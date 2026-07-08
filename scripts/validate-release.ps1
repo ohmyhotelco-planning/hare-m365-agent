@@ -90,9 +90,7 @@ Assert-Order $startHere @(
   '<span class="num">1</span>',
   '<span class="num">2</span>',
   '<span class="num">3</span>',
-  '<span class="num">4</span>',
-  '<span class="num">5</span>',
-  '<span class="num">6</span>'
+  '<span class="num">4</span>'
 ) "START_HERE.html"
 Assert-Contains $startHere "Claude/Cowork" "START_HERE.html"
 Assert-Contains $startHere "github.com" "START_HERE.html"
@@ -132,9 +130,12 @@ foreach ($assetName in @("START_HERE.html", "LLM_FIRST_PROMPT_KO.txt", "README.m
     "create the folder first",
     "File Explorer",
     "double-click execution",
+    "id=""cmd""",
     "__PACKAGE_",
     (From-Base64Utf8 "7IOIIO2PtOuNlA=="),
-    (From-Base64Utf8 "66eM65Ok6rOgIOydtOumhA==")
+    (From-Base64Utf8 "66eM65Ok6rOgIOydtOumhA=="),
+    (From-Base64Utf8 "7Y+0642UIO2XiOyaqSDsmpTssq3snbQg64KY7Jik66m0"),
+    (From-Base64Utf8 "7KeB7KCRIO2FjOyKpO2KuCDrqoXroLk=")
   )) {
     Assert-NotContains $content $forbidden $assetName
   }

@@ -458,21 +458,7 @@ Microsoft device code는 사용자가 화면에서 직접 보고 브라우저에
     </section>
 
     <section class="step">
-      <div class="step-title"><span class="num">3</span>폴더 허용 요청이 나오면</div>
-      <p>정상 흐름에서는 LLM이 먼저 도메인 허용 확인, 패키지 실행, 상태 점검을 진행합니다. 그 뒤 폴더가 필요하다고 확인되면 LLM이 가능한 도구로 전용 폴더를 준비하고, Claude/Cowork가 폴더 허용을 요청할 때만 아래 전용 폴더를 승인합니다.</p>
-      <button onclick="copyLiteral('Hare M365 Agent')">폴더 이름 복사</button>
-      <pre>Windows: 문서 &gt; Hare M365 Agent
-Mac: Documents &gt; Hare M365 Agent</pre>
-      <ol class="path-list">
-        <li>Claude/Cowork가 <strong>Hare M365 Agent</strong> 폴더 연결을 요청하면 <strong>허용</strong> 또는 <strong>선택</strong>을 누릅니다.</li>
-        <li>폴더 선택창이 직접 열리는 경우에만 <strong>문서</strong> 또는 <strong>Documents</strong> 안의 <strong>Hare M365 Agent</strong> 폴더를 선택합니다.</li>
-        <li>폴더가 보이지 않으면 선택창을 닫고 LLM에게 전용 폴더 준비 후 다시 연결 요청하라고 말합니다. 사용자가 직접 폴더를 만들거나 다른 위치를 고르지 않습니다.</li>
-      </ol>
-      <p class="small muted">SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하지 마세요.</p>
-    </section>
-
-    <section class="step">
-      <div class="step-title"><span class="num">4</span>로그인 필요 시 사용자가 직접 완료</div>
+      <div class="step-title"><span class="num">3</span>로그인 필요 시 사용자가 직접 완료</div>
       <p><code>loggedIn: false</code>이면 LLM은 로그인 hard gate에서 멈추고, 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내합니다. 사용자는 LLM이 안내한 로그인 명령을 그대로 실행하면 됩니다.</p>
       <ol class="path-list">
         <li>사용자가 로컬 터미널에서 로그인 명령을 실행하면 검은 명령창 또는 터미널에 Microsoft 로그인 안내가 표시됩니다.</li>
@@ -513,7 +499,7 @@ Mac: Documents &gt; Hare M365 Agent</pre>
     </section>
 
     <section class="step">
-      <div class="step-title"><span class="num">5</span>이후 새 채팅에서 다시 사용할 때</div>
+      <div class="step-title"><span class="num">4</span>이후 새 채팅에서 다시 사용할 때</div>
       <p>새 채팅세션은 Hare M365 Agent를 기억하지 못합니다. 도메인 허용을 이미 끝냈더라도 아래 짧은 프롬프트로 도구와 패키지 URL을 다시 알려줍니다.</p>
       <button onclick="copyText('reusePrompt')">새 채팅용 프롬프트 복사</button>
       <pre id="reusePrompt">도메인 허용은 이미 완료했다. Hare M365 Agent를 사용해줘.
@@ -529,15 +515,6 @@ loggedIn이 true면 바로 내 요청을 처리하고, false면 로그인 hard g
 
 요청:
 [여기에 Outlook/Teams/파일 관련 요청을 적기]</pre>
-    </section>
-
-    <section class="step">
-      <div class="step-title"><span class="num">6</span>직접 테스트 명령</div>
-      <p>터미널에서 직접 확인해야 할 때는 아래 명령을 사용합니다.</p>
-      <button onclick="copyText('cmd')">명령 복사</button>
-      <pre id="cmd">npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 llm-guide
-npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 doctor
-npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 auth status</pre>
     </section>
   </main>
 
