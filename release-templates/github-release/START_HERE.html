@@ -257,9 +257,98 @@
       font-size: 13px;
       margin: 6px 0 12px;
     }
+    .login-visual {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+      gap: 14px;
+      margin: 16px 0 8px;
+      align-items: stretch;
+    }
+    .terminal-mock,
+    .browser-mock {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+    }
+    .terminal-title,
+    .browser-title {
+      padding: 9px 12px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .terminal-title {
+      background: #202124;
+      color: #ffffff;
+    }
+    .terminal-body {
+      min-height: 220px;
+      padding: 14px;
+      background: #050505;
+      color: #f5f5f5;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .code-highlight {
+      display: inline-block;
+      border: 3px solid #ff2d2d;
+      padding: 2px 6px;
+      color: #ffffff;
+      background: #2a2a2a;
+      font-weight: 700;
+    }
+    .terminal-muted {
+      color: #b8bec6;
+    }
+    .browser-title {
+      background: #f6f8fa;
+      border-bottom: 1px solid var(--line);
+      color: var(--text);
+    }
+    .browser-body {
+      min-height: 220px;
+      padding: 18px;
+      background: #ffffff;
+    }
+    .ms-logo {
+      display: grid;
+      grid-template-columns: 12px 12px;
+      grid-template-rows: 12px 12px;
+      gap: 2px;
+      width: 26px;
+      margin-bottom: 14px;
+    }
+    .ms-logo span:nth-child(1) { background: #f25022; }
+    .ms-logo span:nth-child(2) { background: #7fba00; }
+    .ms-logo span:nth-child(3) { background: #00a4ef; }
+    .ms-logo span:nth-child(4) { background: #ffb900; }
+    .browser-heading {
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .browser-input {
+      border: 2px solid var(--brand);
+      border-radius: 6px;
+      padding: 11px;
+      margin: 14px 0 10px;
+      color: #6a737d;
+      font-family: Consolas, "Courier New", monospace;
+      overflow-wrap: anywhere;
+    }
+    .browser-next {
+      display: inline-block;
+      border-radius: 6px;
+      background: #0067b8;
+      color: #ffffff;
+      padding: 8px 18px;
+      font-weight: 700;
+    }
     @media (max-width: 760px) {
       .mock-settings { grid-template-columns: 1fr; }
       .mock-sidebar { min-height: auto; }
+      .login-visual { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -357,6 +446,38 @@ __PACKAGE_URL__
     <section class="step">
       <div class="step-title"><span class="num">3</span>로그인 필요 시 사용자가 직접 완료</div>
       <p>LLM이 <code>auth login</code>을 실행하면 Microsoft device-code 로그인 안내가 표시됩니다. 코드는 사용자가 브라우저에 직접 입력합니다.</p>
+      <ol class="path-list">
+        <li>LLM이 로그인 명령을 실행하면 검은 명령창 또는 터미널에 Microsoft 로그인 안내가 표시됩니다.</li>
+        <li>문장 끝에 보이는 짧은 코드가 device code입니다. 아래 예시의 빨간 박스 위치입니다.</li>
+        <li>브라우저의 Microsoft device login 화면에 그 코드를 사용자가 직접 입력합니다.</li>
+        <li>회사 Microsoft 계정으로 로그인한 뒤, LLM에게 <strong>로그인 완료</strong>라고 알려줍니다.</li>
+      </ol>
+      <div class="login-visual" aria-label="Microsoft device-code 로그인 과정 예시">
+        <div class="terminal-mock">
+          <div class="terminal-title">명령창에 표시되는 로그인 코드 예시</div>
+          <div class="terminal-body">
+            <div>Hare M365 Agent - Microsoft login</div>
+            <br>
+            <div class="terminal-muted">Opening Microsoft device login page...</div>
+            <br>
+            <div>To sign in, use a web browser to open the page</div>
+            <div>https://microsoft.com/devicelogin</div>
+            <div>and enter the code <span class="code-highlight">화면에 표시된 코드</span></div>
+            <br>
+            <div class="terminal-muted">코드는 채팅에 붙여넣지 않습니다.</div>
+          </div>
+        </div>
+        <div class="browser-mock">
+          <div class="browser-title">브라우저 Microsoft 로그인 화면 예시</div>
+          <div class="browser-body">
+            <div class="ms-logo" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <div class="browser-heading">코드 입력</div>
+            <p class="small muted">명령창에 표시된 코드를 이 칸에 직접 입력합니다.</p>
+            <div class="browser-input">화면에 표시된 코드 입력</div>
+            <div class="browser-next">다음</div>
+          </div>
+        </div>
+      </div>
       <p><strong>device code, token, .cache 내용은 채팅에 붙여넣지 않습니다.</strong></p>
     </section>
 
