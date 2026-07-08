@@ -11,7 +11,7 @@
 GitHub Release에 npm tarball을 올리고 아래처럼 실행합니다.
 
 ```bash
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
 ```
 
 장점:
@@ -26,6 +26,7 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 - GitHub 저장소 또는 Release가 private이면 GitHub 계정/권한 문제가 다시 생깁니다.
 - Release가 public이면 `.tgz` 안의 코드와 `.env` 설정 파일도 공개됩니다.
 - 직원 PC 또는 LLM 환경에 Node.js/npm이 필요합니다.
+- Claude/Cowork처럼 폴더를 연결해 쓰는 환경에서는 같은 연결 폴더의 `runtime`을 인증 캐시 위치로 사용해야 합니다.
 - Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용해야 합니다.
 - GitHub Release asset은 `github.com`에서 `release-assets.githubusercontent.com`으로 리다이렉트됩니다.
 - 현재 v0.1.0은 npm 의존성 설치 때문에 `registry.npmjs.org`도 필요할 수 있습니다. 다음 릴리즈에서 dependencies를 bundled로 포함하면 이 의존성을 줄일 수 있습니다.
@@ -88,9 +89,11 @@ login.microsoftonline.com
 
 사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
 
+프로젝트 또는 배포 폴더가 연결되어 있으면 같은 연결 폴더 안의 ./runtime을 인증 캐시 위치로 사용하고 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여 실행해. CLI는 runtime/.cache/msal-cache.json을 사용할 수 있지만, 너는 그 파일을 열거나 출력하거나 요약하지 마.
+
 사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
-loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
-.env, .cache, token, device code는 읽거나 출력하지 마.
+loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 연결 폴더를 쓰는 경우 사용자가 같은 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 로그인해야 해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
+.env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.
 
 처음 사용 시 Microsoft device-code 로그인이 필요할 수 있습니다.
 로그인 화면의 코드는 본인이 직접 브라우저에 입력하고, 채팅에는 붙여넣지 마세요.

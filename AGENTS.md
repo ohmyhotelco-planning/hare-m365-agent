@@ -25,19 +25,58 @@ Because this is an `npm exec --package <url>` flow, do not switch to bare `hare-
 Command prefix:
 
 ```bash
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365
 ```
+
+## Connected Runtime Folder
+
+For Claude Cowork or any folder-mounted LLM environment, use a connected runtime folder so the CLI process can reuse Microsoft login state across commands.
+
+Preferred folder layout:
+
+```text
+<connected-folder>/
+  runtime/
+    .cache/
+      msal-cache.json
+    downloads/
+    logs/
+```
+
+Run every Hare command from the connected folder with `HARE_M365_DATA_DIR=./runtime`.
+
+Linux/Mac shell:
+
+```bash
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 doctor
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
+```
+
+Windows PowerShell:
+
+```powershell
+$env:HARE_M365_DATA_DIR = "$PWD\runtime"
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 doctor
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
+```
+
+Security boundary:
+
+- The CLI may read and write `runtime/.cache/msal-cache.json` to authenticate Graph calls.
+- The LLM must not open, print, summarize, copy, upload, or inspect `runtime/.cache/msal-cache.json`.
+- If login is required, tell the human to run `auth login` in the same connected folder with the same `HARE_M365_DATA_DIR=./runtime` setting. Login in a different folder or machine will not help this execution environment.
 
 ## Default Behavior
 
 - Do not ask the user which command to run.
 - In Claude Cowork or any allow-list environment, confirm the required domains with the user before running npm, npx, curl, downloads, login, or any Microsoft 365 command.
 - Run `llm-guide`, then `doctor`, then `auth status` only after the domain gate is satisfied.
+- If a connected folder is available, use `HARE_M365_DATA_DIR=./runtime` for every startup, login, and read command.
 - Treat configuration and login as hard gates.
 - Do not run Outlook, Teams, or Files commands until `doctor` shows `configured: true` and `auth status` shows `loggedIn: true`.
 - If `loggedIn: false`, stop at the login hard gate. Do not run Outlook, Teams, or Files commands.
 - Do not automatically run `auth login` in Claude Cowork, hosted sandboxes, or any environment where command output is primarily visible to the agent rather than directly to the human.
-- At the login hard gate, give the exact local login command and ask the human to run it in a terminal they can see. After the human says "로그인 완료", rerun `doctor` and `auth status`, then resume the original request.
+- At the login hard gate, give the exact local login command and ask the human to run it in the same connected folder and runtime path. After the human says "로그인 완료", rerun `doctor` and `auth status`, then resume the original request.
 - Only run `auth login` yourself if the user explicitly asks you to start login and the current terminal/browser output is directly visible to the human. Run it once. If it fails before showing a device code, report the error and stop instead of retrying or probing repeatedly.
 - If a natural-language Microsoft 365 request is given, run the smallest safe read sequence needed to answer it.
 
@@ -52,20 +91,20 @@ Network/domain gate for Claude Cowork or any allow-list environment:
 Startup checklist:
 
 ```bash
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 doctor
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 doctor
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
 ```
 
 Login command:
 
 ```bash
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth login
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth login
 ```
 
 ## Hard Safety Rules
 
-- Never read, print, summarize, screenshot, upload, or copy `.env`, `.cache/`, MSAL cache contents, access tokens, refresh tokens, cookies, device codes, private keys, or real credential values.
+- Never read, print, summarize, screenshot, upload, or copy `.env`, `.cache/`, `runtime/.cache/`, MSAL cache contents, access tokens, refresh tokens, cookies, device codes, private keys, or real credential values.
 - Client ID and tenant ID are delegated public-client configuration, not secrets. Do not print them unless the user explicitly asks and it is operationally necessary.
 - Default to read-only operations.
 - Do not send mail, post Teams messages, create calendar events, upload files, delete files, share files, or change permissions in this POC.
@@ -76,12 +115,12 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 ## Preferred Read Commands
 
 ```bash
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 outlook inbox --limit 10
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams teams
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams chats --limit 20
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams chat-messages --chat-id "<chat-id>" --limit 20
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 files search --query "keyword" --limit 10
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 files download --drive-id "<drive-id>" --item-id "<item-id>" --name "downloaded-file.ext"
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 outlook inbox --limit 10
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams teams
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams chats --limit 20
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams chat-messages --chat-id "<chat-id>" --limit 20
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 files search --query "keyword" --limit 10
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 files download --drive-id "<drive-id>" --item-id "<item-id>" --name "downloaded-file.ext"
 ```
 
 ## Login Handling
@@ -93,7 +132,7 @@ Allowed:
 - Provide the exact `auth login` command when `loggedIn: false`.
 - Run `auth login` only in a trusted local environment where the human can directly see the code and browser page, and only after the user explicitly asks you to start login.
 - Open or guide the Microsoft device login page if the environment supports it.
-- If `auth status` returns `loggedIn: false`, do not continue the Microsoft 365 task. Stop and tell the user: `로그인이 필요합니다. 아래 로그인 명령을 사용자가 직접 볼 수 있는 로컬 터미널에서 실행한 뒤, Microsoft 로그인을 완료하고 "로그인 완료"라고 알려주세요. 코드는 채팅에 붙여넣지 마세요.`
+- If `auth status` returns `loggedIn: false`, do not continue the Microsoft 365 task. Stop and tell the user: `로그인이 필요합니다. 아래 로그인 명령을 같은 연결 폴더에서 실행한 뒤, Microsoft 로그인을 완료하고 "로그인 완료"라고 알려주세요. 코드는 채팅에 붙여넣지 마세요.`
 
 Forbidden:
 

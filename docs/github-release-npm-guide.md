@@ -34,14 +34,31 @@ Hare_M365_Start_Windows.zip
 ## LLM 실행 명령
 
 ```bash
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
 ```
 
 이 방식은 전역 설치가 아니므로, 후속 명령도 같은 접두어를 붙입니다.
 
 ```bash
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 doctor
-npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 doctor
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
+```
+
+## 연결형 runtime 폴더
+
+Claude/Cowork처럼 프로젝트 또는 배포 폴더를 연결해 쓰는 환경에서는 같은 연결 폴더 안의 `runtime`을 인증 캐시 위치로 사용합니다.
+
+```text
+<연결한 폴더>/runtime/.cache/msal-cache.json
+```
+
+CLI 프로세스는 이 캐시 파일을 사용해 Microsoft Graph 인증을 수행할 수 있습니다. 단, LLM은 `runtime/.cache/msal-cache.json`을 열거나 출력하거나 요약하거나 업로드하면 안 됩니다.
+
+Windows PowerShell에서 같은 연결 폴더에 로그인 캐시를 만들려면:
+
+```powershell
+$env:HARE_M365_DATA_DIR = "$PWD\runtime"
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth login
 ```
 
 ## 사용자에게 줄 맨 처음 1회용 프롬프트
@@ -61,9 +78,11 @@ login.microsoftonline.com
 
 사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
 
+프로젝트 또는 배포 폴더가 연결되어 있으면 같은 연결 폴더 안의 ./runtime을 인증 캐시 위치로 사용하고 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여 실행해. CLI는 runtime/.cache/msal-cache.json을 사용할 수 있지만, 너는 그 파일을 열거나 출력하거나 요약하지 마.
+
 사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 Microsoft 365 요청을 처리해.
-loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
-.env, .cache, token, device code는 읽거나 출력하지 마.
+loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 연결 폴더를 쓰는 경우 사용자가 같은 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 로그인해야 해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
+.env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.
 ```
 
 ## 이후 새 채팅세션에서 다시 사용할 때
@@ -77,8 +96,9 @@ loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조
 https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
 
 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해.
-loggedIn이 true면 바로 내 요청을 처리하고, false면 로그인 hard gate로 멈춰. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 내가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 내가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
-.env, .cache, token, device code는 읽거나 출력하지 마.
+프로젝트 또는 배포 폴더가 연결되어 있으면 같은 연결 폴더 안의 ./runtime을 인증 캐시 위치로 사용하고 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여 실행해.
+loggedIn이 true면 바로 내 요청을 처리하고, false면 로그인 hard gate로 멈춰. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 내가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 연결 폴더를 쓰는 경우 같은 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 로그인해야 해. 내가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
+.env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.
 
 요청:
 [여기에 Outlook/Teams/파일 관련 요청을 적기]
@@ -87,6 +107,7 @@ loggedIn이 true면 바로 내 요청을 처리하고, false면 로그인 hard g
 ## 사람이 해야 하는 일
 
 - Node.js/npm이 설치되어 있어야 합니다.
+- Claude/Cowork에 폴더를 연결해 쓰는 경우 같은 연결 폴더의 `runtime`을 인증 캐시 위치로 사용해야 합니다.
 - Claude/Cowork처럼 도메인 허용 목록이 있는 환경은 아래 도메인을 허용해야 합니다.
   - `github.com`
   - `release-assets.githubusercontent.com`
@@ -108,3 +129,4 @@ GitHub Release asset은 `github.com`에서 `release-assets.githubusercontent.com
 - public GitHub Release에 올리면 `.tgz` 안의 코드와 `.env` 설정 파일도 외부에서 받을 수 있습니다.
 - `.env`는 delegated public-client 설정 파일이지만, 공개 전 내부 승인 기준은 확인해야 합니다.
 - token, cache, device code, cookie, credential은 어떤 배포 파일에도 포함하지 않습니다.
+- `runtime/.cache/msal-cache.json`은 사용자가 로그인 후 생성하는 로컬 인증 캐시입니다. CLI가 사용하는 것은 허용하지만 LLM이 내용을 열람하거나 출력하면 안 됩니다.

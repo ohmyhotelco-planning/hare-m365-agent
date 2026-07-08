@@ -101,7 +101,7 @@ PKG 설치 후 생성되는 항목:
 6. 안내 화면의 Cowork 프롬프트를 Claude/Cowork 또는 Claude Code에 붙여넣고 원하는 작업을 요청합니다.
 ```
 
-device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
+device code, token, `.cache`, `runtime/.cache` 내용은 채팅에 붙여넣지 않습니다.
 
 ## 실제 검증
 
@@ -140,7 +140,7 @@ Mac에서 Codex 또는 Claude Code에 아래처럼 요청합니다.
 OMH M365 Agent Mac pkg 실제 설치 검증을 진행해.
 
 규칙:
-- .env, .cache, token, device code는 읽거나 출력하지 마.
+- .env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.
 - 먼저 /Library/Application Support/OMH/M365Agent 폴더와 /Applications의 Start/Login 앱 존재를 확인해.
 - scripts/verify-mac-install.sh를 실행해 doctor/auth status를 확인해.
 - loggedIn이 false면 사용자가 Applications의 "OMH M365 Agent Login" 앱으로 로그인해야 한다고 안내해.

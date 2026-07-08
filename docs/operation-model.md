@@ -53,8 +53,9 @@ LLM -> 로컬 Linux shell/Cowork sandbox -> omh-m365 CLI -> Microsoft Graph dele
 ## 파일/토큰 취급
 
 - `.env`는 delegated public-client 설정 파일로 배포에 포함할 수 있습니다.
-- `.env`와 `.cache`는 LLM이 읽거나 출력하지 않습니다.
-- 배포 템플릿에는 `.cache`, `downloads`, `logs`를 포함하지 않습니다.
+- CLI가 인증 캐시를 사용해 Microsoft Graph를 호출하는 것은 허용합니다.
+- `.env`, `.cache`, `runtime/.cache`는 LLM이 읽거나 출력하지 않습니다.
+- 배포 템플릿에는 `.cache`, `runtime`, `downloads`, `logs`를 포함하지 않습니다.
 - POC의 token cache는 파일 기반입니다. 파일럿/운영 전에는 OS credential store 등 더 안전한 저장 방식을 검토합니다.
 
 ## 파일럿 전 남은 과제

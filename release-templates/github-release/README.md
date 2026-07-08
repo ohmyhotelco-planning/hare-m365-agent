@@ -26,12 +26,14 @@ login.microsoftonline.com
 
 이미 도메인 허용과 로그인을 완료했다면 새 채팅용 프롬프트만으로 충분합니다. 인증이 만료되었거나 캐시가 없는 환경이면 LLM은 로그인 hard gate에서 멈추고 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내합니다. 사용자는 화면의 Microsoft device code를 브라우저에 직접 입력하고, 완료 후 "로그인 완료"라고 알려주면 됩니다.
 
+Claude/Cowork에 프로젝트 또는 배포 폴더를 연결해 쓰는 경우, 같은 연결 폴더 안의 `runtime`을 인증 캐시 위치로 사용합니다. LLM은 모든 Hare 명령에 `HARE_M365_DATA_DIR=./runtime`을 붙이고, 사용자는 같은 폴더와 같은 설정으로 로그인해야 합니다. CLI가 `runtime/.cache/msal-cache.json`을 사용하는 것은 허용하지만 LLM은 해당 파일 내용을 읽거나 출력하면 안 됩니다.
+
 ## 직접 실행 예
 
 ```bash
-npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 llm-guide
-npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 doctor
-npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 auth status
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 llm-guide
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 doctor
+HARE_M365_DATA_DIR=./runtime npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 auth status
 ```
 
 ## Windows에서 스크립트로 시작
@@ -53,8 +55,9 @@ chmod +x Hare_M365_Start_Mac_Linux.sh
 
 - Node.js/npm이 설치되어 있어야 합니다.
 - Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 LLM 실행 전에 먼저 허용합니다.
+- 연결 폴더를 쓰는 경우 `runtime` 폴더를 인증 캐시 위치로 사용합니다.
 - Microsoft device-code 로그인 코드는 본인이 브라우저에 직접 입력합니다.
-- device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
+- device code, token, `.cache`, `runtime/.cache` 내용은 채팅에 붙여넣지 않습니다.
 
 ## 포함 파일
 
