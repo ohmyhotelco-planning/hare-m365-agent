@@ -16,7 +16,7 @@ npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 auth status
 
 ## Windows에서 스크립트로 시작
 
-`Hare_M365_Start_Windows.cmd`를 실행합니다.
+`Hare_M365_Start_Windows.zip`을 내려받아 압축을 풀고, 안의 `Hare_M365_Start_Windows.cmd`를 실행합니다.
 
 처음 사용하거나 `loggedIn: false`가 나오면 스크립트 안내에 따라 Microsoft 로그인을 진행합니다.
 
@@ -40,9 +40,9 @@ chmod +x Hare_M365_Start_Mac_Linux.sh
 
 ```text
 __PACKAGE_FILE__
-__PACKAGE_FILE__.sha256
+SHA256SUMS.txt
 LLM_FIRST_PROMPT_KO.txt
-Hare_M365_Start_Windows.cmd
+Hare_M365_Start_Windows.zip
 Hare_M365_Start_Mac_Linux.sh
 README.md
 github-release-npm-guide.md

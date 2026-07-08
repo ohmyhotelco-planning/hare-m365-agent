@@ -29,7 +29,7 @@ releases/github-release/v0.1.0/
 
 ```text
 ohmyhotel-hare-m365-agent-0.1.0.tgz
-ohmyhotel-hare-m365-agent-0.1.0.tgz.sha256
+SHA256SUMS.txt
 LLM_FIRST_PROMPT_KO.txt
 README.md
 ```
@@ -37,7 +37,7 @@ README.md
 선택 파일:
 
 ```text
-Hare_M365_Start_Windows.cmd
+Hare_M365_Start_Windows.zip
 Hare_M365_Start_Mac_Linux.sh
 github-release-npm-guide.md
 ```

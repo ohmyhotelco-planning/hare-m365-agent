@@ -36,7 +36,8 @@ if (Test-Path -LiteralPath $target) {
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 
 Copy-Item -LiteralPath $tgz.FullName -Destination (Join-Path $target $tgz.Name) -Force
-Copy-Item -LiteralPath $sha -Destination (Join-Path $target "$($tgz.Name).sha256") -Force
+$shaText = Get-Content -LiteralPath $sha -Raw
+Set-Content -LiteralPath (Join-Path $target "SHA256SUMS.txt") -Value $shaText -Encoding ASCII
 Copy-Item -LiteralPath (Join-Path $root "docs\github-release-npm-guide.md") -Destination (Join-Path $target "github-release-npm-guide.md") -Force
 
 $packageUrl = "https://github.com/$repo/releases/download/$tag/$($tgz.Name)"
@@ -64,10 +65,18 @@ foreach ($templateName in @(
   [System.IO.File]::WriteAllText((Join-Path $target $templateName), $content, $utf8NoBom)
 }
 
+$windowsStart = Join-Path $target "Hare_M365_Start_Windows.cmd"
+$windowsZip = Join-Path $target "Hare_M365_Start_Windows.zip"
+if (-not (Test-Path -LiteralPath $windowsStart)) {
+  throw "Windows start script was not created: $windowsStart"
+}
+Compress-Archive -LiteralPath $windowsStart -DestinationPath $windowsZip -Force
+Remove-Item -LiteralPath $windowsStart -Force
+
 $required = @(
   $tgz.Name,
-  "$($tgz.Name).sha256",
-  "Hare_M365_Start_Windows.cmd",
+  "SHA256SUMS.txt",
+  "Hare_M365_Start_Windows.zip",
   "Hare_M365_Start_Mac_Linux.sh",
   "LLM_FIRST_PROMPT_KO.txt",
   "README.md",

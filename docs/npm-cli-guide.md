@@ -118,8 +118,8 @@ npm run package:github-release
 
 ```text
 releases/github-release/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
-releases/github-release/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz.sha256
-releases/github-release/v0.1.0/Hare_M365_Start_Windows.cmd
+releases/github-release/v0.1.0/SHA256SUMS.txt
+releases/github-release/v0.1.0/Hare_M365_Start_Windows.zip
 releases/github-release/v0.1.0/Hare_M365_Start_Mac_Linux.sh
 releases/github-release/v0.1.0/LLM_FIRST_PROMPT_KO.txt
 releases/github-release/v0.1.0/README.md

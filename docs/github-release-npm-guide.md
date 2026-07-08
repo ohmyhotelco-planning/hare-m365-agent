@@ -14,21 +14,19 @@ GitHub 저장소와 Release가 public이면 직원에게 GitHub 계정이 없어
 releases/github-release/v0.1.0/
 ```
 
-필수 파일:
+GitHub 업로드 허용 확장자에 맞춘 파일 목록:
 
 ```text
 ohmyhotel-hare-m365-agent-0.1.0.tgz
-ohmyhotel-hare-m365-agent-0.1.0.tgz.sha256
+SHA256SUMS.txt
 LLM_FIRST_PROMPT_KO.txt
 README.md
-```
-
-선택 파일:
-
-```text
-Hare_M365_Start_Windows.cmd
+github-release-npm-guide.md
 Hare_M365_Start_Mac_Linux.sh
+Hare_M365_Start_Windows.zip
 ```
+
+`Hare_M365_Start_Windows.zip` 안에는 Windows 시작 스크립트 `.cmd`가 들어 있습니다. GitHub 업로드 화면에서 `.cmd`를 직접 받지 않는 경우가 있어 ZIP으로 감쌉니다.
 
 ## LLM 실행 명령
 
