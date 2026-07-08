@@ -444,7 +444,7 @@ CLI는 runtime/.cache/msal-cache.json을 사용해 Microsoft Graph 인증을 수
 
 사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 Microsoft 365 요청을 처리해.
 
-도메인 허용 완료 전에는 폴더 연결 요청도 시작하지 마. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도해. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만 Claude/Cowork의 폴더 연결 기능으로 문서/Documents 안의 Hare M365 Agent 전용 폴더 연결/허용을 요청해. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 마. 폴더 선택창이 뜬 경우에만 SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하지 말라고 안내해.
+도메인 허용 완료 전에는 폴더 연결 요청도 시작하지 마. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도해. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만, 가능한 도구로 문서/Documents 안의 Hare M365 Agent 전용 폴더를 먼저 준비한 뒤 Claude/Cowork의 폴더 연결 기능으로 그 폴더 연결/허용을 요청해. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 마. 사용자가 할 일은 연결 허용뿐이라는 전제로 진행해. 폴더 선택창이 뜬 경우에만 SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하지 말라고 안내해.
 
 loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마.
 
@@ -459,14 +459,14 @@ Microsoft device code는 사용자가 화면에서 직접 보고 브라우저에
 
     <section class="step">
       <div class="step-title"><span class="num">3</span>폴더 허용 요청이 나오면</div>
-      <p>정상 흐름에서는 LLM이 먼저 도메인 허용 확인, 패키지 실행, 상태 점검을 진행합니다. 그 뒤 Claude/Cowork가 폴더 허용을 요청할 때만 아래 전용 폴더를 승인합니다.</p>
+      <p>정상 흐름에서는 LLM이 먼저 도메인 허용 확인, 패키지 실행, 상태 점검을 진행합니다. 그 뒤 폴더가 필요하다고 확인되면 LLM이 가능한 도구로 전용 폴더를 준비하고, Claude/Cowork가 폴더 허용을 요청할 때만 아래 전용 폴더를 승인합니다.</p>
       <button onclick="copyLiteral('Hare M365 Agent')">폴더 이름 복사</button>
       <pre>Windows: 문서 &gt; Hare M365 Agent
 Mac: Documents &gt; Hare M365 Agent</pre>
       <ol class="path-list">
         <li>Claude/Cowork가 <strong>Hare M365 Agent</strong> 폴더 연결을 요청하면 <strong>허용</strong> 또는 <strong>선택</strong>을 누릅니다.</li>
-        <li>폴더 선택창이 직접 열리면 <strong>문서</strong> 또는 <strong>Documents</strong> 안의 <strong>Hare M365 Agent</strong> 폴더를 선택합니다.</li>
-        <li>해당 폴더가 보이지 않을 때만 <strong>새 폴더</strong>를 만들고 이름을 <strong>Hare M365 Agent</strong>로 입력한 뒤 선택합니다.</li>
+        <li>폴더 선택창이 직접 열리는 경우에만 <strong>문서</strong> 또는 <strong>Documents</strong> 안의 <strong>Hare M365 Agent</strong> 폴더를 선택합니다.</li>
+        <li>폴더가 보이지 않으면 선택창을 닫고 LLM에게 전용 폴더 준비 후 다시 연결 요청하라고 말합니다. 사용자가 직접 폴더를 만들거나 다른 위치를 고르지 않습니다.</li>
       </ol>
       <p class="small muted">SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하지 마세요.</p>
     </section>
@@ -522,7 +522,7 @@ Mac: Documents &gt; Hare M365 Agent</pre>
 __PACKAGE_URL__
 
 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해.
-폴더 연결 요청은 먼저 하지 마. 현재 실행환경에서 llm-guide, doctor, auth status를 먼저 시도하고, 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만 Claude/Cowork의 폴더 연결 기능으로 문서/Documents 안의 Hare M365 Agent 전용 폴더 연결/허용을 요청해.
+폴더 연결 요청은 먼저 하지 마. 현재 실행환경에서 llm-guide, doctor, auth status를 먼저 시도하고, 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만, 가능한 도구로 문서/Documents 안의 Hare M365 Agent 전용 폴더를 먼저 준비한 뒤 Claude/Cowork의 폴더 연결 기능으로 그 폴더 연결/허용을 요청해. 사용자가 폴더를 직접 만들거나 경로를 판단하게 하지 마.
 프로젝트 또는 배포 폴더가 연결되어 있으면 같은 연결 폴더 안의 ./runtime을 인증 캐시 위치로 사용하고, 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여 실행해.
 loggedIn이 true면 바로 내 요청을 처리하고, false면 로그인 hard gate로 멈춰. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 내가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 연결 폴더를 쓰는 경우 같은 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 로그인해야 해. 내가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
 .env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.

@@ -59,7 +59,7 @@ Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 아래 도
 
 도메인 허용 목록이 있는 환경에서 사용자가 아직 도메인 허용 완료를 확인하지 않았다면 npm exec, npx, 다운로드, 로그인, Microsoft 365 조회를 시작하지 않습니다.
 
-도메인 허용 완료 전에는 폴더 연결 요청도 시작하지 않습니다. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도합니다. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만 Claude/Cowork의 폴더 연결 기능으로 문서/Documents 안의 Hare M365 Agent 전용 폴더 연결/허용을 요청합니다. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 않습니다. 폴더 선택창이 뜬 경우에만 SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하지 말라고 안내합니다.
+도메인 허용 완료 전에는 폴더 연결 요청도 시작하지 않습니다. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도합니다. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만, 가능한 도구로 문서/Documents 안의 Hare M365 Agent 전용 폴더를 먼저 준비한 뒤 Claude/Cowork의 폴더 연결 기능으로 그 폴더 연결/허용을 요청합니다. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 않습니다. 사용자가 할 일은 연결 허용뿐이라는 전제로 진행합니다. 폴더 선택창이 뜬 경우에만 SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하지 말라고 안내합니다.
 
 GitHub Release tarball로 실행 중이면 모든 명령에 같은 npm exec 접두어를 사용합니다.
 
@@ -110,7 +110,7 @@ Teams 최신성 규칙:
 - lastUpdatedDateTime은 채팅방 메타데이터 변경 시각이므로 최신 메시지 판단에 사용하지 않습니다.
 `;
 
-const llmPrompt = `Hare M365 Agent를 사용해 내 Microsoft 365 요청을 처리해. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 github.com, release-assets.githubusercontent.com, registry.npmjs.org, graph.microsoft.com, login.microsoftonline.com 허용 여부를 사용자에게 확인해. 도메인 허용 완료 전에는 npm exec, 조회, 로그인, 폴더 연결 요청을 시작하지 마. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도해. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만 Claude/Cowork의 폴더 연결 기능으로 문서/Documents 안의 Hare M365 Agent 전용 폴더 연결/허용을 요청해. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 마. 연결 폴더가 있으면 같은 폴더 안의 ./runtime을 인증 캐시 위치로 쓰고 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여. CLI는 runtime/.cache/msal-cache.json을 사용할 수 있지만, 너는 그 파일을 열거나 출력하거나 요약하지 마. 이후 doctor/auth status로 설정과 로그인을 확인해. loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 같은 연결 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 실행할 로그인 명령을 안내해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해. .env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.`;
+const llmPrompt = `Hare M365 Agent를 사용해 내 Microsoft 365 요청을 처리해. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 github.com, release-assets.githubusercontent.com, registry.npmjs.org, graph.microsoft.com, login.microsoftonline.com 허용 여부를 사용자에게 확인해. 도메인 허용 완료 전에는 npm exec, 조회, 로그인, 폴더 연결 요청을 시작하지 마. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도해. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만, 가능한 도구로 문서/Documents 안의 Hare M365 Agent 전용 폴더를 먼저 준비한 뒤 Claude/Cowork의 폴더 연결 기능으로 그 폴더 연결/허용을 요청해. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 마. 사용자가 할 일은 연결 허용뿐이라는 전제로 진행해. 연결 폴더가 있으면 같은 폴더 안의 ./runtime을 인증 캐시 위치로 쓰고 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여. CLI는 runtime/.cache/msal-cache.json을 사용할 수 있지만, 너는 그 파일을 열거나 출력하거나 요약하지 마. 이후 doctor/auth status로 설정과 로그인을 확인해. loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 같은 연결 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 실행할 로그인 명령을 안내해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해. .env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.`;
 
 function getSelfCommand(): string {
   const packageSpec = process.env.HARE_M365_PACKAGE_SPEC ?? process.env.HARE_M365_PACKAGE_URL;
