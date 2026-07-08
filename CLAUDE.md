@@ -48,7 +48,7 @@ The CLI may use `runtime/.cache/msal-cache.json`; Claude must never open, print,
 - In Claude Cowork or any allow-list environment, confirm required domain allow-list setup before running npm, npx, curl, package download, login, or Microsoft 365 commands.
 - Run the startup checklist only after the domain gate is satisfied.
 - If a connected folder is available, use `HARE_M365_DATA_DIR=./runtime` for every startup, login, and read command.
-- If folder access is missing, request a Claude/Cowork folder connection for the dedicated `Documents/Hare M365 Agent` folder before running Hare. Do not use File Explorer, desktop control, or arbitrary path browsing as a workaround.
+- Do not request folder connection before the domain gate and startup checklist. First try `llm-guide`, `doctor`, and `auth status` in the current execution environment. Request a Claude/Cowork folder connection for the dedicated `Documents/Hare M365 Agent` folder only if folder access or a persistent auth-cache location is actually required.
 - Treat startup as a hard gate.
 - Do not run Outlook, Teams, or Files commands until `configured: true` and `loggedIn: true`.
 - If `loggedIn: false`, stop at the login hard gate. Do not run Outlook, Teams, or Files commands.
@@ -89,7 +89,7 @@ If shell access is available, do not ask for Windows desktop control just to run
 
 If the package download is blocked by network policy, report the blocked domain/error and stop. Do not switch to GUI control unless the user explicitly asks for desktop troubleshooting.
 
-If a folder connection prompt is required, ask for the dedicated `Documents/Hare M365 Agent` folder. Tell the human not to select SharePoint shared folders, Teams shared folders, the whole Downloads folder, or the whole Desktop.
+If a folder connection prompt is required, ask for the dedicated `Documents/Hare M365 Agent` folder. Do not preflight that path and stop because it does not exist. Tell the human not to select SharePoint shared folders, Teams shared folders, the whole Downloads folder, or the whole Desktop.
 
 ## Login
 

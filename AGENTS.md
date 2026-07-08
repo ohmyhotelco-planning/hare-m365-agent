@@ -72,7 +72,7 @@ Security boundary:
 - In Claude Cowork or any allow-list environment, confirm the required domains with the user before running npm, npx, curl, downloads, login, or any Microsoft 365 command.
 - Run `llm-guide`, then `doctor`, then `auth status` only after the domain gate is satisfied.
 - If a connected folder is available, use `HARE_M365_DATA_DIR=./runtime` for every startup, login, and read command.
-- If folder access is missing, request a Claude/Cowork folder connection for the dedicated `Documents/Hare M365 Agent` folder before running Hare. Do not use File Explorer, desktop control, or arbitrary path browsing as a workaround.
+- Do not request folder connection before the domain gate and startup checklist. First try `llm-guide`, `doctor`, and `auth status` in the current execution environment. Request a Claude/Cowork folder connection for the dedicated `Documents/Hare M365 Agent` folder only if folder access or a persistent auth-cache location is actually required.
 - Treat configuration and login as hard gates.
 - Do not run Outlook, Teams, or Files commands until `doctor` shows `configured: true` and `auth status` shows `loggedIn: true`.
 - If `loggedIn: false`, stop at the login hard gate. Do not run Outlook, Teams, or Files commands.
@@ -88,7 +88,7 @@ Network/domain gate for Claude Cowork or any allow-list environment:
 - Microsoft 365 calls need `graph.microsoft.com` and `login.microsoftonline.com`.
 - If the user has not explicitly confirmed domain setup, stop before the startup checklist and ask them to add these domains first.
 - If download or Graph access fails with `403`, `network_error`, proxy, or allow-list symptoms, report the blocked domain/error and stop. Do not switch to Windows GUI control, File Explorer, or double-click execution as a workaround.
-- If a folder connection prompt is required, ask for the dedicated `Documents/Hare M365 Agent` folder. Tell the human not to select SharePoint shared folders, Teams shared folders, the whole Downloads folder, or the whole Desktop.
+- If a folder connection prompt is required, ask for the dedicated `Documents/Hare M365 Agent` folder. Do not preflight that path and stop because it does not exist. Tell the human not to select SharePoint shared folders, Teams shared folders, the whole Downloads folder, or the whole Desktop.
 
 Startup checklist:
 
