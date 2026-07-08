@@ -109,6 +109,17 @@
       font-family: Consolas, "Courier New", monospace;
       font-size: 14px;
     }
+    .domain-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .domain-row button {
+      margin: 0;
+      padding: 9px 11px;
+      white-space: nowrap;
+    }
     button {
       appearance: none;
       border: 0;
@@ -141,13 +152,19 @@
     <section class="step">
       <div class="step-title"><span class="num">1</span>Claude/Cowork 도메인 허용</div>
       <p>Claude/Cowork 설정에서 도메인 허용 목록을 열고 아래 5개를 추가합니다.</p>
+      <button onclick="copyText('domains')">도메인 전체 복사</button>
       <div class="domain-grid">
-        <div class="domain">github.com</div>
-        <div class="domain">release-assets.githubusercontent.com</div>
-        <div class="domain">registry.npmjs.org</div>
-        <div class="domain">graph.microsoft.com</div>
-        <div class="domain">login.microsoftonline.com</div>
+        <div class="domain-row"><div class="domain">github.com</div><button class="secondary" onclick="copyLiteral('github.com')">복사</button></div>
+        <div class="domain-row"><div class="domain">release-assets.githubusercontent.com</div><button class="secondary" onclick="copyLiteral('release-assets.githubusercontent.com')">복사</button></div>
+        <div class="domain-row"><div class="domain">registry.npmjs.org</div><button class="secondary" onclick="copyLiteral('registry.npmjs.org')">복사</button></div>
+        <div class="domain-row"><div class="domain">graph.microsoft.com</div><button class="secondary" onclick="copyLiteral('graph.microsoft.com')">복사</button></div>
+        <div class="domain-row"><div class="domain">login.microsoftonline.com</div><button class="secondary" onclick="copyLiteral('login.microsoftonline.com')">복사</button></div>
       </div>
+      <pre id="domains">github.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+graph.microsoft.com
+login.microsoftonline.com</pre>
       <p class="small muted">GitHub Release 다운로드는 <code>github.com</code>에서 시작하지만 실제 파일은 <code>release-assets.githubusercontent.com</code>에서 내려옵니다. 현재 v__VERSION__은 npm 의존성 설치 때문에 <code>registry.npmjs.org</code>도 필요할 수 있습니다.</p>
     </section>
 
@@ -194,16 +211,19 @@ npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 auth status</pre>
   <script>
     async function copyText(id) {
       const text = document.getElementById(id).innerText;
+      await copyToClipboard(text);
+    }
+
+    async function copyLiteral(text) {
+      await copyToClipboard(text);
+    }
+
+    async function copyToClipboard(text) {
       try {
         await navigator.clipboard.writeText(text);
         alert("복사했습니다.");
       } catch (error) {
-        const range = document.createRange();
-        range.selectNodeContents(document.getElementById(id));
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        alert("자동 복사가 막혔습니다. 선택된 내용을 직접 복사하세요.");
+        window.prompt("자동 복사가 막혔습니다. 아래 내용을 직접 복사하세요.", text);
       }
     }
   </script>
