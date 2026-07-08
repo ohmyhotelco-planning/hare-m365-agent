@@ -35,7 +35,9 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 - Run `llm-guide`, then `doctor`, then `auth status` only after the domain gate is satisfied.
 - Treat configuration and login as hard gates.
 - Do not run Outlook, Teams, or Files commands until `doctor` shows `configured: true` and `auth status` shows `loggedIn: true`.
-- If login is missing, run or guide `auth login` and let the human complete Microsoft device-code login.
+- If `loggedIn: false`, do not ask which command to run and do not ask whether to log in. Start `auth login` immediately when the current shell output is visible to the human.
+- During `auth login`, the terminal may display a Microsoft device code for the human. Do not copy, repeat, summarize, or paste that code into chat. Ask only for the human to complete the browser login and say "로그인 완료".
+- If the current environment cannot show the login flow to the human, stop and provide the exact local login command instead of trying another workaround.
 - If a natural-language Microsoft 365 request is given, run the smallest safe read sequence needed to answer it.
 
 Network/domain gate for Claude Cowork or any allow-list environment:
@@ -89,10 +91,13 @@ Allowed:
 
 - Run `auth login` in a trusted local environment where the human can see the code and browser page.
 - Open or guide the Microsoft device login page if the environment supports it.
+- If `auth status` returns `loggedIn: false`, run the login command first. Do not present a menu or ask the user which command to run.
+- After starting login, tell the user: `브라우저에 화면의 코드를 직접 입력하고 완료되면 "로그인 완료"라고 알려주세요. 코드는 채팅에 붙여넣지 마세요.`
 
 Forbidden:
 
 - Do not paste the device code into chat.
+- Do not say that the code cannot be shown to the human. The code can be shown in the user's terminal/browser flow; it just must not be copied back into chat.
 - Do not inspect token cache contents to troubleshoot.
 - Do not run login in a remote or unclear hosted sandbox where the human cannot complete the browser login safely.
 

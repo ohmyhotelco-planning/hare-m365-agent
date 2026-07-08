@@ -32,6 +32,9 @@ Because this is not a global install, repeat the full npm exec prefix for every 
 - Run the startup checklist only after the domain gate is satisfied.
 - Treat startup as a hard gate.
 - Do not run Outlook, Teams, or Files commands until `configured: true` and `loggedIn: true`.
+- If `loggedIn: false`, do not ask which command to run and do not ask whether to log in. Start `auth login` immediately when the current shell output is visible to the human.
+- During `auth login`, the terminal may display a Microsoft device code for the human. Do not copy, repeat, summarize, or paste that code into chat. Ask only for the human to complete the browser login and say "로그인 완료".
+- If the current environment cannot show the login flow to the human, stop and provide the exact local login command instead of trying desktop or GUI workarounds.
 - Never print or inspect `.env`, `.cache/`, access tokens, refresh tokens, cookies, device codes, or MSAL cache contents.
 - Keep operations read-only.
 - Do not send email, post Teams messages, create calendar events, upload files, delete files, share files, or change permissions in this POC.
@@ -77,6 +80,14 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 ```
 
 Do not read, repeat, store, or summarize the displayed device code.
+
+Do not say that the code cannot be shown to the human. The code may appear in the user's terminal or browser flow; the rule is that Claude must not copy it back into chat.
+
+When `auth status` shows `loggedIn: false`, run the login command before any Outlook, Teams, or Files command. Do not present a menu. After starting login, tell the human:
+
+```text
+브라우저에 화면의 코드를 직접 입력하고 완료되면 "로그인 완료"라고 알려주세요. 코드는 채팅에 붙여넣지 마세요.
+```
 
 After the human says login is complete, rerun startup and resume the original task.
 

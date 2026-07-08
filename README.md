@@ -45,6 +45,7 @@ login.microsoftonline.com
 사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
 
 사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
+loggedIn이 false이면 사용자에게 어떤 명령을 실행할지 묻지 말고 auth login을 먼저 실행해. Microsoft device code는 사용자가 화면에서 직접 보고 브라우저에 입력하게 해. 코드를 채팅에 복사하거나 반복하지 마.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 ```
 
@@ -59,7 +60,7 @@ login.microsoftonline.com
 https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
 
 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해.
-loggedIn이 true면 바로 내 요청을 처리하고, false면 auth login을 실행한 뒤 Microsoft 로그인은 내가 직접 완료하게 안내해.
+loggedIn이 true면 바로 내 요청을 처리하고, false면 사용자에게 선택지를 묻지 말고 auth login을 먼저 실행해. Microsoft 로그인은 내가 화면의 코드를 직접 브라우저에 입력해서 완료할게. 코드를 채팅에 복사하거나 반복하지 마.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 
 요청:

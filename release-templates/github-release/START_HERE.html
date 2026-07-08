@@ -440,6 +440,8 @@ __PACKAGE_URL__
 
 사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 Microsoft 365 요청을 처리해.
 
+loggedIn이 false이면 사용자에게 어떤 명령을 실행할지 묻지 말고 auth login을 먼저 실행해. Microsoft device code는 사용자가 화면에서 직접 보고 브라우저에 입력하게 해. 코드를 채팅에 복사하거나 반복하지 말고, 사용자가 로그인 완료 후 "로그인 완료"라고 알려주면 doctor/auth status를 다시 확인한 뒤 원래 요청을 이어서 처리해.
+
 .env, .cache, token, device code는 읽거나 출력하지 마.</pre>
     </section>
 
@@ -491,7 +493,7 @@ __PACKAGE_URL__
 __PACKAGE_URL__
 
 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해.
-loggedIn이 true면 바로 내 요청을 처리하고, false면 auth login을 실행한 뒤 Microsoft 로그인은 내가 직접 완료하게 안내해.
+loggedIn이 true면 바로 내 요청을 처리하고, false면 사용자에게 선택지를 묻지 말고 auth login을 먼저 실행해. Microsoft 로그인은 내가 화면의 코드를 직접 브라우저에 입력해서 완료할게. 코드를 채팅에 복사하거나 반복하지 마.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 
 요청:
