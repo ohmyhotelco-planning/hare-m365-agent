@@ -20,6 +20,8 @@ login.microsoftonline.com
 
 이 설정이 끝나기 전에는 LLM이 npm 패키지를 다운로드할 수 없어서 `llm-guide`도 읽을 수 없습니다.
 
+Claude/Cowork가 폴더 연결 또는 폴더 접근 허용을 요청하면, 사용자에게 임의 경로를 고르게 하지 말고 `문서/Documents > Hare M365 Agent` 전용 폴더를 허용하도록 안내합니다. 폴더가 없으면 같은 위치에 `Hare M365 Agent` 폴더를 새로 만든 뒤 선택합니다.
+
 ## 이후 새 채팅세션에서 다시 사용할 때
 
 새 채팅세션은 Hare M365 Agent와 패키지 URL을 기억하지 못합니다. `START_HERE.html`의 **새 채팅용 프롬프트 복사** 버튼을 눌러 다시 붙여넣으세요.

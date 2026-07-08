@@ -13,6 +13,8 @@ __PACKAGE_URL__
 
 사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, npx, curl, 다운로드, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
 
+폴더 접근 권한이 없으면 파일 탐색기나 데스크톱 제어로 우회하지 말고, Claude/Cowork의 폴더 연결 기능으로 Hare M365 Agent 전용 폴더 연결/허용을 먼저 요청해. 요청 메시지에는 "문서/Documents 안의 Hare M365 Agent 폴더"라고 명확히 안내해. 사용자가 임의 경로를 판단하게 하지 말고, SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하게 하지 마.
+
 프로젝트 또는 배포 폴더가 연결되어 있으면 같은 연결 폴더 안의 ./runtime을 인증 캐시 위치로 사용해. 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여 실행해.
 
 CLI는 runtime/.cache/msal-cache.json을 사용해 Microsoft Graph 인증을 수행할 수 있어. 하지만 너는 runtime/.cache/msal-cache.json 파일을 열거나 출력하거나 요약하거나 업로드하지 마.
