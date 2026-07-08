@@ -38,6 +38,8 @@ login.microsoftonline.com
 
 `github.com`만 허용하면 부족할 수 있습니다. GitHub Release asset은 실제 다운로드 시 `release-assets.githubusercontent.com`으로 리다이렉트됩니다. 현재 v0.1.0은 npm 의존성 설치 때문에 `registry.npmjs.org`도 필요할 수 있습니다.
 
+이 도메인 허용은 `npm exec`보다 먼저 완료되어야 합니다. 허용 전에는 LLM이 패키지를 다운로드할 수 없으므로, LLM에게 최초 프롬프트를 주기 전에 사용자가 먼저 설정을 끝내야 합니다.
+
 ## 2순위: npm registry 공개 배포
 
 나중에 public npm registry에 배포하면 더 짧게 실행할 수 있습니다.
@@ -65,7 +67,17 @@ hare-m365 auth status
 ```text
 아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
 패키지 URL: https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
-먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
+
+중요: Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 npm 실행 전에 먼저 사용자에게 아래 도메인이 허용되어 있는지 확인시켜.
+github.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+graph.microsoft.com
+login.microsoftonline.com
+
+사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
+
+사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 ```
 

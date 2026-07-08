@@ -46,7 +46,17 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 ```text
 아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
 패키지 URL: https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
-먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
+
+중요: Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 npm 실행 전에 먼저 사용자에게 아래 도메인이 허용되어 있는지 확인시켜.
+github.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+graph.microsoft.com
+login.microsoftonline.com
+
+사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
+
+사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 Microsoft 365 요청을 처리해.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 ```
 
@@ -60,6 +70,8 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
   - `graph.microsoft.com`
   - `login.microsoftonline.com`
 - 처음 사용하거나 인증이 만료되면 Microsoft device-code 로그인을 직접 완료해야 합니다.
+
+이 도메인 허용은 npm 실행보다 먼저 완료되어야 합니다. 허용 전에는 LLM이 패키지를 다운로드할 수 없으므로 `llm-guide`도 읽을 수 없습니다.
 
 ## Cowork 도메인 주의
 

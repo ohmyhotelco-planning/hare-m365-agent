@@ -31,7 +31,8 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 ## Default Behavior
 
 - Do not ask the user which command to run.
-- Run `llm-guide`, then `doctor`, then `auth status`.
+- In Claude Cowork or any allow-list environment, confirm the required domains with the user before running npm, npx, curl, downloads, login, or any Microsoft 365 command.
+- Run `llm-guide`, then `doctor`, then `auth status` only after the domain gate is satisfied.
 - Treat configuration and login as hard gates.
 - Do not run Outlook, Teams, or Files commands until `doctor` shows `configured: true` and `auth status` shows `loggedIn: true`.
 - If login is missing, run or guide `auth login` and let the human complete Microsoft device-code login.
@@ -42,6 +43,7 @@ Network/domain gate for Claude Cowork or any allow-list environment:
 - GitHub Release execution may need `github.com` and `release-assets.githubusercontent.com`.
 - Current v0.1.0 may also need `registry.npmjs.org` while npm installs package dependencies.
 - Microsoft 365 calls need `graph.microsoft.com` and `login.microsoftonline.com`.
+- If the user has not explicitly confirmed domain setup, stop before the startup checklist and ask them to add these domains first.
 - If download or Graph access fails with `403`, `network_error`, proxy, or allow-list symptoms, report the blocked domain/error and stop. Do not switch to Windows GUI control, File Explorer, or double-click execution as a workaround.
 
 Startup checklist:

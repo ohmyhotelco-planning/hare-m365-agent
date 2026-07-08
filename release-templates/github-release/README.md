@@ -6,6 +6,18 @@
 
 `LLM_FIRST_PROMPT_KO.txt` 내용을 LLM에게 전달하세요.
 
+Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 LLM에게 작업을 맡기기 전에 아래 도메인을 먼저 허용합니다.
+
+```text
+github.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+graph.microsoft.com
+login.microsoftonline.com
+```
+
+이 설정이 끝나기 전에는 LLM이 npm 패키지를 다운로드할 수 없어서 `llm-guide`도 읽을 수 없습니다.
+
 ## 직접 실행 예
 
 ```bash
@@ -32,7 +44,7 @@ chmod +x Hare_M365_Start_Mac_Linux.sh
 ## 사람이 해야 하는 일
 
 - Node.js/npm이 설치되어 있어야 합니다.
-- Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용합니다.
+- Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 LLM 실행 전에 먼저 허용합니다.
 - Microsoft device-code 로그인 코드는 본인이 브라우저에 직접 입력합니다.
 - device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
 

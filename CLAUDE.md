@@ -28,7 +28,8 @@ Because this is not a global install, repeat the full npm exec prefix for every 
 
 ## Required Behavior
 
-- Run the startup checklist first.
+- In Claude Cowork or any allow-list environment, confirm required domain allow-list setup before running npm, npx, curl, package download, login, or Microsoft 365 commands.
+- Run the startup checklist only after the domain gate is satisfied.
 - Treat startup as a hard gate.
 - Do not run Outlook, Teams, or Files commands until `configured: true` and `loggedIn: true`.
 - Never print or inspect `.env`, `.cache/`, access tokens, refresh tokens, cookies, device codes, or MSAL cache contents.
@@ -58,6 +59,8 @@ If Cowork has domain allow-list controls, Microsoft 365 and GitHub Release execu
 `github.com` alone is not enough for Release assets. GitHub redirects the `.tgz` asset download to `release-assets.githubusercontent.com`.
 
 Current v0.1.0 may also need `registry.npmjs.org` while npm installs package dependencies.
+
+If the user has not explicitly confirmed these domains are allowed, stop before the startup checklist and ask the user to add them first.
 
 If shell access is available, do not ask for Windows desktop control just to run Hare.
 

@@ -3,7 +3,7 @@
 패키지 URL:
 __PACKAGE_URL__
 
-Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 도메인이 허용되어 있는지 확인하고, 막혀 있으면 사용자에게 설정을 안내해.
+중요: Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 npm 실행 전에 먼저 사용자에게 아래 도메인이 허용되어 있는지 확인시켜.
 
 - github.com
 - release-assets.githubusercontent.com
@@ -11,11 +11,20 @@ Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래
 - graph.microsoft.com
 - login.microsoftonline.com
 
-먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
+사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, npx, curl, 다운로드, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
+
+도메인이 아직 허용되지 않았다면 사용자에게 이렇게 안내해.
+
+1. Claude/Cowork 설정을 연다.
+2. 기능 또는 네트워크 액세스 설정으로 이동한다.
+3. 도메인 허용 목록에 위 5개 도메인을 추가한다.
+4. 저장 후 이 채팅으로 돌아와 "도메인 허용 완료"라고 말한다.
+
+사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 Microsoft 365 요청을 처리해.
 
 .env, .cache, token, device code는 읽거나 출력하지 마.
 
-패키지 다운로드가 403, network_error, allowlist 오류로 실패하면 Windows GUI나 파일 탐색기로 우회하지 말고, 어떤 도메인이 막혔는지 사용자에게 알려줘.
+패키지 다운로드가 403, network_error, proxy, allowlist 오류로 실패하면 Windows GUI나 파일 탐색기로 우회하지 말고, 어떤 도메인이 막혔는지 사용자에게 알려줘.
 
 실행 예:
 npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 llm-guide

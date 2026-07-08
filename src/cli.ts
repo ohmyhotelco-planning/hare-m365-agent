@@ -35,6 +35,8 @@ Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 아래 도
 
 패키지 다운로드나 Graph 호출이 403, network_error, proxy, allowlist 오류로 실패하면 막힌 도메인/오류를 사용자에게 보고하고 중단합니다. Windows GUI, 파일 탐색기, 더블클릭 실행으로 우회하지 않습니다.
 
+도메인 허용 목록이 있는 환경에서 사용자가 아직 도메인 허용 완료를 확인하지 않았다면 npm exec, npx, 다운로드, 로그인, Microsoft 365 조회를 시작하지 않습니다.
+
 GitHub Release tarball로 실행 중이면 모든 명령에 같은 npm exec 접두어를 사용합니다.
 
 \`\`\`bash
@@ -84,7 +86,7 @@ Teams 최신성 규칙:
 - lastUpdatedDateTime은 채팅방 메타데이터 변경 시각이므로 최신 메시지 판단에 사용하지 않습니다.
 `;
 
-const llmPrompt = `Hare M365 Agent를 사용해 내 Microsoft 365 요청을 처리해. 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해. .env, .cache, token, device code는 읽거나 출력하지 마.`;
+const llmPrompt = `Hare M365 Agent를 사용해 내 Microsoft 365 요청을 처리해. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 github.com, release-assets.githubusercontent.com, registry.npmjs.org, graph.microsoft.com, login.microsoftonline.com 허용 여부를 사용자에게 확인해. 도메인 허용 완료 전에는 npm exec나 조회를 시작하지 마. 이후 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해. .env, .cache, token, device code는 읽거나 출력하지 마.`;
 
 function getSelfCommand(): string {
   const packageUrl = process.env.HARE_M365_PACKAGE_URL;

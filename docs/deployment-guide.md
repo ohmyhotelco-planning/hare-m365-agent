@@ -47,6 +47,16 @@ Hare_M365_Start_Mac_Linux.sh
 
 사용자는 긴 명령어를 직접 외울 필요가 없습니다. `LLM_FIRST_PROMPT_KO.txt` 내용을 LLM에게 전달하면 됩니다.
 
+단, Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 사용자가 LLM에게 작업을 맡기기 전에 아래 도메인을 먼저 허용해야 합니다.
+
+```text
+github.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+graph.microsoft.com
+login.microsoftonline.com
+```
+
 핵심 실행 명령은 아래 형태입니다.
 
 ```bash
@@ -56,7 +66,7 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 ## 사람이 해야 하는 일
 
 - Node.js/npm이 설치되어 있어야 합니다.
-- Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용합니다.
+- Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 LLM 실행 전에 먼저 허용합니다.
 - 처음 사용하거나 로그인 만료 시 Microsoft device-code 로그인을 직접 완료합니다.
 - device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
 

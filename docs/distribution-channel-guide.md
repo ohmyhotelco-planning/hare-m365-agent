@@ -78,7 +78,17 @@ LLM에게 아래 문구를 전달하세요.
 
 아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
 패키지 URL: https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
-먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
+
+중요: Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 npm 실행 전에 먼저 사용자에게 아래 도메인이 허용되어 있는지 확인시켜.
+github.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+graph.microsoft.com
+login.microsoftonline.com
+
+사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
+
+사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 
 처음 사용 시 Microsoft device-code 로그인이 필요할 수 있습니다.
