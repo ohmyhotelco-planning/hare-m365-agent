@@ -55,6 +55,10 @@ If Cowork has domain allow-list controls, Microsoft 365 and GitHub Release execu
 - `graph.microsoft.com`
 - `login.microsoftonline.com`
 
+`github.com` alone is not enough for Release assets. GitHub redirects the `.tgz` asset download to `release-assets.githubusercontent.com`.
+
+Current v0.1.0 may also need `registry.npmjs.org` while npm installs package dependencies.
+
 If shell access is available, do not ask for Windows desktop control just to run Hare.
 
 If the package download is blocked by network policy, report the blocked domain/error and stop. Do not switch to GUI control unless the user explicitly asks for desktop troubleshooting.

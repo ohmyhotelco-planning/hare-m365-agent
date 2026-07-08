@@ -37,6 +37,13 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 - If login is missing, run or guide `auth login` and let the human complete Microsoft device-code login.
 - If a natural-language Microsoft 365 request is given, run the smallest safe read sequence needed to answer it.
 
+Network/domain gate for Claude Cowork or any allow-list environment:
+
+- GitHub Release execution may need `github.com` and `release-assets.githubusercontent.com`.
+- Current v0.1.0 may also need `registry.npmjs.org` while npm installs package dependencies.
+- Microsoft 365 calls need `graph.microsoft.com` and `login.microsoftonline.com`.
+- If download or Graph access fails with `403`, `network_error`, proxy, or allow-list symptoms, report the blocked domain/error and stop. Do not switch to Windows GUI control, File Explorer, or double-click execution as a workaround.
+
 Startup checklist:
 
 ```bash

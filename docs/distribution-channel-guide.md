@@ -26,6 +26,9 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 - GitHub 저장소 또는 Release가 private이면 GitHub 계정/권한 문제가 다시 생깁니다.
 - Release가 public이면 `.tgz` 안의 코드와 `.env` 설정 파일도 공개됩니다.
 - 직원 PC 또는 LLM 환경에 Node.js/npm이 필요합니다.
+- Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용해야 합니다.
+- GitHub Release asset은 `github.com`에서 `release-assets.githubusercontent.com`으로 리다이렉트됩니다.
+- 현재 v0.1.0은 npm 의존성 설치 때문에 `registry.npmjs.org`도 필요할 수 있습니다. 다음 릴리즈에서 dependencies를 bundled로 포함하면 이 의존성을 줄일 수 있습니다.
 
 ## 2순위: Public npm registry
 
@@ -93,6 +96,7 @@ LLM_FIRST_PROMPT_KO.txt
 README.md
 Hare_M365_Start_Windows.zip
 Hare_M365_Start_Mac_Linux.sh
+github-release-npm-guide.md
 ```
 
-`cmd`/`sh` 파일은 선택입니다. 핵심은 `.tgz` URL과 LLM 최초 프롬프트입니다.
+업로드할 때는 `releases/github-release/v0.1.0-upload-only` 폴더의 파일만 사용합니다. 핵심은 `.tgz` URL과 LLM 최초 프롬프트입니다.

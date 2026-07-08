@@ -38,11 +38,16 @@ GitHub Release가 아니라 npm registry에 공개 배포한 경우에는 `npx @
 
 ## 사람이 해야 하는 일
 
-1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 아래 2개를 허용합니다.
+1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 아래 5개를 허용합니다.
+   - `github.com`
+   - `release-assets.githubusercontent.com`
+   - `registry.npmjs.org`
    - `graph.microsoft.com`
    - `login.microsoftonline.com`
 2. 처음 사용하거나 로그인이 만료되었으면 LLM이 안내하는 `auth login`을 실행하고 Microsoft device-code 로그인을 직접 완료합니다.
 3. device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
+
+참고: GitHub Release 파일 URL은 `github.com`에서 시작하지만 실제 다운로드는 `release-assets.githubusercontent.com`으로 리다이렉트됩니다. 현재 v0.1.0 tarball은 실행 중 npm 의존성 설치를 위해 `registry.npmjs.org`도 필요할 수 있습니다.
 
 ## 현재 지원 범위
 

@@ -26,6 +26,18 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 outlook inbox --limit 10
 ```
 
+Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 아래 도메인이 필요합니다.
+
+```text
+github.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+graph.microsoft.com
+login.microsoftonline.com
+```
+
+`github.com`만 허용하면 부족할 수 있습니다. GitHub Release asset은 실제 다운로드 시 `release-assets.githubusercontent.com`으로 리다이렉트됩니다. 현재 v0.1.0은 npm 의존성 설치 때문에 `registry.npmjs.org`도 필요할 수 있습니다.
+
 ## 2순위: npm registry 공개 배포
 
 나중에 public npm registry에 배포하면 더 짧게 실행할 수 있습니다.
@@ -117,15 +129,16 @@ npm run package:github-release
 생성 파일:
 
 ```text
-releases/github-release/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
-releases/github-release/v0.1.0/SHA256SUMS.txt
-releases/github-release/v0.1.0/Hare_M365_Start_Windows.zip
-releases/github-release/v0.1.0/Hare_M365_Start_Mac_Linux.sh
-releases/github-release/v0.1.0/LLM_FIRST_PROMPT_KO.txt
-releases/github-release/v0.1.0/README.md
+releases/github-release/v0.1.0-upload-only/ohmyhotel-hare-m365-agent-0.1.0.tgz
+releases/github-release/v0.1.0-upload-only/SHA256SUMS.txt
+releases/github-release/v0.1.0-upload-only/Hare_M365_Start_Windows.zip
+releases/github-release/v0.1.0-upload-only/Hare_M365_Start_Mac_Linux.sh
+releases/github-release/v0.1.0-upload-only/LLM_FIRST_PROMPT_KO.txt
+releases/github-release/v0.1.0-upload-only/README.md
+releases/github-release/v0.1.0-upload-only/github-release-npm-guide.md
 ```
 
-이 파일들을 GitHub Release `v0.1.0`에 업로드합니다.
+`v0.1.0-upload-only` 폴더의 파일만 GitHub Release `v0.1.0`에 업로드합니다.
 
 ## 안전 규칙
 

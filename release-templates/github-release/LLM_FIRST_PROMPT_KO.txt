@@ -3,9 +3,19 @@
 패키지 URL:
 __PACKAGE_URL__
 
+Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 도메인이 허용되어 있는지 확인하고, 막혀 있으면 사용자에게 설정을 안내해.
+
+- github.com
+- release-assets.githubusercontent.com
+- registry.npmjs.org
+- graph.microsoft.com
+- login.microsoftonline.com
+
 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
 
 .env, .cache, token, device code는 읽거나 출력하지 마.
+
+패키지 다운로드가 403, network_error, allowlist 오류로 실패하면 Windows GUI나 파일 탐색기로 우회하지 말고, 어떤 도메인이 막혔는지 사용자에게 알려줘.
 
 실행 예:
 npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 llm-guide
