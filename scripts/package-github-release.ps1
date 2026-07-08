@@ -105,6 +105,8 @@ foreach ($name in $required) {
   Copy-Item -LiteralPath (Join-Path $target $name) -Destination (Join-Path $uploadOnly $name) -Force
 }
 
+& (Join-Path $PSScriptRoot "validate-release.ps1") -Tag $tag
+
 Write-Host "Prepared GitHub Release assets:"
 Write-Host $target
 Write-Host "Upload only these files:"

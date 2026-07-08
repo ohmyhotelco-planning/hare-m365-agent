@@ -42,6 +42,7 @@ foreach ($required in @(
 
 foreach ($forbidden in @(
   "package/.cache/",
+  "package/runtime/",
   "package/downloads/",
   "package/logs/",
   "package/node_modules/",

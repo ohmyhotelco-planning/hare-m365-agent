@@ -38,7 +38,8 @@
     "setup:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1",
     "smoke:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-test.ps1",
     "start": "node dist/cli.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "validate:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1"
   },
   "dependencies": {
     "@azure/msal-node": "^2.16.2",
