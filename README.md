@@ -46,6 +46,24 @@ login.microsoftonline.com
 .env, .cache, token, device code는 읽거나 출력하지 마.
 ```
 
+## 새 채팅세션에서 다시 사용할 때
+
+새 채팅세션은 Hare M365 Agent와 패키지 URL을 기억하지 못합니다. 도메인 허용과 로그인을 이미 끝냈더라도 아래 짧은 프롬프트를 다시 전달합니다.
+
+```text
+도메인 허용은 이미 완료했다. Hare M365 Agent를 사용해줘.
+
+패키지 URL:
+https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
+
+먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해.
+loggedIn이 true면 바로 내 요청을 처리하고, false면 auth login을 실행한 뒤 Microsoft 로그인은 내가 직접 완료하게 안내해.
+.env, .cache, token, device code는 읽거나 출력하지 마.
+
+요청:
+[여기에 Outlook/Teams/파일 관련 요청을 적기]
+```
+
 ## 사람이 해야 하는 일
 
 0. LLM에게 최초 프롬프트를 주기 전에 Claude/Cowork 설정에서 아래 5개 도메인을 허용합니다.

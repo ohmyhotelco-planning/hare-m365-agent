@@ -48,7 +48,7 @@ Hare_M365_Start_Mac_Linux.sh
 
 사용자는 긴 명령어를 직접 외울 필요가 없습니다. `LLM_FIRST_PROMPT_KO.txt` 내용을 LLM에게 전달하면 됩니다.
 
-비개발자 사용자에게는 먼저 `START_HERE.html`을 열도록 안내합니다. 이 HTML은 도메인 허용, LLM 프롬프트 복사, 로그인 주의사항을 한 화면에서 보여줍니다.
+비개발자 사용자에게는 먼저 `START_HERE.html`을 열도록 안내합니다. 이 HTML은 도메인 허용, 최초 LLM 프롬프트 복사, 새 채팅세션용 재사용 프롬프트 복사, 로그인 주의사항을 한 화면에서 보여줍니다.
 
 단, Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 사용자가 LLM에게 작업을 맡기기 전에 아래 도메인을 먼저 허용해야 합니다.
 
@@ -70,6 +70,7 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 
 - Node.js/npm이 설치되어 있어야 합니다.
 - Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 LLM 실행 전에 먼저 허용합니다.
+- 새 채팅세션은 Hare M365 Agent를 기억하지 못하므로 `START_HERE.html`의 새 채팅용 프롬프트를 다시 붙여넣습니다.
 - 처음 사용하거나 로그인 만료 시 Microsoft device-code 로그인을 직접 완료합니다.
 - device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
 

@@ -331,8 +331,8 @@ login.microsoftonline.com</pre>
     </section>
 
     <section class="step">
-      <div class="step-title"><span class="num">2</span>LLM에 최초 프롬프트 전달</div>
-      <p>도메인 허용을 끝낸 뒤 아래 프롬프트를 LLM에게 전달합니다.</p>
+      <div class="step-title"><span class="num">2</span>처음 쓰는 채팅에 프롬프트 전달</div>
+      <p>처음 설치하거나 도메인 허용 여부가 확실하지 않은 채팅에서는 아래 프롬프트를 LLM에게 전달합니다.</p>
       <button onclick="copyText('prompt')">프롬프트 복사</button>
       <pre id="prompt">아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
 
@@ -361,7 +361,24 @@ __PACKAGE_URL__
     </section>
 
     <section class="step">
-      <div class="step-title"><span class="num">4</span>직접 테스트 명령</div>
+      <div class="step-title"><span class="num">4</span>새 채팅에서 다시 사용할 때</div>
+      <p>새 채팅세션은 Hare M365 Agent를 기억하지 못합니다. 도메인 허용을 이미 끝냈더라도 아래 짧은 프롬프트로 도구와 패키지 URL을 다시 알려줍니다.</p>
+      <button onclick="copyText('reusePrompt')">새 채팅용 프롬프트 복사</button>
+      <pre id="reusePrompt">도메인 허용은 이미 완료했다. Hare M365 Agent를 사용해줘.
+
+패키지 URL:
+__PACKAGE_URL__
+
+먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해.
+loggedIn이 true면 바로 내 요청을 처리하고, false면 auth login을 실행한 뒤 Microsoft 로그인은 내가 직접 완료하게 안내해.
+.env, .cache, token, device code는 읽거나 출력하지 마.
+
+요청:
+[여기에 Outlook/Teams/파일 관련 요청을 적기]</pre>
+    </section>
+
+    <section class="step">
+      <div class="step-title"><span class="num">5</span>직접 테스트 명령</div>
       <p>터미널에서 직접 확인해야 할 때는 아래 명령을 사용합니다.</p>
       <button onclick="copyText('cmd')">명령 복사</button>
       <pre id="cmd">npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 llm-guide
