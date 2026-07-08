@@ -331,9 +331,9 @@ login.microsoftonline.com</pre>
     </section>
 
     <section class="step">
-      <div class="step-title"><span class="num">2</span>처음 쓰는 채팅에 프롬프트 전달</div>
-      <p>처음 설치하거나 도메인 허용 여부가 확실하지 않은 채팅에서는 아래 프롬프트를 LLM에게 전달합니다.</p>
-      <button onclick="copyText('prompt')">프롬프트 복사</button>
+      <div class="step-title"><span class="num">2</span>맨 처음 1회용 프롬프트 전달</div>
+      <p>설치 직후 처음 사용하는 채팅, 또는 도메인 허용 여부가 확실하지 않은 채팅에서는 아래 프롬프트를 LLM에게 한 번 전달합니다.</p>
+      <button onclick="copyText('prompt')">최초 1회용 프롬프트 복사</button>
       <pre id="prompt">아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
 
 패키지 URL:
@@ -361,7 +361,7 @@ __PACKAGE_URL__
     </section>
 
     <section class="step">
-      <div class="step-title"><span class="num">4</span>새 채팅에서 다시 사용할 때</div>
+      <div class="step-title"><span class="num">4</span>이후 새 채팅에서 다시 사용할 때</div>
       <p>새 채팅세션은 Hare M365 Agent를 기억하지 못합니다. 도메인 허용을 이미 끝냈더라도 아래 짧은 프롬프트로 도구와 패키지 URL을 다시 알려줍니다.</p>
       <button onclick="copyText('reusePrompt')">새 채팅용 프롬프트 복사</button>
       <pre id="reusePrompt">도메인 허용은 이미 완료했다. Hare M365 Agent를 사용해줘.

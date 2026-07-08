@@ -44,7 +44,9 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
 ```
 
-## 사용자에게 줄 최초 프롬프트
+## 사용자에게 줄 맨 처음 1회용 프롬프트
+
+설치 직후 처음 사용하는 채팅, 또는 도메인 허용 여부가 확실하지 않은 채팅에는 아래 프롬프트를 한 번 전달합니다.
 
 ```text
 아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
@@ -63,7 +65,7 @@ login.microsoftonline.com
 .env, .cache, token, device code는 읽거나 출력하지 마.
 ```
 
-## 새 채팅세션에서 다시 사용할 때
+## 이후 새 채팅세션에서 다시 사용할 때
 
 새 채팅세션은 Hare M365 Agent를 기억하지 못하므로 패키지 URL과 안전 지침을 다시 알려줘야 합니다. 이미 도메인 허용을 완료한 사용자는 아래 짧은 프롬프트를 사용합니다.
 

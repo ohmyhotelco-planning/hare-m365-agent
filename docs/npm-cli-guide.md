@@ -38,7 +38,7 @@ login.microsoftonline.com
 
 `github.com`만 허용하면 부족할 수 있습니다. GitHub Release asset은 실제 다운로드 시 `release-assets.githubusercontent.com`으로 리다이렉트됩니다. 현재 v0.1.0은 npm 의존성 설치 때문에 `registry.npmjs.org`도 필요할 수 있습니다.
 
-이 도메인 허용은 `npm exec`보다 먼저 완료되어야 합니다. 허용 전에는 LLM이 패키지를 다운로드할 수 없으므로, LLM에게 최초 프롬프트를 주기 전에 사용자가 먼저 설정을 끝내야 합니다.
+이 도메인 허용은 `npm exec`보다 먼저 완료되어야 합니다. 허용 전에는 LLM이 패키지를 다운로드할 수 없으므로, LLM에게 맨 처음 1회용 프롬프트를 주기 전에 사용자가 먼저 설정을 끝내야 합니다.
 
 ## 2순위: npm registry 공개 배포
 
@@ -62,7 +62,7 @@ hare-m365 auth status
 
 기존 호환 명령인 `omh-m365`도 유지됩니다.
 
-## LLM 최초 프롬프트
+## LLM 맨 처음 1회용 프롬프트
 
 ```text
 아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
