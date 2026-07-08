@@ -47,55 +47,11 @@ New-Item -ItemType Directory -Path $uploadOnly -Force | Out-Null
 Copy-Item -LiteralPath $tgz.FullName -Destination (Join-Path $target $tgz.Name) -Force
 $shaText = Get-Content -LiteralPath $sha -Raw
 Set-Content -LiteralPath (Join-Path $target "SHA256SUMS.txt") -Value $shaText -Encoding ASCII
-Copy-Item -LiteralPath (Join-Path $root "docs\github-release-npm-guide.md") -Destination (Join-Path $target "github-release-npm-guide.md") -Force
-
 $packageUrl = "https://github.com/$repo/releases/download/$tag/$($tgz.Name)"
-$templateDir = Join-Path $root "release-templates\github-release"
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-
-foreach ($templateName in @(
-  "Hare_M365_Start_Windows.cmd",
-  "Hare_M365_Start_Mac_Linux.sh",
-  "LLM_FIRST_PROMPT_KO.txt",
-  "START_HERE.html",
-  "README.md"
-)) {
-  $source = Join-Path $templateDir $templateName
-  if (-not (Test-Path -LiteralPath $source)) {
-    throw "Release template is missing: $source"
-  }
-
-  $content = [System.IO.File]::ReadAllText($source, [System.Text.Encoding]::UTF8)
-  $content = $content.Replace("__PACKAGE_URL__", $packageUrl)
-  $content = $content.Replace("__PACKAGE_FILE__", $tgz.Name)
-  $content = $content.Replace("__VERSION__", $version)
-  $content = $content.Replace("__TAG__", $tag)
-  $content = $content.Replace("__REPO__", $repo)
-
-  [System.IO.File]::WriteAllText((Join-Path $target $templateName), $content, $utf8NoBom)
-}
-
-$windowsStart = Join-Path $target "Hare_M365_Start_Windows.cmd"
-$startHereHtml = Join-Path $target "START_HERE.html"
-$windowsZip = Join-Path $target "Hare_M365_Start_Windows.zip"
-if (-not (Test-Path -LiteralPath $windowsStart)) {
-  throw "Windows start script was not created: $windowsStart"
-}
-if (-not (Test-Path -LiteralPath $startHereHtml)) {
-  throw "START_HERE.html was not created: $startHereHtml"
-}
-Compress-Archive -LiteralPath @($windowsStart, $startHereHtml) -DestinationPath $windowsZip -Force
-Remove-Item -LiteralPath $windowsStart -Force
 
 $required = @(
   $tgz.Name,
-  "SHA256SUMS.txt",
-  "Hare_M365_Start_Windows.zip",
-  "Hare_M365_Start_Mac_Linux.sh",
-  "START_HERE.html",
-  "LLM_FIRST_PROMPT_KO.txt",
-  "README.md",
-  "github-release-npm-guide.md"
+  "SHA256SUMS.txt"
 )
 
 foreach ($name in $required) {
