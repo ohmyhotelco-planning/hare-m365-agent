@@ -135,6 +135,29 @@
       background: #24292f;
     }
     .small { font-size: 13px; }
+    .copy-toast {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 20;
+      min-width: 140px;
+      max-width: min(320px, calc(100vw - 48px));
+      padding: 11px 14px;
+      border-radius: 8px;
+      background: #24292f;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 10px 28px rgba(31, 35, 40, 0.22);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+    .copy-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
     .path-list {
       margin: 12px 0;
       padding-left: 22px;
@@ -347,7 +370,11 @@ npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 auth status</pre>
     </section>
   </main>
 
+  <div id="copyToast" class="copy-toast" role="status" aria-live="polite"></div>
+
   <script>
+    let copyToastTimer;
+
     async function copyText(id) {
       const text = document.getElementById(id).innerText;
       await copyToClipboard(text);
@@ -360,10 +387,20 @@ npm exec --yes --package "__PACKAGE_URL__" -- hare-m365 auth status</pre>
     async function copyToClipboard(text) {
       try {
         await navigator.clipboard.writeText(text);
-        alert("복사했습니다.");
+        showCopyToast("복사했습니다.");
       } catch (error) {
         window.prompt("자동 복사가 막혔습니다. 아래 내용을 직접 복사하세요.", text);
       }
+    }
+
+    function showCopyToast(message) {
+      const toast = document.getElementById("copyToast");
+      toast.innerText = message;
+      toast.classList.add("show");
+      clearTimeout(copyToastTimer);
+      copyToastTimer = setTimeout(() => {
+        toast.classList.remove("show");
+      }, 1200);
     }
   </script>
 </body>
