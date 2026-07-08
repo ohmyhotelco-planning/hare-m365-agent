@@ -1,0 +1,55 @@
+{
+  "name": "@ohmyhotel/hare-m365-agent",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Hare CLI for LLM-driven Microsoft 365 Graph access using delegated permissions.",
+  "type": "module",
+  "bin": {
+    "hare-m365": "./dist/cli.js",
+    "omh-m365": "./dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "docs/npm-cli-guide.md",
+    "docs/github-release-npm-guide.md",
+    "README.md",
+    "policy.json",
+    ".env",
+    ".env.example",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:exe:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-exe.ps1",
+    "build:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1",
+    "build:pkg:mac": "bash scripts/build-mac-pkg.sh",
+    "dev": "tsx src/cli.ts",
+    "package:linux": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-linux.ps1",
+    "package:mac": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-mac.ps1",
+    "package:mac-build-input": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-mac-build-input.ps1",
+    "package:github-release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-github-release.ps1",
+    "package:npm": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-npm.ps1",
+    "package:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1",
+    "prepare:sharepoint": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-sharepoint-upload.ps1",
+    "setup:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1",
+    "smoke:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-test.ps1",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^2.16.2",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "esbuild": "^0.28.1",
+    "postject": "^1.0.0-alpha.6",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}

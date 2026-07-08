@@ -1,0 +1,98 @@
+# Hare M365 Agent Instructions For Claude
+
+Use Hare M365 Agent as a shell-executed Microsoft 365 read-only tool.
+
+Primary workflow:
+
+```text
+Claude/Cowork/Claude Code -> local shell -> npm exec GitHub Release tarball -> hare-m365 -> Microsoft Graph delegated access
+```
+
+Do not default to `computer-use`, File Explorer, Windows desktop control, or double-click execution. Use shell commands directly when shell access exists.
+
+## Primary Package URL
+
+Use this GitHub Release package URL unless the user gives a newer version:
+
+```text
+https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
+```
+
+Command prefix:
+
+```bash
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365
+```
+
+Because this is not a global install, repeat the full npm exec prefix for every command.
+
+## Required Behavior
+
+- Run the startup checklist first.
+- Treat startup as a hard gate.
+- Do not run Outlook, Teams, or Files commands until `configured: true` and `loggedIn: true`.
+- Never print or inspect `.env`, `.cache/`, access tokens, refresh tokens, cookies, device codes, or MSAL cache contents.
+- Keep operations read-only.
+- Do not send email, post Teams messages, create calendar events, upload files, delete files, share files, or change permissions in this POC.
+- Prefer concise summaries and relevant metadata over raw message dumps.
+- Ask before downloading files.
+
+Startup checklist:
+
+```bash
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 doctor
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth status
+```
+
+## Cowork Notes
+
+If Cowork has domain allow-list controls, Microsoft 365 and GitHub Release execution need access to:
+
+- `github.com`
+- `objects.githubusercontent.com`
+- `registry.npmjs.org`
+- `graph.microsoft.com`
+- `login.microsoftonline.com`
+
+If shell access is available, do not ask for Windows desktop control just to run Hare.
+
+If the package download is blocked by network policy, report the blocked domain/error and stop. Do not switch to GUI control unless the user explicitly asks for desktop troubleshooting.
+
+## Login
+
+Login requires human device-code authentication.
+
+Use this command only where the human can see the login code and complete the browser step:
+
+```bash
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth login
+```
+
+Do not read, repeat, store, or summarize the displayed device code.
+
+After the human says login is complete, rerun startup and resume the original task.
+
+## Commands
+
+```bash
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 outlook inbox --limit 10
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams teams
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams chats --limit 20
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 teams chat-messages --chat-id "<chat-id>" --limit 20
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 files search --query "keyword" --limit 10
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 files download --drive-id "<drive-id>" --item-id "<item-id>" --name "downloaded-file.ext"
+```
+
+## Teams Recency Rule
+
+- `teams chats` is ordered by `lastMessageCreatedDateTime`, which comes from Microsoft Graph `lastMessagePreview/createdDateTime`.
+- Use `lastMessageCreatedDateTime` to decide the newest chat.
+- Treat `lastUpdatedDateTime` as chat metadata only.
+
+## Recovery
+
+- Missing configuration: say the package configuration is missing or invalid. Do not ask the user to paste `.env` values into chat.
+- Authentication missing or expired: complete login first, rerun startup, then resume.
+- Access denied: explain the difference between Azure Application permissions and the signed-in user's actual M365 permissions.
+- Write/delete/share/send request: say it is outside the current POC policy.

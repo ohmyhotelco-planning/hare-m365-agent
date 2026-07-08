@@ -1,0 +1,18 @@
+{
+  "defaultMode": "readOnly",
+  "allowWriteActions": false,
+  "allowDownloads": true,
+  "storeRawMessages": false,
+  "maxMailFetchLimit": 20,
+  "maxTeamsFetchLimit": 50,
+  "maxFileSearchLimit": 25,
+  "retentionDays": 0,
+  "requireConfirmationFor": [
+    "send_mail",
+    "post_teams_message",
+    "create_calendar_event",
+    "upload_file",
+    "delete_file",
+    "change_permission"
+  ]
+}

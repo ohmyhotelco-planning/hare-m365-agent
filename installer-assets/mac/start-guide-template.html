@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OMH M365 Agent Mac 시작하기</title>
+  <style>
+    :root { color-scheme: light; --accent: #FF6000; --text: #1f2933; --muted: #5c6670; --line: #d8dde3; --bg: #f6f8fa; --panel: #ffffff; --soft: #fff7ed; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Helvetica Neue", Arial, sans-serif; color: var(--text); background: var(--bg); line-height: 1.55; }
+    main { max-width: 980px; margin: 0 auto; padding: 32px 24px 52px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin: 0 0 12px; font-size: 19px; }
+    h3 { margin: 18px 0 8px; font-size: 16px; }
+    p { margin: 0 0 12px; }
+    .accent { width: 64px; height: 4px; background: var(--accent); margin: 18px 0 28px; }
+    .step { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; margin: 16px 0; }
+    .num { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin-right: 8px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; }
+    code, textarea { font-family: Menlo, Consolas, "Courier New", monospace; }
+    code { display: block; padding: 10px 12px; background: #f0f3f6; border: 1px solid var(--line); border-radius: 6px; overflow-wrap: anywhere; }
+    code.inline { display: inline; padding: 2px 5px; }
+    textarea { width: 100%; min-height: 150px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; }
+    button { border: 0; border-radius: 6px; background: var(--accent); color: white; font-weight: 700; padding: 10px 14px; cursor: pointer; }
+    button.secondary { background: #344054; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .muted { color: var(--muted); }
+    .guide-list { margin: 12px 0 16px; padding-left: 24px; }
+    .guide-list li { margin: 8px 0; }
+    .callout { background: var(--soft); border: 1px solid #fed7aa; border-left: 4px solid var(--accent); border-radius: 6px; padding: 12px 14px; margin: 12px 0; }
+    .mock-settings { display: grid; grid-template-columns: 180px 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #202124; color: #f5f5f5; margin-top: 14px; }
+    .mock-sidebar { background: #18191b; padding: 14px; min-height: 300px; }
+    .mock-search { background: #303134; border-radius: 6px; padding: 8px 10px; color: #b8bdc7; margin-bottom: 14px; }
+    .mock-nav { padding: 8px 10px; border-radius: 6px; margin: 5px 0; color: #c9ced6; }
+    .mock-nav.active { background: #3a3b3f; color: #fff; font-weight: 700; outline: 2px solid var(--accent); }
+    .mock-content { background: #242528; padding: 18px; }
+    .mock-section-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+    .mock-card { border: 1px solid #55585f; border-radius: 8px; padding: 16px; background: #313236; }
+    .mock-label { font-weight: 700; margin-bottom: 4px; }
+    .mock-row { display: grid; grid-template-columns: 1fr 70px; gap: 8px; margin: 12px 0; }
+    .mock-input { border: 2px solid var(--accent); background: #4a4b4f; border-radius: 6px; padding: 10px; color: #d8dde3; }
+    .mock-add { background: var(--accent); color: #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+    .mock-domain { background: #505257; border-radius: 6px; padding: 10px 12px; margin-top: 8px; font-family: Menlo, Consolas, monospace; }
+    .terminal { background: #0c0c0c; color: #eeeeee; border-radius: 8px; padding: 14px; font-family: Menlo, Consolas, monospace; overflow-wrap: anywhere; margin: 12px 0; }
+    .code-highlight { display: inline-block; border: 3px solid #ff2d2d; padding: 2px 6px; color: #fff; background: #2a2a2a; font-weight: 700; }
+    @media (max-width: 720px) { .mock-settings { grid-template-columns: 1fr; } .mock-sidebar { min-height: auto; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>OMH M365 Agent Mac 시작하기</h1>
+    <p class="muted">이 화면에서 도메인 허용, 로그인, Cowork 프롬프트까지 순서대로 진행하면 됩니다.</p>
+    <div class="accent"></div>
+
+    <section class="step">
+      <h2><span class="num">1</span>Claude/Cowork 도메인 허용</h2>
+      <ol class="guide-list">
+        <li><strong>Claude 앱 왼쪽 아래 계정/조직명</strong>을 클릭하고 <strong>설정</strong>을 엽니다.</li>
+        <li>왼쪽 설정 메뉴에서 <strong>기능</strong>을 클릭합니다.</li>
+        <li>오른쪽에서 <strong>네트워크 접근</strong> 섹션을 찾습니다.</li>
+        <li><strong>도메인 허용 목록</strong> 아래 <strong>추가 허용 도메인</strong> 입력칸에 아래 도메인을 하나씩 입력하고 <strong>추가</strong>를 누릅니다.</li>
+      </ol>
+      <code>graph.microsoft.com</code>
+      <br>
+      <code>login.microsoftonline.com</code>
+      <div class="callout">두 도메인이 목록에 보이면 완료입니다.</div>
+      <div class="mock-settings">
+        <div class="mock-sidebar">
+          <div class="mock-search">검색</div>
+          <div class="mock-nav">일반</div>
+          <div class="mock-nav">계정</div>
+          <div class="mock-nav">개인정보보호</div>
+          <div class="mock-nav active">기능</div>
+          <div class="mock-nav">Claude Code</div>
+          <div class="mock-nav">Chrome용 Claude</div>
+        </div>
+        <div class="mock-content">
+          <div class="mock-section-title">네트워크 접근</div>
+          <div class="mock-card">
+            <div class="mock-label">도메인 허용 목록</div>
+            <div class="mock-label">추가 허용 도메인</div>
+            <div class="mock-row">
+              <div class="mock-input">example.com 또는 *.example.com</div>
+              <div class="mock-add">추가</div>
+            </div>
+            <div class="mock-domain">graph.microsoft.com</div>
+            <div class="mock-domain">login.microsoftonline.com</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="num">2</span>최초 1회 로그인</h2>
+      <p><strong>Finder에서 이 폴더를 열고</strong> 아래 파일을 더블클릭합니다.</p>
+      <code id="loginCommandPath">__ESCAPED_LOGIN_CMD__</code>
+      <p class="muted">파일 이름은 <strong>로그인 시작.command</strong>입니다.</p>
+      <div class="callout">더블클릭으로 열리지 않으면 파일을 Control-클릭 또는 오른쪽 클릭한 뒤 <strong>열기</strong>를 선택하세요. 확인 창이 뜨면 다시 <strong>열기</strong>를 누릅니다. 회사 보안 정책상 계속 차단되면 IT 배포 담당자에게 Jamf/Intune 배포본을 요청하세요.</div>
+      <ol class="guide-list">
+        <li>터미널 창이 열리고 Microsoft 로그인 페이지가 자동으로 열립니다.</li>
+        <li>터미널 창에 <strong>device code</strong>가 표시됩니다.</li>
+        <li>브라우저의 Microsoft device login 화면에 그 코드를 직접 입력합니다.</li>
+        <li>회사 Microsoft 계정으로 로그인합니다.</li>
+        <li>로그인이 끝나면 터미널에서 <code class="inline">loggedIn: true</code>가 보이는지 확인합니다.</li>
+      </ol>
+      <div class="terminal">
+        To sign in, use a web browser to open the page https://login.microsoft.com/device<br>
+        and enter the code <span class="code-highlight">화면에 표시된 코드</span> to authenticate.
+      </div>
+      <div class="callout">device code는 Claude/Cowork/채팅에 붙여넣지 말고, 사용자가 브라우저에 직접 입력하세요.</div>
+    </section>
+
+    <section class="step">
+      <h2><span class="num">3</span>Cowork에 프롬프트 붙여넣기</h2>
+      <textarea id="prompt" readonly>__ESCAPED_PROMPT__</textarea>
+      <div class="row">
+        <button id="copyPrompt">프롬프트 복사</button>
+        <button class="secondary" id="selectPrompt">선택하기</button>
+      </div>
+      <p class="muted">파일로도 저장됨: <span id="promptPath">__ESCAPED_PROMPT_PATH__</span></p>
+    </section>
+
+    <section class="step">
+      <h2>설치/실행 폴더</h2>
+      <code id="packagePath">__ESCAPED_LINUX_PATH__</code>
+    </section>
+  </main>
+  <script>
+    const promptBox = document.getElementById("prompt");
+    const packagePathBox = document.getElementById("packagePath");
+    const loginCommandPathBox = document.getElementById("loginCommandPath");
+    const promptPathBox = document.getElementById("promptPath");
+
+    function currentFolderPath() {
+      if (window.location.protocol !== "file:") return "";
+      const folderUrl = new URL(".", window.location.href);
+      return decodeURIComponent(folderUrl.pathname);
+    }
+
+    const folderPath = currentFolderPath();
+    if (folderPath) {
+      const loginPath = `${folderPath}로그인 시작.command`;
+      const promptPath = `${folderPath}Cowork에 붙여넣을 프롬프트.txt`;
+      const promptText = `${folderPath}
+
+이 Mac 배포 폴더를 Cowork에 연결하고 COWORK_REQUIRED_README.md를 먼저 읽은 뒤 그대로 따라.
+작업: <원하는 Microsoft 365 작업>
+`;
+
+      packagePathBox.textContent = folderPath;
+      loginCommandPathBox.textContent = loginPath;
+      promptPathBox.textContent = promptPath;
+      promptBox.value = promptText;
+    }
+
+    document.getElementById("selectPrompt").addEventListener("click", () => {
+      promptBox.focus();
+      promptBox.select();
+    });
+    document.getElementById("copyPrompt").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(promptBox.value);
+        alert("프롬프트를 복사했습니다.");
+      } catch {
+        promptBox.focus();
+        promptBox.select();
+        alert("복사 버튼이 차단되면 Command+C로 복사하세요.");
+      }
+    });
+  </script>
+</body>
+</html>

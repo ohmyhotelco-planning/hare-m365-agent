@@ -1,0 +1,4 @@
+{
+  "notes": "Optional future config placeholder. Current POC reads .env and policy.json.",
+  "profile": "default"
+}

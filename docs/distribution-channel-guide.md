@@ -1,0 +1,98 @@
+# Hare M365 Agent 배포 채널 가이드
+
+## 결론
+
+현재 1순위 배포 방식은 **public GitHub Release + npm exec**입니다.
+
+이 방식은 npm registry 유료 private package를 쓰지 않으면서도, Windows/Mac/Linux/LLM shell 환경에서 같은 npm 실행 모델을 사용할 수 있습니다.
+
+## 1순위: Public GitHub Release + npm exec
+
+GitHub Release에 npm tarball을 올리고 아래처럼 실행합니다.
+
+```bash
+npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 llm-guide
+```
+
+장점:
+
+- 직원에게 GitHub 계정이 없어도 public release asset은 받을 수 있습니다.
+- npm registry publish가 필요 없습니다.
+- OS별 exe/pkg를 따로 만들지 않아도 됩니다.
+- LLM이 shell에서 직접 실행하기 쉽습니다.
+
+주의:
+
+- GitHub 저장소 또는 Release가 private이면 GitHub 계정/권한 문제가 다시 생깁니다.
+- Release가 public이면 `.tgz` 안의 코드와 `.env` 설정 파일도 공개됩니다.
+- 직원 PC 또는 LLM 환경에 Node.js/npm이 필요합니다.
+
+## 2순위: Public npm registry
+
+코드 공개가 가능하고 npmjs.com 배포를 승인받으면 가장 짧게 실행할 수 있습니다.
+
+```bash
+npx @ohmyhotel/hare-m365-agent llm-guide
+```
+
+단, private npm package는 유료/인증 문제가 있어 비개발자 배포에는 적합하지 않습니다.
+
+## 3순위: Intune / Company Portal / Jamf
+
+비개발자에게 Node.js/npm 설치까지 포함해 관리형으로 배포해야 한다면 Intune, Company Portal, Jamf를 검토합니다.
+
+장점:
+
+- 버전 관리, 회수, 대상자 지정이 가능합니다.
+- macOS 보안 정책, Windows SmartScreen, 실행 파일 차단 문제를 표준 배포 체계로 다룰 수 있습니다.
+
+단점:
+
+- OS별 패키징이 필요합니다.
+- LLM이 직접 쓰는 npm 실행 모델과는 거리가 있습니다.
+
+## 4순위: SharePoint 보조 배포
+
+SharePoint는 npm 실험의 중심 배포 채널이 아니라 보조 채널입니다.
+
+사용 용도:
+
+- 사용자 안내 문서 공유
+- GitHub Release 링크 공지
+- 오프라인/차단 대비용 산출물 보관
+
+주의:
+
+- `.exe`, `.cmd`, `.ps1`, `.pkg`, `.tgz` 등은 조직 보안 정책에 따라 업로드 또는 공유가 차단될 수 있습니다.
+- SharePoint를 중심으로 잡으면 결국 파일 다운로드형 배포가 되어 npm 실행 모델 검증과 어긋납니다.
+
+## Teams 안내 예시
+
+```text
+Hare M365 Agent 사용 안내입니다.
+
+LLM에게 아래 문구를 전달하세요.
+
+아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해.
+패키지 URL: https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz
+먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
+.env, .cache, token, device code는 읽거나 출력하지 마.
+
+처음 사용 시 Microsoft device-code 로그인이 필요할 수 있습니다.
+로그인 화면의 코드는 본인이 직접 브라우저에 입력하고, 채팅에는 붙여넣지 마세요.
+```
+
+## Release 파일
+
+GitHub Release `v0.1.0`에 업로드할 파일:
+
+```text
+ohmyhotel-hare-m365-agent-0.1.0.tgz
+ohmyhotel-hare-m365-agent-0.1.0.tgz.sha256
+LLM_FIRST_PROMPT_KO.txt
+README.md
+Hare_M365_Start_Windows.cmd
+Hare_M365_Start_Mac_Linux.sh
+```
+
+`cmd`/`sh` 파일은 선택입니다. 핵심은 `.tgz` URL과 LLM 최초 프롬프트입니다.
