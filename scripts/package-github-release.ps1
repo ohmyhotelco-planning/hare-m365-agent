@@ -57,6 +57,7 @@ foreach ($templateName in @(
   "Hare_M365_Start_Windows.cmd",
   "Hare_M365_Start_Mac_Linux.sh",
   "LLM_FIRST_PROMPT_KO.txt",
+  "START_HERE.html",
   "README.md"
 )) {
   $source = Join-Path $templateDir $templateName
@@ -75,11 +76,15 @@ foreach ($templateName in @(
 }
 
 $windowsStart = Join-Path $target "Hare_M365_Start_Windows.cmd"
+$startHereHtml = Join-Path $target "START_HERE.html"
 $windowsZip = Join-Path $target "Hare_M365_Start_Windows.zip"
 if (-not (Test-Path -LiteralPath $windowsStart)) {
   throw "Windows start script was not created: $windowsStart"
 }
-Compress-Archive -LiteralPath $windowsStart -DestinationPath $windowsZip -Force
+if (-not (Test-Path -LiteralPath $startHereHtml)) {
+  throw "START_HERE.html was not created: $startHereHtml"
+}
+Compress-Archive -LiteralPath @($windowsStart, $startHereHtml) -DestinationPath $windowsZip -Force
 Remove-Item -LiteralPath $windowsStart -Force
 
 $required = @(
@@ -87,6 +92,7 @@ $required = @(
   "SHA256SUMS.txt",
   "Hare_M365_Start_Windows.zip",
   "Hare_M365_Start_Mac_Linux.sh",
+  "START_HERE.html",
   "LLM_FIRST_PROMPT_KO.txt",
   "README.md",
   "github-release-npm-guide.md"

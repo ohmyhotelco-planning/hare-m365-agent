@@ -3,6 +3,7 @@ chcp 65001 >nul
 setlocal
 
 set "HARE_M365_PACKAGE_URL=__PACKAGE_URL__"
+set "START_GUIDE=%~dp0START_HERE.html"
 
 echo Hare M365 Agent 시작 도구
 echo.
@@ -10,6 +11,14 @@ echo 이 파일은 GitHub Release에 올라간 Hare M365 Agent npm 패키지를 
 echo 패키지 URL:
 echo %HARE_M365_PACKAGE_URL%
 echo.
+
+if exist "%START_GUIDE%" (
+  echo 시작 가이드를 브라우저로 엽니다.
+  start "" "%START_GUIDE%"
+  echo 가이드의 1번 도메인 허용 단계를 먼저 완료하세요.
+  echo.
+  pause
+)
 
 where npm >nul 2>nul
 if errorlevel 1 (
@@ -46,6 +55,6 @@ npm exec --yes --package "%HARE_M365_PACKAGE_URL%" -- hare-m365 auth status
 :done
 echo.
 echo LLM에게 줄 짧은 프롬프트:
-echo 아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해. 패키지 URL: %HARE_M365_PACKAGE_URL% 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해. .env, .cache, token, device code는 읽거나 출력하지 마.
+echo 아래 GitHub Release 패키지를 npm exec로 실행해서 Hare M365 Agent를 사용해. 패키지 URL: %HARE_M365_PACKAGE_URL% 먼저 도메인 허용 여부를 확인하고, 허용 완료 후 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해. .env, .cache, token, device code는 읽거나 출력하지 마.
 echo.
 pause

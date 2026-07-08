@@ -4,6 +4,8 @@
 
 ## 먼저 LLM에게 줄 문구
 
+가장 먼저 `START_HERE.html`을 열어 도메인 허용 단계를 완료하세요.
+
 `LLM_FIRST_PROMPT_KO.txt` 내용을 LLM에게 전달하세요.
 
 Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 LLM에게 작업을 맡기기 전에 아래 도메인을 먼저 허용합니다.
@@ -53,6 +55,7 @@ chmod +x Hare_M365_Start_Mac_Linux.sh
 ```text
 __PACKAGE_FILE__
 SHA256SUMS.txt
+START_HERE.html
 LLM_FIRST_PROMPT_KO.txt
 Hare_M365_Start_Windows.zip
 Hare_M365_Start_Mac_Linux.sh

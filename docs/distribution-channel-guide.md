@@ -102,6 +102,7 @@ GitHub Release `v0.1.0`에 업로드할 파일:
 ```text
 ohmyhotel-hare-m365-agent-0.1.0.tgz
 SHA256SUMS.txt
+START_HERE.html
 LLM_FIRST_PROMPT_KO.txt
 README.md
 Hare_M365_Start_Windows.zip

@@ -31,6 +31,7 @@ GitHub Release에는 `v0.1.0-upload-only` 폴더의 파일만 업로드합니다
 ```text
 ohmyhotel-hare-m365-agent-0.1.0.tgz
 SHA256SUMS.txt
+START_HERE.html
 LLM_FIRST_PROMPT_KO.txt
 README.md
 github-release-npm-guide.md
@@ -46,6 +47,8 @@ Hare_M365_Start_Mac_Linux.sh
 ## 사용자 안내
 
 사용자는 긴 명령어를 직접 외울 필요가 없습니다. `LLM_FIRST_PROMPT_KO.txt` 내용을 LLM에게 전달하면 됩니다.
+
+비개발자 사용자에게는 먼저 `START_HERE.html`을 열도록 안내합니다. 이 HTML은 도메인 허용, LLM 프롬프트 복사, 로그인 주의사항을 한 화면에서 보여줍니다.
 
 단, Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 사용자가 LLM에게 작업을 맡기기 전에 아래 도메인을 먼저 허용해야 합니다.
 

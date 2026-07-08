@@ -19,6 +19,7 @@ GitHub 업로드 허용 확장자에 맞춘 파일 목록:
 ```text
 ohmyhotel-hare-m365-agent-0.1.0.tgz
 SHA256SUMS.txt
+START_HERE.html
 LLM_FIRST_PROMPT_KO.txt
 README.md
 github-release-npm-guide.md
@@ -27,6 +28,8 @@ Hare_M365_Start_Windows.zip
 ```
 
 `Hare_M365_Start_Windows.zip` 안에는 Windows 시작 스크립트 `.cmd`가 들어 있습니다. GitHub 업로드 화면에서 `.cmd`를 직접 받지 않는 경우가 있어 ZIP으로 감쌉니다.
+
+사용자에게는 먼저 `START_HERE.html`을 열어 도메인 허용 단계를 완료하도록 안내합니다.
 
 ## LLM 실행 명령
 
