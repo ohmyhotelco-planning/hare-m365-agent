@@ -24,16 +24,25 @@ if (-not (Test-Path -LiteralPath $sha)) {
 
 $githubReleaseRoot = Join-Path $root "releases\github-release"
 $target = Join-Path $githubReleaseRoot $tag
+$uploadOnly = Join-Path $githubReleaseRoot "$tag-upload-only"
 $resolvedReleaseRoot = [System.IO.Path]::GetFullPath($githubReleaseRoot)
 $resolvedTarget = [System.IO.Path]::GetFullPath($target)
+$resolvedUploadOnly = [System.IO.Path]::GetFullPath($uploadOnly)
 if (-not $resolvedTarget.StartsWith($resolvedReleaseRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
   throw "Refusing to write outside releases\github-release: $resolvedTarget"
+}
+if (-not $resolvedUploadOnly.StartsWith($resolvedReleaseRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "Refusing to write outside releases\github-release: $resolvedUploadOnly"
 }
 
 if (Test-Path -LiteralPath $target) {
   Remove-Item -LiteralPath $target -Recurse -Force
 }
+if (Test-Path -LiteralPath $uploadOnly) {
+  Remove-Item -LiteralPath $uploadOnly -Recurse -Force
+}
 New-Item -ItemType Directory -Path $target -Force | Out-Null
+New-Item -ItemType Directory -Path $uploadOnly -Force | Out-Null
 
 Copy-Item -LiteralPath $tgz.FullName -Destination (Join-Path $target $tgz.Name) -Force
 $shaText = Get-Content -LiteralPath $sha -Raw
@@ -87,9 +96,12 @@ foreach ($name in $required) {
   if (-not (Test-Path -LiteralPath (Join-Path $target $name))) {
     throw "Required GitHub Release asset was not created: $name"
   }
+  Copy-Item -LiteralPath (Join-Path $target $name) -Destination (Join-Path $uploadOnly $name) -Force
 }
 
 Write-Host "Prepared GitHub Release assets:"
 Write-Host $target
+Write-Host "Upload only these files:"
+Write-Host $uploadOnly
 Write-Host "Package URL:"
 Write-Host $packageUrl
