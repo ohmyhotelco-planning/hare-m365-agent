@@ -32,7 +32,7 @@ chmod +x Hare_M365_Start_Mac_Linux.sh
 ## 사람이 해야 하는 일
 
 - Node.js/npm이 설치되어 있어야 합니다.
-- Claude/Cowork 도메인 허용 목록에는 `github.com`, `objects.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용합니다.
+- Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용합니다.
 - Microsoft device-code 로그인 코드는 본인이 브라우저에 직접 입력합니다.
 - device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
 

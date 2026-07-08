@@ -21,9 +21,10 @@ npm run package:github-release
 
 ```text
 releases/github-release/v0.1.0/
+releases/github-release/v0.1.0-upload-only/
 ```
 
-이 폴더의 파일을 GitHub Release `v0.1.0`에 업로드합니다.
+GitHub Release에는 `v0.1.0-upload-only` 폴더의 파일만 업로드합니다.
 
 ## GitHub Release 필수 파일
 
@@ -32,6 +33,7 @@ ohmyhotel-hare-m365-agent-0.1.0.tgz
 SHA256SUMS.txt
 LLM_FIRST_PROMPT_KO.txt
 README.md
+github-release-npm-guide.md
 ```
 
 선택 파일:
@@ -39,7 +41,6 @@ README.md
 ```text
 Hare_M365_Start_Windows.zip
 Hare_M365_Start_Mac_Linux.sh
-github-release-npm-guide.md
 ```
 
 ## 사용자 안내
@@ -55,9 +56,15 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 ## 사람이 해야 하는 일
 
 - Node.js/npm이 설치되어 있어야 합니다.
-- Claude/Cowork 도메인 허용 목록에는 `github.com`, `objects.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용합니다.
+- Claude/Cowork 도메인 허용 목록에는 `github.com`, `release-assets.githubusercontent.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`을 허용합니다.
 - 처음 사용하거나 로그인 만료 시 Microsoft device-code 로그인을 직접 완료합니다.
 - device code, token, `.cache` 내용은 채팅에 붙여넣지 않습니다.
+
+## Cowork 도메인 주의
+
+GitHub Release 파일 URL은 `github.com`에서 시작하지만 실제 asset 다운로드는 `release-assets.githubusercontent.com`으로 리다이렉트됩니다.
+
+현재 패키지는 npm 실행 중 의존성 설치를 위해 `registry.npmjs.org` 접근도 필요할 수 있습니다. Cowork에서 도메인 허용 목록을 최소화하려면 다음 릴리즈에서 npm 의존성을 tarball에 bundled로 포함하는 방식을 검토합니다.
 
 ## 보조 배포
 

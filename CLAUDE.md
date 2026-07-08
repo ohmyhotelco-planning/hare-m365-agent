@@ -1,4 +1,4 @@
-# Hare M365 Agent Instructions For Claude
+﻿# Hare M365 Agent Instructions For Claude
 
 Use Hare M365 Agent as a shell-executed Microsoft 365 read-only tool.
 
@@ -50,7 +50,7 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 If Cowork has domain allow-list controls, Microsoft 365 and GitHub Release execution need access to:
 
 - `github.com`
-- `objects.githubusercontent.com`
+- `release-assets.githubusercontent.com`
 - `registry.npmjs.org`
 - `graph.microsoft.com`
 - `login.microsoftonline.com`
@@ -96,3 +96,4 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 - Authentication missing or expired: complete login first, rerun startup, then resume.
 - Access denied: explain the difference between Azure Application permissions and the signed-in user's actual M365 permissions.
 - Write/delete/share/send request: say it is outside the current POC policy.
+

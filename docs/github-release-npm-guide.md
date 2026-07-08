@@ -8,10 +8,10 @@ GitHub 저장소와 Release가 public이면 직원에게 GitHub 계정이 없어
 
 ## Release에 올릴 파일
 
-`npm run package:github-release` 실행 후 아래 폴더의 파일을 GitHub Release `v0.1.0`에 업로드합니다.
+`npm run package:github-release` 실행 후 아래 폴더의 파일만 GitHub Release `v0.1.0`에 업로드합니다.
 
 ```text
-releases/github-release/v0.1.0/
+releases/github-release/v0.1.0-upload-only/
 ```
 
 GitHub 업로드 허용 확장자에 맞춘 파일 목록:
@@ -55,11 +55,17 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 - Node.js/npm이 설치되어 있어야 합니다.
 - Claude/Cowork처럼 도메인 허용 목록이 있는 환경은 아래 도메인을 허용해야 합니다.
   - `github.com`
-  - `objects.githubusercontent.com`
+  - `release-assets.githubusercontent.com`
   - `registry.npmjs.org`
   - `graph.microsoft.com`
   - `login.microsoftonline.com`
 - 처음 사용하거나 인증이 만료되면 Microsoft device-code 로그인을 직접 완료해야 합니다.
+
+## Cowork 도메인 주의
+
+GitHub Release asset은 `github.com`에서 `release-assets.githubusercontent.com`으로 리다이렉트됩니다. 따라서 `github.com`만 허용하면 다운로드가 실패할 수 있습니다.
+
+현재 tarball은 실행 시 npm 의존성을 설치할 수 있으므로 `registry.npmjs.org`도 필요할 수 있습니다. 이 도메인을 제거하려면 다음 릴리즈에서 dependencies를 bundled로 패키징합니다.
 
 ## 주의
 
