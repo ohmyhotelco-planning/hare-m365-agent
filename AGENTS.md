@@ -35,9 +35,10 @@ npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agen
 - Run `llm-guide`, then `doctor`, then `auth status` only after the domain gate is satisfied.
 - Treat configuration and login as hard gates.
 - Do not run Outlook, Teams, or Files commands until `doctor` shows `configured: true` and `auth status` shows `loggedIn: true`.
-- If `loggedIn: false`, do not ask which command to run and do not ask whether to log in. Start `auth login` immediately when the current shell output is visible to the human.
-- During `auth login`, the terminal may display a Microsoft device code for the human. Do not copy, repeat, summarize, or paste that code into chat. Ask only for the human to complete the browser login and say "로그인 완료".
-- If the current environment cannot show the login flow to the human, stop and provide the exact local login command instead of trying another workaround.
+- If `loggedIn: false`, stop at the login hard gate. Do not run Outlook, Teams, or Files commands.
+- Do not automatically run `auth login` in Claude Cowork, hosted sandboxes, or any environment where command output is primarily visible to the agent rather than directly to the human.
+- At the login hard gate, give the exact local login command and ask the human to run it in a terminal they can see. After the human says "로그인 완료", rerun `doctor` and `auth status`, then resume the original request.
+- Only run `auth login` yourself if the user explicitly asks you to start login and the current terminal/browser output is directly visible to the human. Run it once. If it fails before showing a device code, report the error and stop instead of retrying or probing repeatedly.
 - If a natural-language Microsoft 365 request is given, run the smallest safe read sequence needed to answer it.
 
 Network/domain gate for Claude Cowork or any allow-list environment:
@@ -89,13 +90,14 @@ Authentication uses Microsoft device-code login and requires human action.
 
 Allowed:
 
-- Run `auth login` in a trusted local environment where the human can see the code and browser page.
+- Provide the exact `auth login` command when `loggedIn: false`.
+- Run `auth login` only in a trusted local environment where the human can directly see the code and browser page, and only after the user explicitly asks you to start login.
 - Open or guide the Microsoft device login page if the environment supports it.
-- If `auth status` returns `loggedIn: false`, run the login command first. Do not present a menu or ask the user which command to run.
-- After starting login, tell the user: `브라우저에 화면의 코드를 직접 입력하고 완료되면 "로그인 완료"라고 알려주세요. 코드는 채팅에 붙여넣지 마세요.`
+- If `auth status` returns `loggedIn: false`, do not continue the Microsoft 365 task. Stop and tell the user: `로그인이 필요합니다. 아래 로그인 명령을 사용자가 직접 볼 수 있는 로컬 터미널에서 실행한 뒤, Microsoft 로그인을 완료하고 "로그인 완료"라고 알려주세요. 코드는 채팅에 붙여넣지 마세요.`
 
 Forbidden:
 
+- Do not auto-run `auth login` in Cowork or hosted sandbox shells.
 - Do not paste the device code into chat.
 - Do not say that the code cannot be shown to the human. The code can be shown in the user's terminal/browser flow; it just must not be copied back into chat.
 - Do not inspect token cache contents to troubleshoot.

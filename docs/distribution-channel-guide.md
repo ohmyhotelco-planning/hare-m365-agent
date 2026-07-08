@@ -89,7 +89,7 @@ login.microsoftonline.com
 사용자가 "도메인 허용 완료"라고 확인하기 전에는 npm exec, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
 
 사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 내 Microsoft 365 요청을 처리해.
-loggedIn이 false이면 사용자에게 어떤 명령을 실행할지 묻지 말고 auth login을 먼저 실행해. Microsoft device code는 사용자가 화면에서 직접 보고 브라우저에 입력하게 해. 코드를 채팅에 복사하거나 반복하지 마.
+loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 
 처음 사용 시 Microsoft device-code 로그인이 필요할 수 있습니다.

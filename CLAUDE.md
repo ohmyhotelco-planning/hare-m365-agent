@@ -32,9 +32,10 @@ Because this is not a global install, repeat the full npm exec prefix for every 
 - Run the startup checklist only after the domain gate is satisfied.
 - Treat startup as a hard gate.
 - Do not run Outlook, Teams, or Files commands until `configured: true` and `loggedIn: true`.
-- If `loggedIn: false`, do not ask which command to run and do not ask whether to log in. Start `auth login` immediately when the current shell output is visible to the human.
-- During `auth login`, the terminal may display a Microsoft device code for the human. Do not copy, repeat, summarize, or paste that code into chat. Ask only for the human to complete the browser login and say "로그인 완료".
-- If the current environment cannot show the login flow to the human, stop and provide the exact local login command instead of trying desktop or GUI workarounds.
+- If `loggedIn: false`, stop at the login hard gate. Do not run Outlook, Teams, or Files commands.
+- Do not automatically run `auth login` in Claude Cowork, hosted sandboxes, or any environment where command output is primarily visible to Claude rather than directly to the human.
+- At the login hard gate, give the exact local login command and ask the human to run it in a terminal they can see. After the human says "로그인 완료", rerun startup and resume the original request.
+- Only run `auth login` yourself if the user explicitly asks you to start login and the current terminal/browser output is directly visible to the human. Run it once. If it fails before showing a device code, report the error and stop instead of retrying or probing repeatedly.
 - Never print or inspect `.env`, `.cache/`, access tokens, refresh tokens, cookies, device codes, or MSAL cache contents.
 - Keep operations read-only.
 - Do not send email, post Teams messages, create calendar events, upload files, delete files, share files, or change permissions in this POC.
@@ -73,7 +74,7 @@ If the package download is blocked by network policy, report the blocked domain/
 
 Login requires human device-code authentication.
 
-Use this command only where the human can see the login code and complete the browser step:
+When `auth status` shows `loggedIn: false`, stop and tell the human to run this command in a local terminal they can see:
 
 ```bash
 npm exec --yes --package "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz" -- hare-m365 auth login
@@ -83,7 +84,7 @@ Do not read, repeat, store, or summarize the displayed device code.
 
 Do not say that the code cannot be shown to the human. The code may appear in the user's terminal or browser flow; the rule is that Claude must not copy it back into chat.
 
-When `auth status` shows `loggedIn: false`, run the login command before any Outlook, Teams, or Files command. Do not present a menu. After starting login, tell the human:
+Do not automatically run the login command in Cowork or hosted sandbox shells. Run it only if the user explicitly asks you to start login and the terminal/browser output is directly visible to the human. After starting login, tell the human:
 
 ```text
 브라우저에 화면의 코드를 직접 입력하고 완료되면 "로그인 완료"라고 알려주세요. 코드는 채팅에 붙여넣지 마세요.

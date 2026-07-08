@@ -440,16 +440,22 @@ __PACKAGE_URL__
 
 사용자가 도메인 허용을 완료했다고 말하면 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인한 뒤 Microsoft 365 요청을 처리해.
 
-loggedIn이 false이면 사용자에게 어떤 명령을 실행할지 묻지 말고 auth login을 먼저 실행해. Microsoft device code는 사용자가 화면에서 직접 보고 브라우저에 입력하게 해. 코드를 채팅에 복사하거나 반복하지 말고, 사용자가 로그인 완료 후 "로그인 완료"라고 알려주면 doctor/auth status를 다시 확인한 뒤 원래 요청을 이어서 처리해.
+loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마.
+
+Claude Cowork나 hosted sandbox처럼 명령 출력이 주로 LLM에게 보이는 환경에서는 auth login을 자동 실행하지 마. 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내하고 멈춰.
+
+사용자가 명시적으로 "로그인 시작"을 요청했고, 현재 터미널/브라우저 출력이 사용자에게 직접 보이는 환경에서만 auth login을 1회 실행할 수 있어. 실패하면 반복 재시도나 도메인 진단 루프를 돌지 말고 오류를 보고하고 멈춰.
+
+Microsoft device code는 사용자가 화면에서 직접 보고 브라우저에 입력하게 해. 코드를 채팅에 복사하거나 반복하지 마. 사용자가 로그인 완료 후 "로그인 완료"라고 알려주면 doctor/auth status를 다시 확인한 뒤 원래 요청을 이어서 처리해.
 
 .env, .cache, token, device code는 읽거나 출력하지 마.</pre>
     </section>
 
     <section class="step">
       <div class="step-title"><span class="num">3</span>로그인 필요 시 사용자가 직접 완료</div>
-      <p>LLM이 <code>auth login</code>을 실행하면 Microsoft device-code 로그인 안내가 표시됩니다. 코드는 사용자가 브라우저에 직접 입력합니다.</p>
+      <p><code>loggedIn: false</code>이면 LLM은 로그인 hard gate에서 멈추고, 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내합니다. 사용자가 그 명령을 실행하면 Microsoft device-code 로그인 안내가 표시됩니다.</p>
       <ol class="path-list">
-        <li>LLM이 로그인 명령을 실행하면 검은 명령창 또는 터미널에 Microsoft 로그인 안내가 표시됩니다.</li>
+        <li>사용자가 로컬 터미널에서 로그인 명령을 실행하면 검은 명령창 또는 터미널에 Microsoft 로그인 안내가 표시됩니다.</li>
         <li>문장 끝에 보이는 짧은 코드가 device code입니다. 아래 예시의 빨간 박스 위치입니다.</li>
         <li>브라우저의 Microsoft device login 화면에 그 코드를 사용자가 직접 입력합니다.</li>
         <li>회사 Microsoft 계정으로 로그인한 뒤, LLM에게 <strong>로그인 완료</strong>라고 알려줍니다.</li>
@@ -493,7 +499,7 @@ loggedIn이 false이면 사용자에게 어떤 명령을 실행할지 묻지 말
 __PACKAGE_URL__
 
 먼저 llm-guide를 읽고 doctor/auth status로 설정과 로그인을 확인해.
-loggedIn이 true면 바로 내 요청을 처리하고, false면 사용자에게 선택지를 묻지 말고 auth login을 먼저 실행해. Microsoft 로그인은 내가 화면의 코드를 직접 브라우저에 입력해서 완료할게. 코드를 채팅에 복사하거나 반복하지 마.
+loggedIn이 true면 바로 내 요청을 처리하고, false면 로그인 hard gate로 멈춰. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 내가 직접 볼 수 있는 로컬 터미널에서 실행할 로그인 명령을 안내해. 내가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해.
 .env, .cache, token, device code는 읽거나 출력하지 마.
 
 요청:
