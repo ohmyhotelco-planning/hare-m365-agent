@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hare M365 Agent 시작 가이드</title>
+  <style>
+    :root { --brand: #ff6000; --text: #1f2328; --muted: #59636e; --line: #d8dee4; --soft: #fff5ef; --code: #f6f8fa; --dark: #24292f; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: var(--text); background: #fff; line-height: 1.55; }
+    header { border-bottom: 1px solid var(--line); padding: 28px 32px 20px; }
+    main { max-width: 980px; padding: 24px 32px 56px; }
+    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0; }
+    p { margin: 8px 0; }
+    pre, code { font-family: Consolas, "Courier New", monospace; font-size: 14px; }
+    code { background: var(--code); padding: 2px 5px; border-radius: 4px; }
+    pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+    button { appearance: none; border: 0; border-radius: 6px; background: var(--brand); color: #fff; padding: 10px 14px; font-weight: 700; cursor: pointer; margin: 8px 8px 0 0; }
+    button.secondary { background: var(--dark); }
+    .muted { color: var(--muted); }
+    .notice { border: 1px solid #ffd0b8; background: var(--soft); padding: 16px; border-radius: 8px; margin: 18px 0; }
+    .step { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 14px 0; }
+    .step-title { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+    .num { width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex: 0 0 auto; }
+    .domain-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; margin-top: 10px; }
+    .domain-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+    .domain { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-family: Consolas, "Courier New", monospace; overflow-wrap: anywhere; }
+    .toast { position: fixed; right: 24px; bottom: 24px; z-index: 20; padding: 11px 14px; border-radius: 8px; background: var(--dark); color: #fff; font-size: 14px; font-weight: 700; box-shadow: 0 10px 28px rgba(31, 35, 40, 0.22); opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 160ms ease, transform 160ms ease; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Hare M365 Agent 시작 가이드</h1>
+    <p class="muted">Claude/Cowork에서 git clone 방식으로 Hare를 준비하고 Microsoft 365를 조회하기 위한 안내입니다.</p>
+  </header>
+
+  <main>
+    <div class="notice">
+      <strong>핵심 원칙:</strong>
+      GitHub API나 Release asset이 아니라 <code>git clone</code> 경로를 사용합니다. Microsoft 계정 외 별도 배포 계정을 요구하지 않는 것을 우선합니다.
+    </div>
+
+    <section class="step">
+      <div class="step-title"><span class="num">1</span>도메인 허용</div>
+      <p>Claude/Cowork 설정에서 도메인 허용 목록을 열고 아래 3개를 추가합니다.</p>
+      <button onclick="copyText('domains')">도메인 전체 복사</button>
+      <div class="domain-grid">
+        <div class="domain-row"><div class="domain">github.com</div><button class="secondary" onclick="copyLiteral('github.com')">복사</button></div>
+        <div class="domain-row"><div class="domain">graph.microsoft.com</div><button class="secondary" onclick="copyLiteral('graph.microsoft.com')">복사</button></div>
+        <div class="domain-row"><div class="domain">login.microsoftonline.com</div><button class="secondary" onclick="copyLiteral('login.microsoftonline.com')">복사</button></div>
+      </div>
+      <pre id="domains">github.com
+graph.microsoft.com
+login.microsoftonline.com</pre>
+      <p class="muted">npm install 단계에서 registry 오류가 날 때만 <code>registry.npmjs.org</code>를 추가합니다.</p>
+    </section>
+
+    <section class="step">
+      <div class="step-title"><span class="num">2</span>초기 연결용 프롬프트</div>
+      <p>설치/빌드/상태 확인까지만 수행합니다. 이 프롬프트만으로 Outlook, Teams, Files 조회를 시키지 않습니다.</p>
+      <button onclick="copyText('prompt')">초기 연결용 프롬프트 복사</button>
+      <pre id="prompt">목적: Hare M365 Agent를 Claude/Cowork 샌드박스에서 git clone 방식으로 준비할 수 있는지 확인해.
+이 프롬프트에서는 Outlook/Teams/Files 실제 업무 조회를 실행하지 마.
+Microsoft 로그인(auth login)도 실행하지 마.
+토큰, 캐시, .env 내용은 열거나 출력하지 마.
+
+저장소:
+https://github.com/ohmyhotelco-planning/hare-m365-agent.git
+
+필요 도메인:
+github.com
+login.microsoftonline.com
+graph.microsoft.com
+
+도메인 허용 목록이 있는 환경이면 위 도메인이 허용되어 있는지 먼저 확인해.
+가능하면 사용자 확인 요청/승인 UI로 처리해.
+확인 UI가 없을 때만 짧게 물어봐.
+
+GitHub API(api.github.com)나 GitHub Release asset 다운로드는 이번 경로가 아니야.
+repo 접근 가능 여부는 git ls-remote 또는 git clone으로 판단해.
+
+도메인 확인 후 아래 순서대로 진행해.
+
+git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git HEAD
+rm -rf /tmp/hare-m365-agent-test
+git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent-test
+cd /tmp/hare-m365-agent-test
+npm ci
+npm run build
+node dist/cli.js --version
+node dist/cli.js
+
+npm ci가 registry 접근 오류로 실패하면 registry.npmjs.org 허용이 필요하다고 보고하고 멈춰.
+
+startup JSON이 출력되면 아래 항목만 확인해.
+- configured
+- loggedIn
+- dataDir
+- cacheFile
+- cacheFileExists
+- humanLoginCommand 존재 여부
+
+마지막에 표로 요약해줘.
+표 컬럼: 단계 / 결과 / 근거 / 다음 조치
+
+최종 결론은 아래 중 하나로 분류해줘.
+A. git clone 방식으로 Cowork 준비 가능
+B. git transport 접근 문제
+C. npm registry 허용이 추가로 필요
+D. Microsoft login/Graph 경로 문제
+E. build/runtime 문제</pre>
+    </section>
+
+    <section class="step">
+      <div class="step-title"><span class="num">3</span>업무 조회용 프롬프트</div>
+      <p>새 채팅 세션에서 Hare를 처음 사용할 때 최초 1회 붙여넣습니다. 같은 채팅 안에서는 이후 자연어로 이어서 요청하면 됩니다.</p>
+      <button onclick="copyText('reusePrompt')">업무 조회용 프롬프트 복사</button>
+      <pre id="reusePrompt">목적: Hare M365 Agent로 아래 업무 요청을 처리해.
+
+저장소:
+https://github.com/ohmyhotelco-planning/hare-m365-agent.git
+
+먼저 git clone 방식으로 준비해.
+
+git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git HEAD
+rm -rf /tmp/hare-m365-agent
+git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
+cd /tmp/hare-m365-agent
+npm ci
+npm run build
+node dist/cli.js
+
+GitHub API나 Release asset으로 repo 접근을 판단하지 마.
+npm ci가 registry 접근 오류로 실패하면 registry.npmjs.org 허용이 필요하다고 보고하고 멈춰.
+
+loggedIn이 true면 바로 내 요청을 처리해.
+loggedIn이 false이면 결과 JSON의 dataDir/cacheFile 기준으로 판단해.
+cacheFile이 없을 때만 humanLoginCommand를 사용자에게 안내하고 즉시 멈춰.
+humanLoginCommand는 네가 직접 실행하지 마.
+
+Cowork/hosted sandbox에서 고정 Hare 폴더가 마운트되면, 이후 모든 Hare 명령 앞에 HARE_M365_DATA_DIR="마운트된 Hare 폴더 경로"를 붙여 같은 캐시를 사용해.
+
+요청:
+[여기에 Outlook/Teams/파일 관련 요청을 적기]</pre>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script>
+    let toastTimer;
+    async function copyText(id) { await copyToClipboard(document.getElementById(id).innerText); }
+    async function copyLiteral(text) { await copyToClipboard(text); }
+    async function copyToClipboard(text) {
+      try { await navigator.clipboard.writeText(text); showToast("복사했습니다."); }
+      catch (error) { window.prompt("자동 복사가 막혔습니다. 아래 내용을 직접 복사하세요.", text); }
+    }
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.innerText = message;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 1200);
+    }
+  </script>
+</body>
+</html>

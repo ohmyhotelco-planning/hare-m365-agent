@@ -80,7 +80,7 @@ export async function getAccessToken(config: AppConfig): Promise<string> {
   const account = accounts[0] ?? null;
   if (!account) {
     throw new Error(
-      "Not logged in. Run: hare-m365 auth login. If using npx, run: npx @ohmyhotel/hare-m365-agent auth login. After login, rerun doctor/auth status and retry the original read command."
+      "Not logged in for this Hare dataDir/cacheFile. Run Hare startup without a subcommand, show humanLoginCommand to the user, then stop until the user confirms login is complete in the same dataDir/cacheFile."
     );
   }
 

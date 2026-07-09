@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { getAccount, getScopeList, login, logout } from "./auth.js";
 import { ensureRuntimeDirs, loadConfig, requireConfigured } from "./config.js";
@@ -12,161 +15,173 @@ ensureRuntimeDirs(config);
 
 const preferredCommand = "hare-m365";
 const packageName = "@ohmyhotel/hare-m365-agent";
-const packageVersion = "0.1.0";
-const defaultPackageSpec =
-  "https://github.com/ohmyhotelco-planning/hare-m365-agent/releases/download/v0.1.0/ohmyhotel-hare-m365-agent-0.1.0.tgz";
+const packageVersion = readPackageVersion();
+const repoUrl = "https://github.com/ohmyhotelco-planning/hare-m365-agent.git";
+const defaultWorkDir = "/tmp/hare-m365-agent";
+const defaultCliCommand = "node dist/cli.js";
+
+const requiredDomains = ["github.com", "graph.microsoft.com", "login.microsoftonline.com"];
+
+function readPackageVersion(): string {
+  const packageJsonPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: string };
+  return packageJson.version ?? "0.0.0";
+}
 
 const llmGuide = `# Hare M365 Agent LLM Guide
 
-Hare M365 Agent는 사용자의 로컬 shell에서 Microsoft 365를 읽기 전용으로 조회하기 위한 도구입니다.
+목적: 사용자의 자연어 요청을 Microsoft Graph delegated 권한으로 조회한다. 기본 정책은 read-only다.
 
-기본 원칙:
+시작 순서:
+1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 3개 도메인 허용 여부를 사용자에게 확인한다.
+   - github.com
+   - graph.microsoft.com
+   - login.microsoftonline.com
+2. 도메인 확인은 가능하면 LLM 도구의 사용자 확인 요청, 선택형 질문, 승인 요청 UI로 처리한다. 사용자가 직접 "도메인 허용 완료" 같은 문구를 타이핑하게 만들지 않는다.
+3. 확인 요청 UI가 없는 환경에서만 짧게 yes/no로 묻는다.
+4. 도메인 허용 확인 전에는 git, npm, curl, 로그인, Outlook/Teams/Files 조회를 시작하지 않는다.
+5. GitHub API(api.github.com)나 GitHub Release asset으로 repo 접근을 판단하지 않는다. Cowork에서는 api.github.com이 막혀도 git clone은 성공할 수 있다.
+6. 실제 사용 경로인 git ls-remote 또는 git clone으로 repo 접근을 판단한다.
 
-- 사용자가 자연어로 Outlook, Teams, OneDrive, SharePoint 조회를 요청하면 이 CLI를 사용합니다.
-- 먼저 doctor와 auth status를 실행합니다.
-- Claude Cowork처럼 폴더가 연결된 환경에서는 같은 연결 폴더 안의 runtime 폴더를 인증/다운로드/로그 저장소로 사용합니다.
-- 이 경우 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙입니다.
-- configured가 true이고 loggedIn이 true일 때만 Outlook, Teams, Files 명령을 실행합니다.
-- loggedIn이 false이면 로그인 hard gate에서 멈춥니다. Outlook, Teams, Files 조회를 실행하지 않습니다.
-- Claude Cowork, hosted sandbox, 명령 출력이 주로 LLM에게만 보이는 환경에서는 auth login을 자동 실행하지 않습니다.
-- 로그인 hard gate에서는 사용자가 직접 볼 수 있는 로컬 터미널에서 실행할 정확한 auth login 명령을 안내하고 멈춥니다. 연결 폴더를 쓰는 경우 사용자가 같은 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 로그인해야 합니다.
-- 사용자가 명시적으로 로그인 시작을 요청했고 현재 터미널/브라우저 출력이 사용자에게 직접 보이는 환경에서만 auth login을 1회 실행할 수 있습니다. 실패하면 반복 재시도하지 말고 오류를 보고하고 멈춥니다.
-- auth login 중 터미널에 표시되는 Microsoft device code는 사용자가 직접 브라우저에 입력합니다. LLM은 코드를 채팅으로 복사하거나 반복하지 않습니다.
-- .env, .cache, runtime/.cache, token, device code, cookie, credential 값은 읽거나 출력하지 않습니다.
-
-연결형 runtime 원칙:
-
-- CLI 프로세스는 runtime/.cache/msal-cache.json을 사용해 Microsoft Graph 인증을 수행할 수 있습니다.
-- LLM은 runtime/.cache/msal-cache.json 파일을 열거나 출력하거나 요약하거나 업로드하지 않습니다.
-- 다른 로컬 폴더나 다른 머신에서 로그인한 토큰은 현재 연결된 실행환경에서 재사용되지 않을 수 있습니다.
-
-연결 폴더에서 실행하는 예:
-
+준비 명령:
 \`\`\`bash
-HARE_M365_DATA_DIR=./runtime npm exec --yes --package "<GITHUB_RELEASE_TGZ_URL>" -- hare-m365 doctor
-HARE_M365_DATA_DIR=./runtime npm exec --yes --package "<GITHUB_RELEASE_TGZ_URL>" -- hare-m365 auth status
+git ls-remote ${repoUrl} HEAD
+rm -rf ${defaultWorkDir}
+git clone ${repoUrl} ${defaultWorkDir}
+cd ${defaultWorkDir}
+npm ci
+npm run build
+node dist/cli.js
 \`\`\`
 
-Claude/Cowork처럼 도메인 허용 목록이 있는 환경에서는 아래 도메인이 필요할 수 있습니다.
+npm ci가 npm registry 접근 오류로 실패하면 registry.npmjs.org 허용이 추가로 필요하다고 보고하고 멈춘다.
 
-- github.com
-- release-assets.githubusercontent.com
-- registry.npmjs.org
-- graph.microsoft.com
-- login.microsoftonline.com
+로그인 하드게이트:
+- 시작 명령 또는 auth status 결과에서 loggedIn이 false이면 Outlook/Teams/Files 조회를 실행하지 않는다.
+- loggedIn 값은 출력 JSON의 dataDir/cacheFile 기준 상태다. hosted sandbox나 컨테이너의 dataDir에서 나온 false를 사용자 PC 로그인 실패로 해석하지 않는다.
+- 사용자가 이미 로그인했다고 말했는데 dataDir가 /sessions, /tmp 같은 임시 샌드박스 경로라면 로그인 실패가 아니라 파일시스템 저장 위치 불일치로 판단한다.
+- 그 경우 이미 git clone/build가 끝났다면 소스 분석이나 네트워크 진단으로 빠지지 말고, 출력 JSON의 cacheFile 또는 OS별 고정 Hare 저장 위치 접근 권한을 요청해 로그인 캐시 파일 존재 여부를 확인한다.
+- cacheFile이 있으면 로그인 명령을 다시 안내하지 말고 요청된 조회 명령을 진행한다.
+- cacheFile이 없을 때만 humanLoginCommand를 사용자에게 안내하고 멈춘다.
+- LLM은 humanLoginCommand를 직접 실행하지 않는다.
+- 사용자는 humanLoginCommand를 직접 실행한다.
+- 사용자에게 다음 로그인 절차를 짧게 안내한다: 명령 실행 -> 브라우저에서 코드 입력 -> 회사 Microsoft 계정 로그인 -> 완료 후 "로그인 완료"라고 말하기.
+- 브라우저가 자동으로 열리지 않으면 터미널에 표시된 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 직접 붙여 넣도록 안내한다. Mac에서는 Command+클릭도 가능하다고 안내한다.
+- 사용자가 "로그인 완료"라고 말하면 다시 시작 명령 또는 auth status를 실행한 뒤 원래 요청을 이어간다.
 
-패키지 다운로드나 Graph 호출이 403, network_error, proxy, allowlist 오류로 실패하면 막힌 도메인/오류를 사용자에게 보고하고 중단합니다. Windows GUI, 파일 탐색기, 더블클릭 실행으로 우회하지 않습니다.
+저장 위치:
+- Hare는 항상 status.dataDir에 표시되는 고정 저장 위치를 사용한다.
+- 임의의 별도 저장 폴더를 만들지 않는다.
+- LLM 실행환경에서 사용자 PC의 고정 Hare 폴더 접근 권한이 없으면 선택지를 묻지 말고 그 고정 폴더 저장 접근 허용을 요청한다.
+- Cowork/hosted sandbox에서 고정 Hare 폴더가 마운트되면 이후 모든 Hare 명령 앞에 HARE_M365_DATA_DIR="<마운트된 Hare 폴더 경로>"를 붙여 같은 캐시를 사용한다.
+- 접근 허용 후 같은 HARE_M365_DATA_DIR 값으로 다시 시작 명령 또는 auth status를 실행한다.
 
-도메인 허용 목록이 있는 환경에서 사용자가 아직 도메인 허용 완료를 확인하지 않았다면 npm exec, npx, 다운로드, 로그인, Microsoft 365 조회를 시작하지 않습니다.
+hosted sandbox Graph 실패 때:
+- cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed, network_error 등으로 실패하면 토큰 문제가 아니라 sandbox egress 문제로 판단한다.
+- 이때 clone/build를 반복하지 말고, 도메인 사진 확인이나 반복 호출 루프에 들어가지 않는다.
+- 사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.dataDir에 결과 JSON을 저장하게 한다.
+- 예: node dist/cli.js outlook inbox --limit 1 --out latest-mail.json
+- --out 값이 상대 경로이면 Hare 고정 dataDir 아래에 저장된다.
+- 결과 파일이 생성되면 그 JSON을 읽어 사용자 요청을 처리한다.
 
-도메인 허용 완료 전에는 폴더 연결 요청도 시작하지 않습니다. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도합니다. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만, 가능한 도구로 문서/Documents 안의 Hare M365 Agent 전용 폴더를 먼저 준비한 뒤 Claude/Cowork의 폴더 연결 기능으로 그 폴더 연결/허용을 요청합니다. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 않습니다. 사용자가 할 일은 연결 허용뿐이라는 전제로 진행합니다. 폴더 선택창이 뜬 경우에만 SharePoint 공용 폴더, Teams 공유 폴더, 다운로드 폴더 전체, 바탕화면 전체는 선택하지 말라고 안내합니다.
-
-GitHub Release tarball로 실행 중이면 모든 명령에 같은 npm exec 접두어를 사용합니다.
-
+읽기 명령:
 \`\`\`bash
-HARE_M365_DATA_DIR=./runtime npm exec --yes --package "<GITHUB_RELEASE_TGZ_URL>" -- hare-m365 doctor
-HARE_M365_DATA_DIR=./runtime npm exec --yes --package "<GITHUB_RELEASE_TGZ_URL>" -- hare-m365 auth status
-HARE_M365_DATA_DIR=./runtime npm exec --yes --package "<GITHUB_RELEASE_TGZ_URL>" -- hare-m365 auth login
+node dist/cli.js outlook inbox --limit 10 --out latest-mail.json
+node dist/cli.js teams teams --out teams.json
+node dist/cli.js teams chats --limit 20 --out chats.json
+node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20 --out chat-messages.json
+node dist/cli.js files search --query "keyword" --limit 10 --out files.json
+node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
 \`\`\`
 
-npm registry에 공개 배포된 경우에는 npx를 사용할 수 있습니다.
-
-\`\`\`bash
-npx ${packageName} doctor
-npx ${packageName} auth status
-\`\`\`
-
-전역 설치된 경우에는 hare-m365를 직접 사용할 수 있습니다.
-
-\`\`\`bash
-hare-m365 doctor
-hare-m365 auth status
-\`\`\`
-
-허용된 읽기 명령:
-
-\`\`\`bash
-HARE_M365_DATA_DIR=./runtime hare-m365 doctor
-HARE_M365_DATA_DIR=./runtime hare-m365 auth status
-HARE_M365_DATA_DIR=./runtime hare-m365 auth login
-HARE_M365_DATA_DIR=./runtime hare-m365 outlook inbox --limit 10
-HARE_M365_DATA_DIR=./runtime hare-m365 teams teams
-HARE_M365_DATA_DIR=./runtime hare-m365 teams chats --limit 20
-HARE_M365_DATA_DIR=./runtime hare-m365 teams chat-messages --chat-id "<chat-id>" --limit 20
-HARE_M365_DATA_DIR=./runtime hare-m365 files search --query "keyword" --limit 10
-HARE_M365_DATA_DIR=./runtime hare-m365 files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
-\`\`\`
-
-안전 규칙:
-
-- 기본 정책은 read-only입니다.
-- 메일 발송, Teams 게시, 일정 생성, 파일 업로드/삭제/공유, 권한 변경은 수행하지 않습니다.
-- 파일 다운로드는 사용자가 특정 파일을 명시적으로 요청했을 때만 수행합니다.
-- 원문 전체 덤프보다 필요한 메타데이터와 요약을 우선합니다.
-
-Teams 최신성 규칙:
-
-- teams chats 결과의 lastMessageCreatedDateTime으로 최신 채팅을 판단합니다.
-- lastUpdatedDateTime은 채팅방 메타데이터 변경 시각이므로 최신 메시지 판단에 사용하지 않습니다.
+주의:
+- 메일 발송, Teams 게시, 일정 생성, 파일 업로드/삭제/공유, 권한 변경은 수행하지 않는다.
+- Microsoft device code, 토큰 캐시, 쿠키, credential 값은 채팅에 붙여 넣거나 출력하지 않는다.
+- Teams 최신 채팅 판단은 lastMessageCreatedDateTime을 우선한다. lastUpdatedDateTime만으로 최신 메시지 방을 판단하지 않는다.
 `;
 
-const llmPrompt = `Hare M365 Agent를 사용해 내 Microsoft 365 요청을 처리해. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 github.com, release-assets.githubusercontent.com, registry.npmjs.org, graph.microsoft.com, login.microsoftonline.com 허용 여부를 사용자에게 확인해. 도메인 허용 완료 전에는 npm exec, 조회, 로그인, 폴더 연결 요청을 시작하지 마. 도메인 허용 후 먼저 현재 실행환경에서 llm-guide, doctor, auth status를 시도해. 그 과정에서 폴더 접근 권한 또는 지속 인증 캐시 위치가 필요하다고 확인될 때만, 가능한 도구로 문서/Documents 안의 Hare M365 Agent 전용 폴더를 먼저 준비한 뒤 Claude/Cowork의 폴더 연결 기능으로 그 폴더 연결/허용을 요청해. 폴더 존재 여부를 미리 검사해서 사용자에게 만들라고 요구하지 마. 사용자가 할 일은 연결 허용뿐이라는 전제로 진행해. 연결 폴더가 있으면 같은 폴더 안의 ./runtime을 인증 캐시 위치로 쓰고 모든 Hare 명령에 HARE_M365_DATA_DIR=./runtime을 붙여. CLI는 runtime/.cache/msal-cache.json을 사용할 수 있지만, 너는 그 파일을 열거나 출력하거나 요약하지 마. 이후 doctor/auth status로 설정과 로그인을 확인해. loggedIn이 false이면 로그인 hard gate로 멈추고 Outlook/Teams/Files 조회를 실행하지 마. Cowork/샌드박스에서는 auth login을 자동 실행하지 말고, 사용자가 같은 연결 폴더에서 같은 HARE_M365_DATA_DIR=./runtime 설정으로 실행할 로그인 명령을 안내해. 사용자가 "로그인 완료"라고 말하면 doctor/auth status를 다시 확인하고 원래 요청을 이어서 처리해. .env, .cache, runtime/.cache, token, device code는 읽거나 출력하지 마.`;
+const llmPrompt = `목적: Hare M365 Agent로 내 Microsoft 365 업무 요청을 처리해.
 
+저장소:
+${repoUrl}
+
+Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 3개 도메인이 허용되어 있는지 확인해.
+github.com
+graph.microsoft.com
+login.microsoftonline.com
+
+도메인 허용 확인은 가능하면 네가 가진 사용자 확인 요청, 선택형 질문, 승인 요청 UI로 처리해. 사용자가 직접 "도메인 허용 완료" 같은 문구를 타이핑하게 요구하지 마.
+그런 확인 요청 기능이 없는 환경에서만 짧게 yes/no로 물어봐.
+
+도메인 허용 확인 전에는 git, npm, curl, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
+GitHub API(api.github.com)나 GitHub Release asset 다운로드로 repo 접근을 판단하지 마.
+이 환경에서는 api.github.com이 403이어도 git clone은 성공할 수 있어.
+repo 접근은 git ls-remote 또는 git clone으로 판단해.
+
+아래 순서로 준비해.
+
+git ls-remote ${repoUrl} HEAD
+rm -rf ${defaultWorkDir}
+git clone ${repoUrl} ${defaultWorkDir}
+cd ${defaultWorkDir}
+npm ci
+npm run build
+node dist/cli.js
+
+npm ci가 npm registry 접근 오류로 실패하면 registry.npmjs.org 허용이 추가로 필요하다고 보고하고 멈춰.
+
+결과에서 loggedIn이 true이면 바로 내 요청을 처리해.
+loggedIn이 false이면 결과 JSON의 dataDir/cacheFile 기준으로 판단해.
+단, loggedIn 값은 결과 JSON의 dataDir/cacheFile 기준 상태야. hosted sandbox나 컨테이너 경로에서 나온 false를 사용자 PC 로그인 실패로 해석하지 마.
+내가 이미 로그인했다고 말했는데 dataDir가 /sessions, /tmp 같은 임시 샌드박스 경로라면 로그인 실패가 아니라 파일시스템 저장 위치 불일치로 판단해.
+그 경우 이미 git clone/build가 끝났다면 추가 소스 분석이나 네트워크 진단으로 빠지지 말고, 결과 JSON의 cacheFile 또는 OS별 고정 Hare 저장 위치 접근 권한을 요청해서 로그인 캐시 파일 존재 여부부터 확인해.
+내가 이미 로그인했다고 말했거나 cacheFile이 있으면 로그인 명령을 다시 안내하지 말고 요청된 조회 명령을 진행해.
+cacheFile이 없을 때만 humanLoginCommand를 사용자에게 안내하고 즉시 멈춰.
+humanLoginCommand는 네가 실행하지 마. 사용자에게 안내하고 즉시 멈춰.
+사용자에게 humanLoginCommand를 복사해 직접 실행하라고 안내해.
+사용자가 해야 할 로그인 절차도 같이 안내해: 명령 실행 -> 브라우저에서 코드 입력 -> 회사 Microsoft 계정 로그인 -> 완료 후 "로그인 완료"라고 말하기.
+브라우저가 자동으로 열리지 않으면 터미널에 표시된 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 직접 붙여 넣으라고 안내해. Mac에서는 Command+클릭도 가능하다고 안내해.
+git clone/build 이후에는 소스 재확인, 도메인 사진, network_error 원인 분석 루프를 시작하지 마.
+내가 "로그인 완료"라고 말하면 다시 시작 명령 또는 auth status를 확인하고 원래 요청을 이어서 처리해.
+
+Hare는 고정 저장 위치만 사용해. 임의의 별도 저장 폴더를 만들지 마.
+네 실행환경에서 사용자 PC의 고정 Hare 폴더 접근 권한이 없으면 선택지를 묻지 말고 그 고정 폴더 접근 허용을 요청해.
+Cowork/hosted sandbox에서 고정 Hare 폴더가 마운트되면 이후 모든 Hare 명령 앞에 HARE_M365_DATA_DIR="<마운트된 Hare 폴더 경로>"를 붙여 같은 캐시를 사용해.
+허용되면 같은 HARE_M365_DATA_DIR 값으로 다시 시작 명령 또는 auth status를 실행하고 이어서 처리해.
+
+cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed 또는 network_error로 실패하면 sandbox 네트워크 문제로 판단해.
+clone/build를 반복하지 말고, 도메인 사진확인이나 반복 호출 루프를 시작하지 마.
+사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.dataDir에 결과 JSON을 저장하게 해.
+예: node dist/cli.js outlook inbox --limit 1 --out latest-mail.json
+--out 값이 상대 경로이면 Hare 고정 dataDir 아래에 저장돼.
+결과 파일이 생성되면 그 JSON을 읽어 내 요청을 처리해.`;
 function getSelfCommand(): string {
-  const packageSpec = process.env.HARE_M365_PACKAGE_SPEC ?? process.env.HARE_M365_PACKAGE_URL;
-  if (packageSpec) return `npm exec --yes --package "${packageSpec}" -- ${preferredCommand}`;
-
-  const script = process.argv[1] ?? "";
-  const executable = process.execPath.toLowerCase();
-  if (executable.endsWith("omh-m365.exe")) return ".\\omh-m365.exe";
-  if (script.endsWith("omh-m365.cjs")) return "node omh-m365.cjs";
-  return `npm exec --yes --package "${defaultPackageSpec}" -- ${preferredCommand}`;
+  return process.env.HARE_M365_COMMAND ?? defaultCliCommand;
 }
 
 function getLoginCommand(): string {
-  const packageSpec = process.env.HARE_M365_PACKAGE_SPEC ?? process.env.HARE_M365_PACKAGE_URL;
-  if (packageSpec) return withRuntimeEnv(`npm exec --yes --package "${packageSpec}" -- ${preferredCommand} auth login`);
-
-  const script = process.argv[1] ?? "";
-  const executable = process.execPath.toLowerCase();
-  if (executable.endsWith("omh-m365.exe")) return withRuntimeEnv(".\\START_LOGIN_FOR_USER.cmd");
-  if (script.endsWith("omh-m365.cjs")) return withRuntimeEnv("./START_LOGIN_FOR_USER.sh");
-  return withRuntimeEnv(`npm exec --yes --package "${defaultPackageSpec}" -- ${preferredCommand} auth login`);
+  return `${getSelfCommand()} auth login`;
 }
 
-function renderLlmGuide(): string {
-  const packageSpec = process.env.HARE_M365_PACKAGE_SPEC ?? process.env.HARE_M365_PACKAGE_URL ?? defaultPackageSpec;
-  return llmGuide.replaceAll("<GITHUB_RELEASE_TGZ_URL>", packageSpec);
+function resolveOutPath(out: string): string {
+  return path.resolve(path.isAbsolute(out) ? out : path.join(config.dataDir, out));
 }
 
-function renderLlmPrompt(): string {
-  const packageSpec = process.env.HARE_M365_PACKAGE_SPEC ?? process.env.HARE_M365_PACKAGE_URL ?? defaultPackageSpec;
-  return `패키지 URL: ${packageSpec}\n\n${llmPrompt}`;
-}
+function emitJson(payload: unknown, out?: string): void {
+  if (!out) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
 
-function quotePosix(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
-function quotePowerShell(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
-
-function withRuntimeEnv(command: string): string {
-  const runtimeDir = process.env.HARE_M365_DATA_DIR ?? process.env.OMH_M365_DATA_DIR;
-  if (!runtimeDir) return command;
-  if (process.platform === "win32") return `$env:HARE_M365_DATA_DIR = ${quotePowerShell(runtimeDir)}; ${command}`;
-  return `HARE_M365_DATA_DIR=${quotePosix(runtimeDir)} ${command}`;
-}
-
-function getRuntimeHint(): string {
-  const runtimeDir = process.env.HARE_M365_DATA_DIR ?? process.env.OMH_M365_DATA_DIR;
-  if (runtimeDir) return `Use the same runtime data directory for every command: ${runtimeDir}`;
-  return "For folder-mounted LLM environments, rerun Hare commands from the connected folder with HARE_M365_DATA_DIR=./runtime.";
+  const outputPath = resolveOutPath(out);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2), "utf8");
+  console.log(JSON.stringify({ ok: true, outputPath }, null, 2));
 }
 
 async function getDoctorStatus() {
   const account = config.clientId && config.tenantId ? await getAccount(config).catch(() => null) : null;
+  const cacheFile = path.join(config.cacheDir, "msal-cache.json");
   return {
     configured: Boolean(config.clientId && config.tenantId),
     clientIdPresent: Boolean(config.clientId),
@@ -175,8 +190,23 @@ async function getDoctorStatus() {
     dataDir: config.dataDir,
     policyPath: config.policyPath,
     cacheDir: config.cacheDir,
+    cacheFile,
+    cacheFileExists: fs.existsSync(cacheFile),
     downloadDir: config.downloadDir,
     logsDir: config.logsDir
+  };
+}
+
+function loginGateFields(loggedIn: boolean, cacheFileExists = false) {
+  if (loggedIn) return {};
+  return {
+    nextCommand: "LOGIN_REQUIRED_HARD_GATE",
+    llmAction: "STOP_DO_NOT_RUN_LOGIN_COMMAND",
+    humanLoginCommand: getLoginCommand(),
+    instruction:
+      cacheFileExists
+        ? "loggedIn is only the state for the printed dataDir/cacheFile. cacheFileExists is true, so do not tell the human to login again. If git clone/build was already completed, continue with the requested Hare read command. Do not start an unbounded source audit or network diagnostics loop."
+        : "loggedIn is only the state for the printed dataDir/cacheFile. Do not treat sandbox false as the user's PC login state. If the human already logged in and dataDir is a temporary sandbox path, request access to the user's fixed Hare data folder, set HARE_M365_DATA_DIR to the mounted folder path for every Hare command, and check the cache file first. If no cache file exists, tell the human to copy and run humanLoginCommand, enter the Microsoft device code in the browser, then say login complete. Then stop. Do not run auth login or start an unbounded source audit/network diagnostics loop. After the human confirms login is complete, rerun startup or auth status with the same HARE_M365_DATA_DIR."
   };
 }
 
@@ -191,17 +221,23 @@ program
         {
           tool: preferredCommand,
           package: packageName,
+          version: packageVersion,
           mode: "startup",
+          repository: repoUrl,
+          setupCommand: `git clone ${repoUrl} ${defaultWorkDir} && cd ${defaultWorkDir} && npm ci && npm run build && node dist/cli.js`,
+          requiredDomains,
+          conditionalDomain: "registry.npmjs.org is required only if npm ci cannot reach npm registry.",
           status,
+          storageRule:
+            "Use the fixed Hare data folder only. In Cowork/hosted sandbox, mount the user's fixed Hare folder and set HARE_M365_DATA_DIR to that mounted path for every Hare command.",
+          ...(status.configured ? loginGateFields(status.loggedIn, status.cacheFileExists) : {}),
           nextCommand: status.configured
             ? status.loggedIn
               ? `${getSelfCommand()} auth status`
               : "LOGIN_REQUIRED_HARD_GATE"
             : "Create .env from .env.example and fill approved Azure Application values.",
-          loginCommand: status.configured && !status.loggedIn ? getLoginCommand() : undefined,
-          runtimeHint: getRuntimeHint(),
-          llmInstruction:
-            "Read llm-guide, confirm configured/loggedIn status, and use the smallest safe read command needed for the user's request. If loggedIn is false, stop at the login hard gate and tell the human to run loginCommand in the same connected folder/runtime they expect the LLM to use. Do not auto-run auth login in Cowork or hosted sandbox shells. The CLI may use runtime/.cache/msal-cache.json, but the LLM must never read or print .env, .cache, runtime/.cache, tokens, or device codes."
+          llmAction: status.configured && !status.loggedIn ? "STOP_DO_NOT_RUN_LOGIN_COMMAND" : undefined,
+          humanLoginCommand: status.configured && !status.loggedIn ? getLoginCommand() : undefined
         },
         null,
         2
@@ -231,16 +267,21 @@ auth.command("login").description("Sign in with Microsoft device code flow").act
 auth.command("status").description("Show current login and policy status").action(async () => {
   requireConfigured(config);
   const account = await getAccount(config);
+  const loggedIn = Boolean(account);
+  const cacheFile = path.join(config.cacheDir, "msal-cache.json");
   console.log(
     JSON.stringify(
       {
-        loggedIn: Boolean(account),
+        loggedIn,
         account: account?.username,
         policy: config.policy,
         dataDir: config.dataDir,
         cacheDir: config.cacheDir,
+        cacheFile,
+        cacheFileExists: fs.existsSync(cacheFile),
         downloadDir: config.downloadDir,
-        logsDir: config.logsDir
+        logsDir: config.logsDir,
+        ...loginGateFields(loggedIn, fs.existsSync(cacheFile))
       },
       null,
       2
@@ -262,16 +303,16 @@ program
 
 program
   .command("llm-guide")
-  .description("Print the safe LLM usage guide for Hare M365 Agent")
+  .description("Print the LLM usage guide for Hare M365 Agent")
   .action(() => {
-    console.log(renderLlmGuide());
+    console.log(llmGuide);
   });
 
 program
   .command("llm-prompt")
   .description("Print a short first prompt for an LLM session")
   .action(() => {
-    console.log(renderLlmPrompt());
+    console.log(llmPrompt);
   });
 
 const outlook = program.command("outlook").description("Outlook read commands");
@@ -280,28 +321,34 @@ outlook
   .command("inbox")
   .description("List recent Inbox messages")
   .option("--limit <number>", "maximum message count", "10")
-  .action(async (options: { limit: string }) => {
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .action(async (options: { limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await listInbox(config, Number(options.limit));
-    console.log(JSON.stringify({ messages: data }, null, 2));
+    emitJson({ messages: data }, options.out);
   });
 
 const teams = program.command("teams").description("Teams read commands");
 
-teams.command("teams").description("List joined teams").action(async () => {
-  requireConfigured(config);
-  const data = await listJoinedTeams(config);
-  console.log(JSON.stringify({ teams: data }, null, 2));
-});
+teams
+  .command("teams")
+  .description("List joined teams")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .action(async (options: { out?: string }) => {
+    requireConfigured(config);
+    const data = await listJoinedTeams(config);
+    emitJson({ teams: data }, options.out);
+  });
 
 teams
   .command("chats")
   .description("List recent chats")
   .option("--limit <number>", "maximum chat count", "20")
-  .action(async (options: { limit: string }) => {
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .action(async (options: { limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await listChats(config, Number(options.limit));
-    console.log(JSON.stringify({ chats: data }, null, 2));
+    emitJson({ chats: data }, options.out);
   });
 
 teams
@@ -309,10 +356,11 @@ teams
   .description("List messages in one chat")
   .requiredOption("--chat-id <id>", "chat ID returned by teams chats")
   .option("--limit <number>", "maximum message count", "20")
-  .action(async (options: { chatId: string; limit: string }) => {
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .action(async (options: { chatId: string; limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await listChatMessages(config, options.chatId, Number(options.limit));
-    console.log(JSON.stringify({ messages: data }, null, 2));
+    emitJson({ messages: data }, options.out);
   });
 
 const files = program.command("files").description("SharePoint/OneDrive file commands");
@@ -322,10 +370,11 @@ files
   .description("Search files visible to the signed-in user")
   .requiredOption("--query <text>", "search query")
   .option("--limit <number>", "maximum file count", "10")
-  .action(async (options: { query: string; limit: string }) => {
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .action(async (options: { query: string; limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await searchFiles(config, options.query, Number(options.limit));
-    console.log(JSON.stringify({ files: data }, null, 2));
+    emitJson({ files: data }, options.out);
   });
 
 files

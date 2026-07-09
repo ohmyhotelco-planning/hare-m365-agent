@@ -59,6 +59,11 @@ function readJson<T>(filePath: string, fallback: T): T {
 }
 
 function defaultDataDir(): string {
+  const explicitDataDir = process.env.HARE_M365_DATA_DIR ?? process.env.OMH_M365_DATA_DIR;
+  if (explicitDataDir) {
+    return explicitDataDir;
+  }
+
   if (process.platform === "win32") {
     return path.join(process.env.LOCALAPPDATA ?? os.homedir(), "Ohmyhotel", "HareM365Agent");
   }
@@ -70,11 +75,6 @@ function defaultDataDir(): string {
   return path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), "ohmyhotel", "hare-m365-agent");
 }
 
-function resolveStoragePath(value: string | undefined, fallback: string, baseDir: string): string {
-  if (!value) return path.resolve(fallback);
-  return path.resolve(path.isAbsolute(value) ? value : path.join(baseDir, value));
-}
-
 function resolvePackagePath(value: string | undefined, fallback: string): string {
   if (!value) return path.resolve(fallback);
   return path.resolve(path.isAbsolute(value) ? value : path.join(packageRoot, value));
@@ -83,11 +83,11 @@ function resolvePackagePath(value: string | undefined, fallback: string): string
 export function loadConfig(): AppConfig {
   const clientId = process.env.OMH_M365_CLIENT_ID ?? "";
   const tenantId = process.env.OMH_M365_TENANT_ID ?? "";
-  const dataDir = path.resolve(process.env.HARE_M365_DATA_DIR ?? process.env.OMH_M365_DATA_DIR ?? defaultDataDir());
+  const dataDir = path.resolve(defaultDataDir());
   const policyPath = resolvePackagePath(process.env.OMH_M365_POLICY_PATH, path.join(packageRoot, "policy.json"));
-  const cacheDir = resolveStoragePath(process.env.OMH_M365_CACHE_DIR, path.join(dataDir, ".cache"), dataDir);
-  const downloadDir = resolveStoragePath(process.env.OMH_M365_DOWNLOAD_DIR, path.join(dataDir, "downloads"), dataDir);
-  const logsDir = resolveStoragePath(process.env.OMH_M365_LOGS_DIR, path.join(dataDir, "logs"), dataDir);
+  const cacheDir = path.join(dataDir, ".cache");
+  const downloadDir = path.join(dataDir, "downloads");
+  const logsDir = path.join(dataDir, "logs");
 
   const policy = {
     ...defaultPolicy,
