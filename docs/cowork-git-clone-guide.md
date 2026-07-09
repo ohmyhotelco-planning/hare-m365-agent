@@ -46,7 +46,11 @@ node dist/cli.js
 github.com
 graph.microsoft.com
 login.microsoftonline.com
+ohmylab-my.sharepoint.com
+ohmylab.sharepoint.com
 ```
+
+SharePoint/OneDrive 파일 본문 다운로드는 Graph 조회 후 SharePoint 테넌트 도메인으로 연결될 수 있습니다. 와일드카드를 지원하는 환경이면 `*.sharepoint.com`으로 대체할 수 있습니다.
 
 `npm ci`가 npm registry 접근 오류로 실패할 때만 아래 도메인이 추가로 필요합니다.
 

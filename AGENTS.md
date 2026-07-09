@@ -34,7 +34,11 @@ Initial required domains:
 github.com
 login.microsoftonline.com
 graph.microsoft.com
+ohmylab-my.sharepoint.com
+ohmylab.sharepoint.com
 ```
+
+SharePoint/OneDrive file content downloads may resolve to the tenant SharePoint host, not only Graph. If wildcard domains are supported, `*.sharepoint.com` can cover these hosts.
 
 If `npm ci` fails with an npm registry access error, report that `registry.npmjs.org` is additionally required and stop.
 

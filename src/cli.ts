@@ -20,7 +20,13 @@ const repoUrl = "https://github.com/ohmyhotelco-planning/hare-m365-agent.git";
 const defaultWorkDir = "/tmp/hare-m365-agent";
 const defaultCliCommand = "node dist/cli.js";
 
-const requiredDomains = ["github.com", "graph.microsoft.com", "login.microsoftonline.com"];
+const requiredDomains = [
+  "github.com",
+  "graph.microsoft.com",
+  "login.microsoftonline.com",
+  "ohmylab-my.sharepoint.com",
+  "ohmylab.sharepoint.com"
+];
 
 function readPackageVersion(): string {
   const packageJsonPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json");
@@ -33,10 +39,12 @@ const llmGuide = `# Hare M365 Agent LLM Guide
 목적: 사용자의 자연어 요청을 Microsoft Graph delegated 권한으로 조회한다. 기본 정책은 read-only다.
 
 시작 순서:
-1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 3개 도메인 허용 여부를 사용자에게 확인한다.
+1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 5개 도메인 허용 여부를 사용자에게 확인한다.
    - github.com
    - graph.microsoft.com
    - login.microsoftonline.com
+   - ohmylab-my.sharepoint.com
+   - ohmylab.sharepoint.com
 2. 도메인 확인은 가능하면 LLM 도구의 사용자 확인 요청, 선택형 질문, 승인 요청 UI로 처리한다. 사용자가 직접 "도메인 허용 완료" 같은 문구를 타이핑하게 만들지 않는다.
 3. 확인 요청 UI가 없는 환경에서만 짧게 yes/no로 묻는다.
 4. 도메인 허용 확인 전에는 git, npm, curl, 로그인, Outlook/Teams/Files 조회를 시작하지 않는다.
@@ -108,6 +116,8 @@ Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래
 github.com
 graph.microsoft.com
 login.microsoftonline.com
+ohmylab-my.sharepoint.com
+ohmylab.sharepoint.com
 
 도메인 허용 확인은 가능하면 네가 가진 사용자 확인 요청, 선택형 질문, 승인 요청 UI로 처리해. 사용자가 직접 "도메인 허용 완료" 같은 문구를 타이핑하게 요구하지 마.
 그런 확인 요청 기능이 없는 환경에서만 짧게 yes/no로 물어봐.

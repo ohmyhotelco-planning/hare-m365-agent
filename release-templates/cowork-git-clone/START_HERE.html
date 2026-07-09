@@ -43,16 +43,21 @@
 
     <section class="step">
       <div class="step-title"><span class="num">1</span>도메인 허용</div>
-      <p>Claude/Cowork 설정에서 도메인 허용 목록을 열고 아래 3개를 추가합니다.</p>
+      <p>Claude/Cowork 설정에서 도메인 허용 목록을 열고 아래 5개를 추가합니다.</p>
       <button onclick="copyText('domains')">도메인 전체 복사</button>
       <div class="domain-grid">
         <div class="domain-row"><div class="domain">github.com</div><button class="secondary" onclick="copyLiteral('github.com')">복사</button></div>
         <div class="domain-row"><div class="domain">graph.microsoft.com</div><button class="secondary" onclick="copyLiteral('graph.microsoft.com')">복사</button></div>
         <div class="domain-row"><div class="domain">login.microsoftonline.com</div><button class="secondary" onclick="copyLiteral('login.microsoftonline.com')">복사</button></div>
+        <div class="domain-row"><div class="domain">ohmylab-my.sharepoint.com</div><button class="secondary" onclick="copyLiteral('ohmylab-my.sharepoint.com')">복사</button></div>
+        <div class="domain-row"><div class="domain">ohmylab.sharepoint.com</div><button class="secondary" onclick="copyLiteral('ohmylab.sharepoint.com')">복사</button></div>
       </div>
       <pre id="domains">github.com
 graph.microsoft.com
-login.microsoftonline.com</pre>
+login.microsoftonline.com
+ohmylab-my.sharepoint.com
+ohmylab.sharepoint.com</pre>
+      <p class="muted">Teams 채팅 파일과 SharePoint/OneDrive 파일 본문은 Graph 조회 후 SharePoint 도메인에서 다운로드될 수 있습니다. 와일드카드가 지원되면 <code>*.sharepoint.com</code>으로 대체할 수 있습니다.</p>
       <p class="muted">npm install 단계에서 registry 오류가 날 때만 <code>registry.npmjs.org</code>를 추가합니다.</p>
     </section>
 
@@ -66,10 +71,12 @@ login.microsoftonline.com</pre>
 저장소:
 https://github.com/ohmyhotelco-planning/hare-m365-agent.git
 
-필요 도메인은 아래 3개야. 도메인 허용 목록이 있는 환경이면 먼저 확인해.
+필요 도메인은 아래 5개야. 도메인 허용 목록이 있는 환경이면 먼저 확인해.
 github.com
 graph.microsoft.com
 login.microsoftonline.com
+ohmylab-my.sharepoint.com
+ohmylab.sharepoint.com
 
 도메인 확인 후 아래 순서대로 준비해.
 GitHub API나 Release asset이 아니라 git clone 경로를 사용해.
