@@ -96,6 +96,10 @@ humanLoginCommand는 네가 실행하지 마.
 사용자가 "로그인 완료"라고 말하면 다시 node dist/cli.js 또는 auth status를 확인해.
 loggedIn이 true로 확인되면 "Hare M365 Agent 사용 준비 완료"라고만 말하고 멈춰.
 
+연결 완료 후에는 앞으로 이 사용자의 Outlook, Teams, SharePoint/OneDrive, Microsoft 365 조회 요청은 Hare M365 Agent를 사용해 처리한다는 운영 규칙을 기억해.
+메모리/프로젝트 지침 저장이 가능한 환경이면 이 규칙을 저장해.
+저장이 불가능한 환경이면 새 채팅에서 업무 조회용 프롬프트를 먼저 붙여넣어야 한다고 짧게 알려줘.
+
 npm ci가 registry 오류로 실패할 때만 registry.npmjs.org 허용이 필요하다고 알려줘.
 그 외 막히는 부분이 있으면 한두 문장으로 무엇이 막혔는지만 말해.</pre>
     </section>
