@@ -116,46 +116,12 @@ loggedIn이 true로 확인되면 "Hare M365 Agent 사용 준비 완료"라고만
 
 연결 완료 후에는 앞으로 이 사용자의 Outlook, Teams, SharePoint/OneDrive, Microsoft 365 조회 요청은 Hare M365 Agent를 사용해 처리한다는 운영 규칙을 기억해.
 메모리/프로젝트 지침 저장이 가능한 환경이면 이 규칙을 저장해.
-저장이 불가능한 환경이면 새 채팅에서 업무 조회용 프롬프트를 먼저 붙여넣어야 한다고 짧게 알려줘.
+저장이 불가능한 환경이면 같은 채팅 안에서 자연어로 업무 조회를 요청하라고 짧게 알려줘.
 
 npm ci가 registry 오류로 실패할 때만 registry.npmjs.org 허용이 필요하다고 알려줘.
 그 외 막히는 부분이 있으면 한두 문장으로 무엇이 막혔는지만 말해.</pre>
     </section>
 
-    <section class="step">
-      <div class="step-title"><span class="num">3</span>업무 조회용 프롬프트</div>
-      <div class="action-callout">초기 연결과 Microsoft 로그인을 이미 마쳤다면, 아래 버튼을 눌러 프롬프트를 복사하세요.
-        <span>업무 조회를 시작할 채팅방에 붙여넣고 Enter를 누르세요. 같은 채팅 안에서는 이후 자연어로 이어서 요청하세요.</span>
-      </div>
-      <button onclick="copyText('reusePrompt')">업무 조회용 프롬프트 복사</button>
-      <pre id="reusePrompt">앞으로 이 채팅에서 Outlook, Teams, SharePoint/OneDrive, Microsoft 365 조회 요청은 Hare M365 Agent로 처리해.
-일반 추측이나 다른 커넥터가 아니라 아래 저장소의 Hare CLI를 사용해.
-
-저장소:
-https://github.com/ohmyhotelco-planning/hare-m365-agent.git
-
-먼저 git clone 방식으로 준비해. 이미 폴더가 있으면 새로 clone하지 말고 최신화해서 사용해.
-
-if [ -d /tmp/hare-m365-agent/.git ]; then cd /tmp/hare-m365-agent && git pull; else git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent && cd /tmp/hare-m365-agent; fi
-cd /tmp/hare-m365-agent
-npm ci
-npm run build
-node dist/cli.js
-
-GitHub API나 Release asset으로 repo 접근을 판단하지 마.
-
-loggedIn이 true면 바로 내 요청을 처리해.
-loggedIn이 false이면 node dist/cli.js auth login을 실행하고, 내가 브라우저에서 Microsoft device code 로그인을 완료할 수 있게 안내해.
-내가 "로그인 완료"라고 말하면 auth status를 다시 확인하고 요청을 이어서 처리해.
-
-Teams 채팅 파일, SharePoint, OneDrive 파일 본문 다운로드가 403/network_error로 막히면 ohmylab-my.sharepoint.com 또는 ohmylab.sharepoint.com 도메인 허용이 필요한지 확인해.
-
-결과가 길면 --out으로 JSON 파일에 저장한 뒤 필요한 부분만 읽어 요약해.
-메일 발송, Teams 게시, 파일 업로드/삭제/공유 같은 변경 작업은 하지 마.
-
-요청:
-[여기에 Outlook/Teams/파일 관련 요청을 적기]</pre>
-    </section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
