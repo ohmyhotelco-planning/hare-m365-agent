@@ -83,7 +83,7 @@ npm run build
 node dist/cli.js --version
 node dist/cli.js
 
-loggedIn이 true면 "Hare M365 Agent 사용 준비 완료"라고 보고하고 멈춰.
+이미 로그인 캐시가 있어서 loggedIn이 true로 확인되면 "Hare M365 Agent 사용 준비 완료"라고 보고하고 멈춰.
 
 loggedIn이 false면 humanLoginCommand를 사용자에게 안내하고 멈춰.
 humanLoginCommand는 네가 실행하지 마.
@@ -96,7 +96,7 @@ humanLoginCommand는 네가 실행하지 마.
 브라우저가 자동으로 열리지 않으면 터미널의 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 붙여넣으라고 안내해. Mac은 Command+클릭도 가능해.
 
 사용자가 "로그인 완료"라고 말하면 다시 node dist/cli.js 또는 auth status를 확인해.
-성공하면 "Hare M365 Agent 사용 준비 완료"라고만 말하고 멈춰.
+loggedIn이 true로 확인되면 "Hare M365 Agent 사용 준비 완료"라고만 말하고 멈춰.
 
 npm ci가 registry 오류로 실패할 때만 registry.npmjs.org 허용이 필요하다고 알려줘.
 그 외 막히는 부분이 있으면 한두 문장으로 무엇이 막혔는지만 말해.</pre>
