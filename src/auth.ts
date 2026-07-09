@@ -80,7 +80,7 @@ export async function getAccessToken(config: AppConfig): Promise<string> {
   const account = accounts[0] ?? null;
   if (!account) {
     throw new Error(
-      "Not logged in for this Hare dataDir/cacheFile. Run Hare startup without a subcommand, show humanLoginCommand to the user, then stop until the user confirms login is complete in the same dataDir/cacheFile."
+      "Not logged in for this Hare dataDir/cacheFile. During initial connection, run Hare auth login in the same shell, let the user complete Microsoft device-code login, then retry in the same dataDir/cacheFile."
     );
   }
 

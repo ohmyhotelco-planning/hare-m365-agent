@@ -82,14 +82,15 @@ npm ci
 npm run build
 node dist/cli.js --version
 node dist/cli.js
+node dist/cli.js auth login
 
-초기 연결에서는 로그인 절차가 반드시 필요하다고 보고 humanLoginCommand를 사용자에게 안내하고 멈춰.
-humanLoginCommand는 네가 실행하지 마.
-사용자에게 아래 절차만 짧게 안내해.
-1. humanLoginCommand 실행
-2. 브라우저에서 Microsoft device code 입력
-3. 회사 Microsoft 계정 로그인
-4. 완료 후 이 채팅에 "로그인 완료"라고 말하기
+초기 연결에서는 로그인 절차가 반드시 필요하므로 auth login까지 네가 실행해.
+사용자에게 명령어를 복사해 실행하라고 시키지 마.
+auth login 출력에 표시되는 Microsoft 로그인 주소와 device code를 사용자가 볼 수 있게 안내해.
+사용자에게 아래 절차만 짧게 말해.
+1. 브라우저에서 Microsoft device code 입력
+2. 회사 Microsoft 계정 로그인
+3. 완료 후 이 채팅에 "로그인 완료"라고 말하기
 
 브라우저가 자동으로 열리지 않으면 터미널의 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 붙여넣으라고 안내해. Mac은 Command+클릭도 가능해.
 

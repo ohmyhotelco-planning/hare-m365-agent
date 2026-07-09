@@ -60,7 +60,7 @@ If `loggedIn` is false, do not run Outlook, Teams, or Files lookup.
 
 If a cache file exists in the fixed Hare folder, do not ask the user to login again. Run the requested read command with the same `HARE_M365_DATA_DIR`.
 
-If no cache exists, show the printed `humanLoginCommand` and stop. The user runs it, enters the Microsoft device code in the browser, signs in with the company account, then says "로그인 완료".
+For initial connection, run the printed `humanLoginCommand` in the same shell. Do not ask the user to type a shell command or navigate to the clone folder. The user enters the Microsoft device code in the browser, signs in with the company account, then says "로그인 완료".
 
 ## Read Commands
 

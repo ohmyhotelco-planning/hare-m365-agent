@@ -28,7 +28,7 @@ After startup, read the JSON and follow these rules:
 - If the user's fixed Hare folder is mounted, set `HARE_M365_DATA_DIR="<mounted Hare folder path>"` for every command.
 - If `loggedIn` is false, do not query Outlook/Teams/Files.
 - If `cacheFileExists` is true, do not ask the user to login again; continue with the requested read command.
-- If no cache exists, show `humanLoginCommand` and stop until the user finishes Microsoft device-code login.
+- For initial connection, run `humanLoginCommand` in the same shell. Do not ask the user to type a shell command or navigate to the clone folder. The user enters the Microsoft device code in the browser, signs in, then says "로그인 완료".
 - If Graph calls fail in the hosted sandbox but cache exists, run the command on the user's local machine with `--out`, then read the output JSON.
 
 Do not use computer-use or File Explorer when shell commands are available.
