@@ -25,6 +25,9 @@
     .domain-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; margin-top: 10px; }
     .domain-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
     .domain { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-family: Consolas, "Courier New", monospace; overflow-wrap: anywhere; }
+    figure { margin: 14px 0 4px; }
+    figure img { display: block; width: 100%; max-width: 720px; border: 1px solid var(--line); border-radius: 8px; }
+    figcaption { margin-top: 6px; color: var(--muted); font-size: 13px; }
     .toast { position: fixed; right: 24px; bottom: 24px; z-index: 20; padding: 11px 14px; border-radius: 8px; background: var(--dark); color: #fff; font-size: 14px; font-weight: 700; box-shadow: 0 10px 28px rgba(31, 35, 40, 0.22); opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 160ms ease, transform 160ms ease; }
     .toast.show { opacity: 1; transform: translateY(0); }
   </style>
@@ -44,6 +47,7 @@
     <section class="step">
       <div class="step-title"><span class="num">1</span>도메인 허용</div>
       <p>Claude/Cowork 설정에서 도메인 허용 목록을 열고 아래 5개를 추가합니다.</p>
+      <p class="muted">위치: Claude 설정 → 기능 → 도메인 허용 목록 → 추가 허용 도메인 입력 → 추가</p>
       <button onclick="copyText('domains')">도메인 전체 복사</button>
       <div class="domain-grid">
         <div class="domain-row"><div class="domain">github.com</div><button class="secondary" onclick="copyLiteral('github.com')">복사</button></div>
@@ -57,6 +61,10 @@ graph.microsoft.com
 login.microsoftonline.com
 ohmylab-my.sharepoint.com
 ohmylab.sharepoint.com</pre>
+      <figure>
+        <img src="assets/domain-allow-list.png" alt="Claude 설정의 기능 메뉴에서 도메인 허용 목록에 도메인을 추가하는 화면 예시">
+        <figcaption>입력 위치 예시입니다. 실제로는 위 5개 도메인을 모두 추가합니다.</figcaption>
+      </figure>
       <p class="muted">Teams 채팅 파일과 SharePoint/OneDrive 파일 본문은 Graph 조회 후 SharePoint 도메인에서 다운로드될 수 있습니다. 와일드카드가 지원되면 <code>*.sharepoint.com</code>으로 대체할 수 있습니다.</p>
       <p class="muted">npm install 단계에서 registry 오류가 날 때만 <code>registry.npmjs.org</code>를 추가합니다.</p>
     </section>
