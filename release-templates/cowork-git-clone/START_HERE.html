@@ -83,9 +83,7 @@ npm run build
 node dist/cli.js --version
 node dist/cli.js
 
-이미 로그인 캐시가 있어서 loggedIn이 true로 확인되면 "Hare M365 Agent 사용 준비 완료"라고 보고하고 멈춰.
-
-loggedIn이 false면 humanLoginCommand를 사용자에게 안내하고 멈춰.
+초기 연결에서는 로그인 절차가 반드시 필요하다고 보고 humanLoginCommand를 사용자에게 안내하고 멈춰.
 humanLoginCommand는 네가 실행하지 마.
 사용자에게 아래 절차만 짧게 안내해.
 1. humanLoginCommand 실행
