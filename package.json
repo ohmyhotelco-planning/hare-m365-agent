@@ -10,8 +10,8 @@
   },
   "files": [
     "dist/",
+    "hare.config.json",
     "policy.json",
-    ".env",
     ".env.example"
   ],
   "scripts": {

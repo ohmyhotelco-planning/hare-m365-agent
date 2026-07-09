@@ -25,7 +25,7 @@ LLM -> local shell/Cowork sandbox -> git clone -> npm ci -> npm run build -> Har
 
 - Azure Application 및 Graph permission 승인
 - Claude/Cowork 도메인 허용 목록에 `github.com`, `graph.microsoft.com`, `login.microsoftonline.com` 추가
-- `.env` 배포 설정 확인
+- 기본 `hare.config.json` 설정 확인
 - Microsoft 로그인 및 consent 완료
 - 향후 write/send/delete/share 기능을 열기 전 명시 승인
 

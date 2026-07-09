@@ -10,6 +10,12 @@ const packageRoot = path.resolve(moduleDir, "..");
 dotenv.config({ path: path.resolve(".env") });
 dotenv.config({ path: path.join(packageRoot, ".env") });
 
+type HareDefaultConfig = {
+  clientId?: string;
+  tenantId?: string;
+  policyPath?: string;
+};
+
 export type Policy = {
   defaultMode: "readOnly" | "readWrite";
   allowWriteActions: boolean;
@@ -58,6 +64,10 @@ function readJson<T>(filePath: string, fallback: T): T {
   return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
 }
 
+function readDefaultConfig(): HareDefaultConfig {
+  return readJson<HareDefaultConfig>(path.join(packageRoot, "hare.config.json"), {});
+}
+
 function defaultDataDir(): string {
   const explicitDataDir = process.env.HARE_M365_DATA_DIR ?? process.env.OMH_M365_DATA_DIR;
   if (explicitDataDir) {
@@ -81,10 +91,11 @@ function resolvePackagePath(value: string | undefined, fallback: string): string
 }
 
 export function loadConfig(): AppConfig {
-  const clientId = process.env.OMH_M365_CLIENT_ID ?? "";
-  const tenantId = process.env.OMH_M365_TENANT_ID ?? "";
+  const defaults = readDefaultConfig();
+  const clientId = process.env.OMH_M365_CLIENT_ID ?? defaults.clientId ?? "";
+  const tenantId = process.env.OMH_M365_TENANT_ID ?? defaults.tenantId ?? "";
   const dataDir = path.resolve(defaultDataDir());
-  const policyPath = resolvePackagePath(process.env.OMH_M365_POLICY_PATH, path.join(packageRoot, "policy.json"));
+  const policyPath = resolvePackagePath(process.env.OMH_M365_POLICY_PATH ?? defaults.policyPath, path.join(packageRoot, "policy.json"));
   const cacheDir = path.join(dataDir, ".cache");
   const downloadDir = path.join(dataDir, "downloads");
   const logsDir = path.join(dataDir, "logs");
@@ -119,7 +130,7 @@ export function requireConfigured(config: AppConfig): void {
   if (!config.tenantId) missing.push("OMH_M365_TENANT_ID");
   if (missing.length > 0) {
     throw new Error(
-      `Missing required environment values: ${missing.join(", ")}. Use the approved Hare M365 Agent package configuration or set these values in a local .env file.`
+      `Missing required configuration values: ${missing.join(", ")}. Check hare.config.json or set local environment overrides.`
     );
   }
 }

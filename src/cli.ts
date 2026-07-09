@@ -235,7 +235,7 @@ program
             ? status.loggedIn
               ? `${getSelfCommand()} auth status`
               : "LOGIN_REQUIRED_HARD_GATE"
-            : "Create .env from .env.example and fill approved Azure Application values.",
+            : "Check hare.config.json or set local environment overrides.",
           llmAction: status.configured && !status.loggedIn ? "STOP_DO_NOT_RUN_LOGIN_COMMAND" : undefined,
           humanLoginCommand: status.configured && !status.loggedIn ? getLoginCommand() : undefined
         },

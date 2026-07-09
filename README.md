@@ -40,6 +40,12 @@ node dist/cli.js
 
 `npm ci` 단계에서 npm registry 접근 오류가 발생할 때만 `registry.npmjs.org` 도메인 허용이 필요합니다.
 
+## 설정
+
+기본 Azure Application 설정은 `hare.config.json`에 포함됩니다. 일반 사용자는 `.env`를 만들거나 수정하지 않습니다.
+
+`.env`는 개발자용 로컬 override가 필요할 때만 사용합니다.
+
 ## 로그인과 저장 위치
 
 Hare는 OS별 고정 `dataDir`에 로그인 캐시와 다운로드를 저장합니다.
