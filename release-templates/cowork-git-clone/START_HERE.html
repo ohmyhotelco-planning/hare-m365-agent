@@ -23,6 +23,8 @@
     .step-title { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
     .action-callout { margin: 14px 0 10px; padding: 14px 16px; border-left: 5px solid var(--brand); background: var(--soft); border-radius: 8px; font-size: 18px; font-weight: 700; color: var(--text); }
     .action-callout span { display: block; margin-top: 4px; font-size: 15px; font-weight: 600; color: var(--muted); }
+    .capability-list { margin: 12px 0 0; padding-left: 20px; }
+    .capability-list li { margin: 6px 0; }
     .num { width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex: 0 0 auto; }
     .domain-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; margin-top: 10px; }
     .domain-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
@@ -45,6 +47,16 @@
       <strong>핵심 원칙:</strong>
       GitHub API나 Release asset이 아니라 <code>git clone</code> 경로를 사용합니다. Microsoft 계정 외 별도 배포 계정을 요구하지 않는 것을 우선합니다.
     </div>
+
+    <section class="step">
+      <div class="step-title"><span class="num">✓</span>연결 후 할 수 있는 일</div>
+      <ul class="capability-list">
+        <li>Outlook 받은편지함에서 최근 메일을 찾고 요약할 수 있습니다.</li>
+        <li>Teams 팀, 채팅방, 채팅 메시지를 조회하고 필요한 내용을 정리할 수 있습니다.</li>
+        <li>SharePoint/OneDrive에서 파일을 검색하고, 필요한 파일을 내려받아 내용을 요약할 수 있습니다.</li>
+        <li>메일 발송, Teams 게시, 파일 업로드/삭제/공유 같은 변경 작업은 기본적으로 하지 않습니다.</li>
+      </ul>
+    </section>
 
     <section class="step">
       <div class="step-title"><span class="num">1</span>도메인 허용</div>
