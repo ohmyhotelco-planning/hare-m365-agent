@@ -60,29 +60,19 @@ login.microsoftonline.com</pre>
       <div class="step-title"><span class="num">2</span>초기 연결용 프롬프트</div>
       <p>최초 1회 반드시 수행하는 준비 절차입니다. 설치/빌드/상태 확인 후 로그인이 필요하면 사용자가 직접 로그인하도록 안내합니다.</p>
       <button onclick="copyText('prompt')">초기 연결용 프롬프트 복사</button>
-      <pre id="prompt">중요: 이 프롬프트는 Hare M365 Agent를 처음 사용하는 환경에서 반드시 최초 1회 실행해야 하는 초기 연결 점검이다.
-이 단계가 끝나기 전에는 Outlook/Teams/Files 업무 조회를 실행하지 마.
-
-목적: Hare M365 Agent를 Claude/Cowork 샌드박스에서 git clone 방식으로 준비하고, 로그인 가능 상태까지 확인해.
-이 프롬프트에서는 Outlook/Teams/Files 실제 업무 조회를 실행하지 마.
-토큰, 캐시, .env 내용은 열거나 출력하지 마. 단, cacheFile 존재 여부와 loggedIn 상태는 확인해.
+      <pre id="prompt">중요: Hare M365 Agent를 처음 쓰는 환경에서는 이 프롬프트를 반드시 최초 1회 실행해.
+목적은 연결 준비와 로그인 상태 확인뿐이야. Outlook/Teams/Files 업무 조회는 실행하지 마.
 
 저장소:
 https://github.com/ohmyhotelco-planning/hare-m365-agent.git
 
-필요 도메인:
+필요 도메인은 아래 3개야. 도메인 허용 목록이 있는 환경이면 먼저 확인해.
 github.com
-login.microsoftonline.com
 graph.microsoft.com
+login.microsoftonline.com
 
-도메인 허용 목록이 있는 환경이면 위 도메인이 허용되어 있는지 먼저 확인해.
-가능하면 사용자 확인 요청/승인 UI로 처리해.
-확인 UI가 없을 때만 짧게 물어봐.
-
-GitHub API(api.github.com)나 GitHub Release asset 다운로드는 이번 경로가 아니야.
-repo 접근 가능 여부는 git ls-remote 또는 git clone으로 판단해.
-
-도메인 확인 후 아래 순서대로 진행해.
+도메인 확인 후 아래 순서대로 준비해.
+GitHub API나 Release asset이 아니라 git clone 경로를 사용해.
 
 git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git HEAD
 rm -rf /tmp/hare-m365-agent-test
@@ -93,45 +83,23 @@ npm run build
 node dist/cli.js --version
 node dist/cli.js
 
-npm ci가 registry 접근 오류로 실패하면 registry.npmjs.org 허용이 필요하다고 보고하고 멈춰.
-
-startup JSON이 출력되면 아래 항목만 확인해.
-- configured
-- loggedIn
-- dataDir
-- cacheFile
-- cacheFileExists
-- humanLoginCommand 존재 여부
-
 loggedIn이 true면 "Hare M365 Agent 사용 준비 완료"라고 보고하고 멈춰.
 
-loggedIn이 false이면 로그인 hard gate로 판단하고, Outlook/Teams/Files 조회는 실행하지 마.
-cacheFileExists가 true이면 "캐시 파일은 확인됨. 같은 저장 위치 기준으로 auth status 재확인이 필요함"이라고 보고하고 멈춰.
+loggedIn이 false면 humanLoginCommand를 사용자에게 안내하고 멈춰.
+humanLoginCommand는 네가 실행하지 마.
+사용자에게 아래 절차만 짧게 안내해.
+1. humanLoginCommand 실행
+2. 브라우저에서 Microsoft device code 입력
+3. 회사 Microsoft 계정 로그인
+4. 완료 후 이 채팅에 "로그인 완료"라고 말하기
 
-cacheFileExists가 false이면 humanLoginCommand를 사용자에게 안내하고 즉시 멈춰.
-humanLoginCommand는 네가 직접 실행하지 마.
-사용자가 직접 해야 할 로그인 절차를 아래처럼 쉬운 말로 안내해.
+브라우저가 자동으로 열리지 않으면 터미널의 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 붙여넣으라고 안내해. Mac은 Command+클릭도 가능해.
 
-1. humanLoginCommand를 복사해 로컬 터미널에서 실행
-2. 터미널에 Microsoft device code와 로그인 주소가 표시됨
-3. 브라우저가 자동으로 열리지 않으면 로그인 주소를 Ctrl+클릭하거나 주소창에 붙여넣기
-4. 브라우저에서 코드를 입력
-5. 회사 Microsoft 계정으로 로그인
-6. 완료되면 이 채팅에 "로그인 완료"라고 말하기
+사용자가 "로그인 완료"라고 말하면 다시 node dist/cli.js 또는 auth status를 확인해.
+성공하면 "Hare M365 Agent 사용 준비 완료"라고만 말하고 멈춰.
 
-사용자가 "로그인 완료"라고 말하면 같은 저장 위치 기준으로 다시 node dist/cli.js 또는 auth status를 실행해 loggedIn을 확인해.
-loggedIn이 true이면 "Hare M365 Agent 사용 준비 완료"라고 보고하고 멈춰.
-
-마지막에 표로 요약해줘.
-표 컬럼: 단계 / 결과 / 근거 / 다음 조치
-
-최종 결론은 아래 중 하나로 분류해줘.
-A. git clone 방식으로 Cowork 준비 가능
-B. git transport 접근 문제
-C. npm registry 허용이 추가로 필요
-D. Microsoft login/Graph 경로 문제
-E. build/runtime 문제
-F. 로그인 필요: humanLoginCommand 사용자 실행 대기</pre>
+npm ci가 registry 오류로 실패할 때만 registry.npmjs.org 허용이 필요하다고 알려줘.
+그 외 막히는 부분이 있으면 한두 문장으로 무엇이 막혔는지만 말해.</pre>
     </section>
 
     <section class="step">
