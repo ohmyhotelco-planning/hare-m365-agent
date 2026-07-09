@@ -111,9 +111,11 @@ npm ci
 npm run build
 node dist/cli.js --version
 node dist/cli.js
-node dist/cli.js auth login
 
-초기 연결에서는 로그인 절차가 반드시 필요하므로 auth login까지 네가 실행해.
+먼저 startup JSON의 loggedIn 값을 확인해.
+loggedIn이 true이면 "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
+
+loggedIn이 false이면 node dist/cli.js auth login을 실행해.
 사용자에게 명령어를 복사해 실행하라고 시키지 마.
 auth login 출력에 표시되는 Microsoft 로그인 주소와 device code를 사용자가 볼 수 있게 안내해.
 사용자에게 아래 절차만 짧게 말해.
