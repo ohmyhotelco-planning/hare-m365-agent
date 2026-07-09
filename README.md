@@ -7,7 +7,7 @@ Hare M365 Agent는 LLM이 Microsoft Graph delegated 권한으로 Outlook, Teams,
 사람이 읽는 안내는 아래 한 장만 사용합니다.
 
 ```text
-release-templates/cowork-git-clone/START_HERE.html
+release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드.html
 ```
 
 ## 실행 개요
