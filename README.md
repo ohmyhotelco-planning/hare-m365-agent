@@ -70,6 +70,7 @@ node dist/cli.js teams teams --out teams.json
 node dist/cli.js teams chats --limit 20 --out chats.json
 node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20 --out chat-messages.json
 node dist/cli.js teams search-messages --query "와플" --since 2026-04-01 --until 2026-07-10 --out teams-search.json
+node dist/cli.js sharepoint sites --query "Agent Automation" --out sharepoint-sites.json
 node dist/cli.js files search --query "keyword" --limit 10 --out files.json
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
 ```
@@ -79,6 +80,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 최근 90일을 조회하며 최대 1,000건을 반환합니다. 결과 JSON의 `search.range.notice`에 실제 조회 기간이 표시되고, `search.limitReached`로 결과 한도 도달 여부를 확인할 수 있습니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
 
 정확한 메일 건수 집계는 검색 인덱스를 사용하는 `outlook search` 대신 `outlook count`를 사용합니다. `outlook count`는 지정 기간의 모든 메일 페이지를 순회하고 `--subject-contains`와 `--from` 조건을 직접 대조합니다.
+
+SharePoint 사이트의 존재 여부는 `sharepoint sites`로 확인합니다. `files search`는 현재 개인 OneDrive 범위이므로, 해당 결과만으로 SharePoint 사이트 존재 여부나 접근 권한을 판단하지 않습니다.
 
 ## 개발 검증
 

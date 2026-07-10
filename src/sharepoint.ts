@@ -16,10 +16,82 @@ export type FileSummary = {
   };
 };
 
+export type SiteSummary = {
+  id: string;
+  displayName?: string;
+  name?: string;
+  description?: string;
+  webUrl?: string;
+  createdDateTime?: string;
+  lastModifiedDateTime?: string;
+  isPersonalSite?: boolean;
+};
+
+export type SiteSearchResult = {
+  search: {
+    query: string;
+    scope: "sharepointSites";
+    returnedCount: number;
+    maxResults: number;
+    limitReached: boolean;
+  };
+  sites: SiteSummary[];
+};
+
 type GraphDriveItem = FileSummary & {
   file?: unknown;
   folder?: unknown;
 };
+
+type GraphSite = SiteSummary;
+
+export async function searchSites(
+  config: AppConfig,
+  query: string,
+  limit: number
+): Promise<SiteSearchResult> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    throw new Error("query must not be empty.");
+  }
+  if (!Number.isFinite(limit) || limit < 1) {
+    throw new Error("limit must be a positive number.");
+  }
+
+  const maxResults = Math.min(Math.floor(limit), config.policy.maxFileSearchLimit);
+  let nextUrl: string | undefined = `/sites?search=${encodeURIComponent(trimmedQuery)}`;
+  const sites: GraphSite[] = [];
+  let limitReached = false;
+
+  while (nextUrl && sites.length < maxResults) {
+    const page: GraphPage<GraphSite> = await graphGet<GraphPage<GraphSite>>(config, nextUrl);
+    const remaining = maxResults - sites.length;
+    const values = page.value ?? [];
+    sites.push(...values.slice(0, remaining));
+    nextUrl = page["@odata.nextLink"];
+    limitReached = Boolean(nextUrl) || values.length > remaining;
+  }
+
+  return {
+    search: {
+      query: trimmedQuery,
+      scope: "sharepointSites",
+      returnedCount: sites.length,
+      maxResults,
+      limitReached
+    },
+    sites: sites.map((site) => ({
+      id: site.id,
+      displayName: site.displayName,
+      name: site.name,
+      description: site.description,
+      webUrl: site.webUrl,
+      createdDateTime: site.createdDateTime,
+      lastModifiedDateTime: site.lastModifiedDateTime,
+      isPersonalSite: site.isPersonalSite
+    }))
+  };
+}
 
 export async function searchFiles(config: AppConfig, query: string, limit: number): Promise<FileSummary[]> {
   const top = Math.min(limit, config.policy.maxFileSearchLimit);
