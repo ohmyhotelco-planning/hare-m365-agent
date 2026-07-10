@@ -3,6 +3,8 @@
   "allowWriteActions": false,
   "allowDownloads": true,
   "storeRawMessages": false,
+  "defaultSearchLookbackDays": 90,
+  "maxSearchResults": 1000,
   "maxMailFetchLimit": 20,
   "maxTeamsFetchLimit": 50,
   "maxFileSearchLimit": 25,

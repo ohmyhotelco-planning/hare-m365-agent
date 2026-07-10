@@ -21,6 +21,8 @@ export type Policy = {
   allowWriteActions: boolean;
   allowDownloads: boolean;
   storeRawMessages: boolean;
+  defaultSearchLookbackDays: number;
+  maxSearchResults: number;
   maxMailFetchLimit: number;
   maxTeamsFetchLimit: number;
   maxFileSearchLimit: number;
@@ -45,6 +47,8 @@ const defaultPolicy: Policy = {
   allowWriteActions: false,
   allowDownloads: true,
   storeRawMessages: false,
+  defaultSearchLookbackDays: 90,
+  maxSearchResults: 1000,
   maxMailFetchLimit: 20,
   maxTeamsFetchLimit: 50,
   maxFileSearchLimit: 25,

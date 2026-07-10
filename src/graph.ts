@@ -26,6 +26,27 @@ export async function graphGet<T>(config: AppConfig, pathOrUrl: string): Promise
   return (await response.json()) as T;
 }
 
+export async function graphPost<T>(config: AppConfig, pathOrUrl: string, body: unknown): Promise<T> {
+  const token = await getAccessToken(config);
+  const url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${graphRoot}${pathOrUrl}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const responseBody = await response.text();
+    throw new Error(`Graph POST failed (${response.status} ${response.statusText}): ${responseBody}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 export async function graphDownload(config: AppConfig, pathOrUrl: string): Promise<Buffer> {
   const token = await getAccessToken(config);
   const url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${graphRoot}${pathOrUrl}`;
