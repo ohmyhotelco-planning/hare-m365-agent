@@ -123,8 +123,11 @@ git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-
 cd /tmp/hare-m365-agent-test
 npm ci
 npm run build
+node dist/cli.js llm-guide
 node dist/cli.js --version
 node dist/cli.js
+
+llm-guide 출력 내용을 이후 Outlook/Teams/SharePoint/OneDrive 업무 조회 규칙으로 적용해.
 
 먼저 startup JSON의 loggedIn 값을 확인해.
 loggedIn이 true이면 "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
