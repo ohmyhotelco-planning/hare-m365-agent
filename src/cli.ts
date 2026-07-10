@@ -13,10 +13,16 @@ import {
 } from "./outlook.js";
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
 import { listChatMessages, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
+import { cleanupExpiredResults, resolveResultPath } from "./results.js";
 
 const program = new Command();
 const config = loadConfig();
 ensureRuntimeDirs(config);
+try {
+  cleanupExpiredResults(config);
+} catch {
+  // Result cleanup is best-effort and must not block M365 commands.
+}
 
 const preferredCommand = "hare-m365";
 const packageName = "@ohmyhotel/hare-m365-agent";
@@ -91,22 +97,23 @@ npm ci가 npm registry 접근 오류로 실패하면 registry.npmjs.org 허용�
 hosted sandbox Graph 실패 때:
 - cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed, network_error 등으로 실패하면 토큰 문제가 아니라 sandbox egress 문제로 판단한다.
 - 이때 clone/build를 반복하지 말고, 도메인 사진 확인이나 반복 호출 루프에 들어가지 않는다.
-- 사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.dataDir에 결과 JSON을 저장하게 한다.
+- 사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.resultsDir에 결과 JSON을 저장하게 한다.
 - 예: node dist/cli.js outlook inbox --limit 1 --out latest-mail.json
-- --out 값이 상대 경로이면 Hare 고정 dataDir 아래에 저장된다.
+- 일반 조회에서는 --out을 사용하지 않고 화면 출력을 바로 처리한다.
+- --out 값이 상대 경로이면 Hare 고정 resultsDir 아래에 저장되며 7일 후 자동 정리된다.
 - 결과 파일이 생성되면 그 JSON을 읽어 사용자 요청을 처리한다.
 
 읽기 명령:
 \`\`\`bash
-node dist/cli.js outlook inbox --limit 10 --out latest-mail.json
-node dist/cli.js outlook search --query "keyword" --since 2026-04-01 --until 2026-07-10 --folder all --out mail-search.json
-node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all --out mail-count.json
-node dist/cli.js teams teams --out teams.json
-node dist/cli.js teams chats --limit 20 --out chats.json
-node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20 --out chat-messages.json
-node dist/cli.js teams search-messages --query "keyword" --since 2026-04-01 --until 2026-07-10 --out teams-search.json
-node dist/cli.js sharepoint sites --query "Agent Automation" --out sharepoint-sites.json
-node dist/cli.js files search --query "keyword" --limit 10 --out files.json
+node dist/cli.js outlook inbox --limit 10
+node dist/cli.js outlook search --query "keyword" --since 2026-04-01 --until 2026-07-10 --folder all
+node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
+node dist/cli.js teams teams
+node dist/cli.js teams chats --limit 20
+node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20
+node dist/cli.js teams search-messages --query "keyword" --since 2026-04-01 --until 2026-07-10
+node dist/cli.js sharepoint sites --query "Agent Automation"
+node dist/cli.js files search --query "keyword" --limit 10
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
 \`\`\`
 
@@ -174,9 +181,10 @@ Cowork/hosted sandbox에서 고정 Hare 폴더가 마운트되면 이후 모든 
 
 cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed 또는 network_error로 실패하면 sandbox 네트워크 문제로 판단해.
 clone/build를 반복하지 말고, 도메인 사진확인이나 반복 호출 루프를 시작하지 마.
-사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.dataDir에 결과 JSON을 저장하게 해.
+사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.resultsDir에 결과 JSON을 저장하게 해.
 예: node dist/cli.js outlook inbox --limit 1 --out latest-mail.json
---out 값이 상대 경로이면 Hare 고정 dataDir 아래에 저장돼.
+일반 조회에서는 --out을 사용하지 말고 화면 출력을 바로 처리해.
+--out 값이 상대 경로이면 Hare 고정 resultsDir 아래에 저장되고 7일 후 자동 정리돼.
 결과 파일이 생성되면 그 JSON을 읽어 내 요청을 처리해.
 
 Outlook 또는 Teams에서 기간·키워드 조회를 요청받으면 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 outlook search 또는 teams search-messages를 사용해.
@@ -193,17 +201,13 @@ function getLoginCommand(): string {
   return `${getSelfCommand()} auth login`;
 }
 
-function resolveOutPath(out: string): string {
-  return path.resolve(path.isAbsolute(out) ? out : path.join(config.dataDir, out));
-}
-
 function emitJson(payload: unknown, out?: string): void {
   if (!out) {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
 
-  const outputPath = resolveOutPath(out);
+  const outputPath = resolveResultPath(config, out);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2), "utf8");
   console.log(JSON.stringify({ ok: true, outputPath }, null, 2));
@@ -223,7 +227,9 @@ async function getDoctorStatus() {
     cacheFile,
     cacheFileExists: fs.existsSync(cacheFile),
     downloadDir: config.downloadDir,
-    logsDir: config.logsDir
+    logsDir: config.logsDir,
+    resultsDir: config.resultsDir,
+    resultRetentionDays: config.policy.retentionDays
   };
 }
 
@@ -317,6 +323,8 @@ auth.command("status").description("Show current login and policy status").actio
         cacheFileExists: fs.existsSync(cacheFile),
         downloadDir: config.downloadDir,
         logsDir: config.logsDir,
+        resultsDir: config.resultsDir,
+        resultRetentionDays: config.policy.retentionDays,
         ...loginGateFields(loggedIn, fs.existsSync(cacheFile))
       },
       null,
@@ -357,7 +365,7 @@ outlook
   .command("inbox")
   .description("List recent Inbox messages")
   .option("--limit <number>", "maximum message count", "10")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(async (options: { limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await listInbox(config, Number(options.limit));
@@ -372,7 +380,7 @@ outlook
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
   .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
   .option("--limit <number>", "maximum matching message count", "1000")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(
     async (options: {
       query: string;
@@ -403,7 +411,7 @@ outlook
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
   .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(
     async (options: {
       subjectContains?: string;
@@ -431,7 +439,7 @@ const teams = program.command("teams").description("Teams read commands");
 teams
   .command("teams")
   .description("List joined teams")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(async (options: { out?: string }) => {
     requireConfigured(config);
     const data = await listJoinedTeams(config);
@@ -442,7 +450,7 @@ teams
   .command("chats")
   .description("List recent chats")
   .option("--limit <number>", "maximum chat count", "20")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(async (options: { limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await listChats(config, Number(options.limit));
@@ -454,7 +462,7 @@ teams
   .description("List messages in one chat")
   .requiredOption("--chat-id <id>", "chat ID returned by teams chats")
   .option("--limit <number>", "maximum message count", "20")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(async (options: { chatId: string; limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await listChatMessages(config, options.chatId, Number(options.limit));
@@ -468,7 +476,7 @@ teams
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
   .option("--limit <number>", "maximum matching message count", "1000")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(
     async (options: { query: string; since?: string; until?: string; limit: string; out?: string }) => {
       requireConfigured(config);
@@ -492,7 +500,7 @@ sharepoint
   .description("Search SharePoint sites by name or keyword")
   .requiredOption("--query <text>", "site name or search keyword")
   .option("--limit <number>", "maximum site count", "25")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(async (options: { query: string; limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await searchSites(config, options.query, Number(options.limit));
@@ -504,7 +512,7 @@ files
   .description("Search files in the signed-in user's personal OneDrive")
   .requiredOption("--query <text>", "search query")
   .option("--limit <number>", "maximum file count", "10")
-  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare dataDir")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(async (options: { query: string; limit: string; out?: string }) => {
     requireConfigured(config);
     const data = await searchFiles(config, options.query, Number(options.limit));

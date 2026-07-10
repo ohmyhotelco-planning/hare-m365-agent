@@ -8,7 +8,7 @@
   "maxMailFetchLimit": 20,
   "maxTeamsFetchLimit": 50,
   "maxFileSearchLimit": 25,
-  "retentionDays": 0,
+  "retentionDays": 7,
   "requireConfirmationFor": [
     "send_mail",
     "post_teams_message",

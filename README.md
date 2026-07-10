@@ -63,19 +63,19 @@ Linux: ~/.local/share/ohmyhotel/hare-m365-agent
 ```bash
 node dist/cli.js
 node dist/cli.js auth status
-node dist/cli.js outlook inbox --limit 10 --out latest-mail.json
-node dist/cli.js outlook search --query "나이스페이 OR nicepay" --since 2026-06-26 --until 2026-07-10 --folder all --out mail-search.json
-node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all --out mail-count.json
-node dist/cli.js teams teams --out teams.json
-node dist/cli.js teams chats --limit 20 --out chats.json
-node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20 --out chat-messages.json
-node dist/cli.js teams search-messages --query "와플" --since 2026-04-01 --until 2026-07-10 --out teams-search.json
-node dist/cli.js sharepoint sites --query "Agent Automation" --out sharepoint-sites.json
-node dist/cli.js files search --query "keyword" --limit 10 --out files.json
+node dist/cli.js outlook inbox --limit 10
+node dist/cli.js outlook search --query "나이스페이 OR nicepay" --since 2026-06-26 --until 2026-07-10 --folder all
+node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
+node dist/cli.js teams teams
+node dist/cli.js teams chats --limit 20
+node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20
+node dist/cli.js teams search-messages --query "와플" --since 2026-04-01 --until 2026-07-10
+node dist/cli.js sharepoint sites --query "Agent Automation"
+node dist/cli.js files search --query "keyword" --limit 10
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
 ```
 
-조회 명령은 `--out <path>`를 지원합니다. 상대 경로를 주면 Hare 고정 `dataDir` 아래에 JSON을 저장합니다.
+일반 조회 결과는 화면 출력을 바로 사용합니다. 별도 파일이 필요한 경우에만 `--out <path>`를 사용하며, 상대 경로는 Hare 고정 `resultsDir` 아래에 저장되고 7일 후 자동 정리됩니다.
 
 기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 최근 90일을 조회하며 최대 1,000건을 반환합니다. 결과 JSON의 `search.range.notice`에 실제 조회 기간이 표시되고, `search.limitReached`로 결과 한도 도달 여부를 확인할 수 있습니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
 

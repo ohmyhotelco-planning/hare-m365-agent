@@ -38,6 +38,7 @@ export type AppConfig = {
   cacheDir: string;
   downloadDir: string;
   logsDir: string;
+  resultsDir: string;
   policyPath: string;
   policy: Policy;
 };
@@ -52,7 +53,7 @@ const defaultPolicy: Policy = {
   maxMailFetchLimit: 20,
   maxTeamsFetchLimit: 50,
   maxFileSearchLimit: 25,
-  retentionDays: 0,
+  retentionDays: 7,
   requireConfirmationFor: [
     "send_mail",
     "post_teams_message",
@@ -103,6 +104,7 @@ export function loadConfig(): AppConfig {
   const cacheDir = path.join(dataDir, ".cache");
   const downloadDir = path.join(dataDir, "downloads");
   const logsDir = path.join(dataDir, "logs");
+  const resultsDir = path.join(dataDir, "results");
 
   const policy = {
     ...defaultPolicy,
@@ -117,13 +119,20 @@ export function loadConfig(): AppConfig {
     cacheDir,
     downloadDir,
     logsDir,
+    resultsDir,
     policyPath,
     policy
   };
 }
 
 export function ensureRuntimeDirs(config: AppConfig): void {
-  for (const dir of [config.dataDir, config.cacheDir, config.downloadDir, config.logsDir]) {
+  for (const dir of [
+    config.dataDir,
+    config.cacheDir,
+    config.downloadDir,
+    config.logsDir,
+    config.resultsDir
+  ]) {
     fs.mkdirSync(path.resolve(dir), { recursive: true });
   }
 }
