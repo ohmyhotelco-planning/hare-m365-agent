@@ -1,5 +1,6 @@
 import { getAccessToken } from "./auth.js";
 import type { AppConfig } from "./config.js";
+import { fetchWithProxy } from "./proxy.js";
 
 const graphRoot = "https://graph.microsoft.com/v1.0";
 
@@ -11,7 +12,7 @@ export type GraphPage<T> = {
 export async function graphGet<T>(config: AppConfig, pathOrUrl: string): Promise<T> {
   const token = await getAccessToken(config);
   const url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${graphRoot}${pathOrUrl}`;
-  const response = await fetch(url, {
+  const response = await fetchWithProxy(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json"
@@ -29,7 +30,7 @@ export async function graphGet<T>(config: AppConfig, pathOrUrl: string): Promise
 export async function graphPost<T>(config: AppConfig, pathOrUrl: string, body: unknown): Promise<T> {
   const token = await getAccessToken(config);
   const url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${graphRoot}${pathOrUrl}`;
-  const response = await fetch(url, {
+  const response = await fetchWithProxy(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -50,7 +51,7 @@ export async function graphPost<T>(config: AppConfig, pathOrUrl: string, body: u
 export async function graphDownload(config: AppConfig, pathOrUrl: string): Promise<Buffer> {
   const token = await getAccessToken(config);
   const url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${graphRoot}${pathOrUrl}`;
-  const response = await fetch(url, {
+  const response = await fetchWithProxy(url, {
     headers: {
       Authorization: `Bearer ${token}`
     }
