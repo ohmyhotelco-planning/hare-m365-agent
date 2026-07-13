@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  FIXED_HOST_DATA_DIRS,
   buildBlockedSetupContract,
   buildSetupContract,
   determineSetupState
@@ -41,7 +40,7 @@ test("setup state follows one deterministic priority order", () => {
 test("setup contract exposes exactly one next action for every state", () => {
   const cases = [
     [{ ...readySnapshot, configured: false }, "CHECK_CONFIGURATION"],
-    [{ ...readySnapshot, dataDirPersistent: false }, "CONNECT_FIXED_FOLDER"],
+    [{ ...readySnapshot, dataDirPersistent: false }, "SELECT_PROJECT_FOLDER"],
     [
       { ...readySnapshot, loggedIn: false, tokenUsable: false },
       "RUN_LOGIN_START"
@@ -64,19 +63,15 @@ test("setup contract exposes exactly one next action for every state", () => {
   }
 });
 
-test("fixed host folders avoid Documents and OneDrive", () => {
-  assert.deepEqual(FIXED_HOST_DATA_DIRS, {
-    windows: "%USERPROFILE%\\HareM365Agent",
-    mac: "~/HareM365Agent"
-  });
-  assert.doesNotMatch(JSON.stringify(FIXED_HOST_DATA_DIRS), /Documents|OneDrive/i);
-
+test("missing project folder stops without folder automation", () => {
   const contract = buildSetupContract(
     { ...readySnapshot, dataDirPersistent: false },
     "node dist/cli.js"
   );
-  assert.match(contract.instruction, /\/root\/\.local\/share/);
-  assert.match(contract.instruction, /container-local/);
+  assert.equal(contract.nextAction, "SELECT_PROJECT_FOLDER");
+  assert.match(contract.instruction, /HareM365Agent project folder/);
+  assert.match(contract.instruction, /stop/i);
+  assert.doesNotMatch(contract.instruction, /computer-use|folder-access|%USERPROFILE%|~\/HareM365Agent/);
 });
 
 test("pending login contract keeps the same device code flow", () => {

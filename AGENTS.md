@@ -18,12 +18,12 @@ Cowork `설정 > 기능 > 도메인 허용 목록`이 유일한 네트워크 허
 
 - `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365 조회를 실행합니다.
 - 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
-- 작업 시작 전에 Windows `%USERPROFILE%\HareM365Agent` 또는 Mac `~/HareM365Agent` 고정 폴더 접근을 요청하고, 연결된 마운트 루트를 모든 Hare 명령의 동일한 `--data-dir`로 사용합니다.
-- 폴더가 없고 `computer-use`를 사용할 수 있으면 LLM이 호스트에 폴더를 먼저 생성한 뒤 정확한 경로의 폴더 접근 요청을 직접 호출합니다. 사용자는 접근 승인만 하게 하며, 필요한 도구가 없을 때만 수동 생성·선택을 안내합니다.
-- 프로그램은 해당 루트의 `app`, 인증 캐시는 `.cache`, 세션 규칙은 `claude`에 둡니다. 새 채팅에서도 같은 폴더를 연결하고 `claude/hare-m365-agent-rules.md`를 읽습니다.
+- 사용자는 Cowork 작업을 만들 때 `HareM365Agent` 프로젝트 또는 폴더를 먼저 선택합니다. 이미 연결된 프로젝트의 마운트 루트를 모든 Hare 명령의 동일한 `--data-dir`로 사용합니다.
+- 프로젝트가 연결되지 않았으면 `FOLDER_REQUIRED`로 중단하고, 해당 프로젝트를 선택해 새 Cowork 작업을 열도록 안내합니다.
+- 프로그램은 해당 루트의 `app`, 인증 캐시는 `.cache`, 세션 규칙은 `claude`에 둡니다. 새 작업도 같은 프로젝트에서 시작하고 `claude/hare-m365-agent-rules.md`를 읽습니다.
 - Cowork Linux의 OS 기본 경로(`/root/.local/share/...`, `~/.local/share/...`)는 컨테이너 내부이므로 로그인이나 규칙 파일 저장에 사용하지 않습니다.
-- 코드, node_modules, dist도 session-local `/sessions`, `/tmp`, `/root` 아래에 설치하거나 실행하지 않습니다. 폴더 연결 도구가 반환한 `/sessions/<session>/mnt/HareM365Agent`는 로컬 호스트 폴더의 정상 마운트 경로이므로 사용합니다.
-- `HTTP 403`과 `X-Proxy-Error: blocked-by-allowlist`가 함께 나오면 `NETWORK_PERMISSION_REQUIRED`로 보고합니다. 설정을 변경했다면 새 Cowork 채팅에서 같은 폴더를 연결하고 실패한 명령만 한 번 재시도합니다.
+- 코드, node_modules, dist도 session-local `/sessions`, `/tmp`, `/root` 아래에 설치하거나 실행하지 않습니다. Cowork 프로젝트의 `/sessions/<session>/mnt/HareM365Agent`는 로컬 프로젝트 폴더의 정상 마운트 경로이므로 사용합니다.
+- `HTTP 403`과 `X-Proxy-Error: blocked-by-allowlist`가 함께 나오면 `NETWORK_PERMISSION_REQUIRED`로 보고합니다. 설정을 변경했다면 같은 프로젝트에서 새 Cowork 작업을 열고 실패한 명령만 한 번 재시도합니다.
 - 마운트 폴더와 네트워크를 서로 다른 로컬/클라우드 실행 환경으로 나누어 설명하지 않습니다. 둘 다 같은 Cowork Linux 셸에서 사용합니다.
 - `auth login-start`는 Microsoft 로그인 주소와 코드를 즉시 반환하고 종료합니다.
 - 사용자가 브라우저 로그인을 완료하면 별도 셸 호출에서 `auth login-complete`를 실행합니다. 이 명령은 최대 25초만 실행됩니다.

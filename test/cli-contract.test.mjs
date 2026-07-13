@@ -143,9 +143,9 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /LOGIN_START_REQUIRED/);
   assert.match(result.stdout, /LOGIN_COMPLETE_REQUIRED/);
   assert.match(result.stdout, /setup\.nextCommand를 수정하지 않고/);
-  assert.match(result.stdout, /%USERPROFILE%\\HareM365Agent/);
   assert.match(result.stdout, /\/root\/\.local\/share/);
-  assert.match(result.stdout, /computer-use/);
+  assert.match(result.stdout, /HareM365Agent 프로젝트/);
+  assert.doesNotMatch(result.stdout, /computer-use|folder-access tool|%USERPROFILE%|~\/HareM365Agent/);
   assert.match(result.stdout, /\/sessions\/<session>\/mnt\/HareM365Agent/);
   assert.match(result.stdout, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(result.stdout, /X-Proxy-Error: blocked-by-allowlist/);
@@ -166,19 +166,13 @@ test("startup blocks login when the default data directory is a hosted-session p
   const output = JSON.parse(result.stdout);
   assert.equal(output.status.dataDirPersistent, false);
   assert.equal(output.setup.state, "FOLDER_REQUIRED");
-  assert.equal(output.setup.nextAction, "CONNECT_FIXED_FOLDER");
+  assert.equal(output.setup.nextAction, "SELECT_PROJECT_FOLDER");
   assert.equal(output.sessionRules.exists, false);
   assert.equal(output.appDir, undefined);
   assert.equal(output.setupCommand, undefined);
-  assert.deepEqual(output.setup.fixedHostDataDirs, {
-    windows: "%USERPROFILE%\\HareM365Agent",
-    mac: "~/HareM365Agent"
-  });
-  assert.doesNotMatch(JSON.stringify(output.setup), /Documents|OneDrive/i);
-  assert.match(output.setup.instruction, /computer-use/);
-  assert.match(output.setup.instruction, /folder-access tool/);
-  assert.match(output.setup.instruction, /user.*only approve access/i);
-  assert.match(output.setup.instruction, /\/root\/\.local\/share/);
+  assert.match(output.setup.instruction, /HareM365Agent project folder/);
+  assert.match(output.setup.instruction, /stop/i);
+  assert.doesNotMatch(output.setup.instruction, /computer-use|folder-access|%USERPROFILE%|~\/HareM365Agent/);
 });
 
 test("--data-dir cannot falsely mark a hosted-session path as persistent", () => {
@@ -267,12 +261,10 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /LOGIN_START_REQUIRED/);
   assert.match(html, /LOGIN_COMPLETE_REQUIRED/);
   assert.match(html, /setup\.nextCommand를 수정하지 않고/);
-  assert.match(html, /%USERPROFILE%\\HareM365Agent/);
-  assert.match(html, /~\/HareM365Agent/);
   assert.match(html, /\/root\/\.local\/share/);
-  assert.match(html, /computer-use/);
-  assert.match(html, /Add folder 버튼을 누르거나 폴더를 찾아 선택하라고 말하지 말고/);
-  assert.match(html, /접근 승인 UI만 띄운 뒤 기다려/);
+  assert.match(html, /프로젝트 또는 폴더/);
+  assert.match(html, /HareM365Agent.*프로젝트/s);
+  assert.doesNotMatch(html, /computer-use|%USERPROFILE%|~\/HareM365Agent/);
   assert.match(html, /2-6/);
   assert.match(html, /새 Cowork 채팅/);
   assert.match(html, /NETWORK_PERMISSION_REQUIRED/);

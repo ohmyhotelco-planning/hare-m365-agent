@@ -1,8 +1,3 @@
-export const FIXED_HOST_DATA_DIRS = {
-  windows: "%USERPROFILE%\\HareM365Agent",
-  mac: "~/HareM365Agent"
-} as const;
-
 export type SetupState =
   | "SETUP_REQUIRED"
   | "FOLDER_REQUIRED"
@@ -25,14 +20,13 @@ export type SetupContract = {
   state: SetupState;
   nextAction:
     | "CHECK_CONFIGURATION"
-    | "CONNECT_FIXED_FOLDER"
+    | "SELECT_PROJECT_FOLDER"
     | "RUN_LOGIN_START"
     | "WAIT_FOR_USER_THEN_RUN_LOGIN_COMPLETE"
     | "WAIT_FOR_USER_REQUEST"
     | "REPORT_BLOCKER";
   nextCommand?: string;
   stopAfterAction: true;
-  fixedHostDataDirs?: typeof FIXED_HOST_DATA_DIRS;
   instruction: string;
 };
 
@@ -61,11 +55,10 @@ export function buildSetupContract(
     case "FOLDER_REQUIRED":
       return {
         state,
-        nextAction: "CONNECT_FIXED_FOLDER",
+        nextAction: "SELECT_PROJECT_FOLDER",
         stopAfterAction: true,
-        fixedHostDataDirs: FIXED_HOST_DATA_DIRS,
         instruction:
-          "The current data directory is not persistent; Cowork paths such as /root/.local/share are container-local. Invoke the folder-access tool for the exact fixed HareM365Agent host path instead of asking the user to browse. If the tool reports that the path does not exist, use computer-use to create it on the host and retry the same access request once. The user should only approve access. Use manual folder creation and selection only when those tools are unavailable. Rerun startup with --data-dir set to the mounted folder root. A returned path shaped like /sessions/<session>/mnt/HareM365Agent is the valid mounted host folder, not a temporary session directory."
+          "This Cowork task was not started with the HareM365Agent project folder. Report FOLDER_REQUIRED and stop. Tell the user to open a new Cowork task with the HareM365Agent project or folder selected, then paste the same prompt there."
       };
     case "LOGIN_START_REQUIRED":
       return {
