@@ -7,7 +7,7 @@ import {
   type Configuration
 } from "@azure/msal-node";
 import type { AppConfig } from "./config.js";
-import { getHttpsProxyUrl } from "./proxy.js";
+import { ProxyAwareNetworkClient } from "./msal-network.js";
 
 const scopes = [
   "User.Read",
@@ -27,7 +27,6 @@ function cachePath(config: AppConfig): string {
 }
 
 async function buildPca(config: AppConfig): Promise<PublicClientApplication> {
-  const proxyUrl = getHttpsProxyUrl();
   const msalConfig: Configuration = {
     auth: {
       clientId: config.clientId,
@@ -52,7 +51,9 @@ async function buildPca(config: AppConfig): Promise<PublicClientApplication> {
         }
       }
     },
-    system: proxyUrl ? { proxyUrl } : undefined
+    system: {
+      networkClient: new ProxyAwareNetworkClient()
+    }
   };
 
   return new PublicClientApplication(msalConfig);
