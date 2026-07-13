@@ -7,7 +7,7 @@ import test from "node:test";
 
 const cli = path.resolve("dist/cli.js");
 const htmlGuide = path.resolve(
-  "release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed.html"
+  "release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed_final.html"
 );
 
 function run(args, dataDir) {
@@ -115,10 +115,12 @@ test("list commands reject invalid limits before making Graph calls", () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /limit must be a positive number/);
 });
 
-test("human guide requires the current version, persistent folder, and split login", () => {
+test("human guide verifies split-login features without a hardcoded version", () => {
   const html = fs.readFileSync(htmlGuide, "utf8");
   assert.equal((html.match(/class="domain-row"/g) ?? []).length, 6);
-  assert.match(html, /test "\$VERSION" = "0\.2\.0"/);
+  assert.match(html, /auth login-start --help/);
+  assert.match(html, /auth login-complete --help/);
+  assert.doesNotMatch(html, /test "\$VERSION" = "/);
   assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.match(html, /auth login-start/);
   assert.match(html, /auth login-complete/);

@@ -220,8 +220,8 @@ test -f /tmp/hare-m365-agent/dist/cli.js
 test -f /tmp/hare-m365-agent/dist/proxy.js
 test -f /tmp/hare-m365-agent/dist/msal-network.js
 cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js llm-guide
-VERSION=$(cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js --version)
-test "$VERSION" = "0.2.0"
+cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js auth login-start --help
+cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js auth login-complete --help
 cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js
 
 각 셸 호출은 작업 폴더가 초기화될 수 있어. 모든 npm, build, Hare 명령은 /tmp/hare-m365-agent를 작업 폴더로 명시해.

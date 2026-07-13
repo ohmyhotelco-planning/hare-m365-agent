@@ -3,7 +3,7 @@
 사람이 따라 하는 배포 안내는 아래 HTML 한 장을 사용합니다.
 
 ```text
-release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed.html
+release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed_final.html
 ```
 
 LLM 실행 규칙은 루트 `AGENTS.md`와 CLI의 `llm-guide` 출력이 기준입니다.
