@@ -34,20 +34,25 @@ const serverResponse = {
 test("login-start returns user instructions immediately and stores resumable state", async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-device-start-"));
   const config = configFor(dataDir);
+  let requestedScopes = [];
   const network = {
     async sendGetRequestAsync() { throw new Error("unexpected GET"); },
-    async sendPostRequestAsync() {
+    async sendPostRequestAsync(_url, options) {
+      requestedScopes = new URLSearchParams(options.body).get("scope")?.split(" ") ?? [];
       return { status: 200, headers: {}, body: serverResponse };
     }
   };
 
   const startedAt = Date.now();
-  const result = await startDeviceLogin(config, ["User.Read"], network);
+  const result = await startDeviceLogin(config, getScopeList(), network);
   assert.ok(Date.now() - startedAt < 1000);
   assert.equal(result.stage, "WAITING_FOR_USER");
   assert.equal(result.userCode, serverResponse.user_code);
   assert.equal("deviceCode" in result, false);
   assert.equal(readDeviceLoginState(config).response.device_code, serverResponse.device_code);
+  assert.ok(requestedScopes.includes("openid"), "device-code request must ask for an ID token");
+  assert.ok(requestedScopes.includes("profile"), "device-code request must ask for profile claims");
+  assert.ok(requestedScopes.includes("offline_access"), "device-code request must ask for refresh access");
 });
 
 test("resume network client reuses the saved code once, then delegates token polling", async () => {
@@ -97,9 +102,13 @@ test("login-start refuses an unmounted hosted-session data directory", async () 
 test("login-complete resumes the saved device flow and writes an MSAL cache quickly", async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-device-complete-"));
   const config = configFor(dataDir);
+  let startRequestedScopes = [];
   const startNetwork = {
     async sendGetRequestAsync() { throw new Error("unexpected GET"); },
-    async sendPostRequestAsync() { return { status: 200, headers: {}, body: serverResponse }; }
+    async sendPostRequestAsync(_url, options) {
+      startRequestedScopes = new URLSearchParams(options.body).get("scope")?.split(" ") ?? [];
+      return { status: 200, headers: {}, body: serverResponse };
+    }
   };
   const scopes = getScopeList();
   await startDeviceLogin(config, scopes, startNetwork);
@@ -153,6 +162,10 @@ test("login-complete resumes the saved device flow and writes an MSAL cache quic
     },
     async sendPostRequestAsync(url) {
       assert.match(url, /\/oauth2\/v2\.0\/token/);
+      assert.ok(
+        startRequestedScopes.includes("openid"),
+        "the synthetic token endpoint must not issue an ID token unless login-start requested openid"
+      );
       return {
         status: 200,
         headers: {},

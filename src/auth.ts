@@ -26,6 +26,8 @@ const scopes = [
   "ChannelMessage.Read.All",
   "Files.Read.All",
   "Sites.Read.All",
+  "openid",
+  "profile",
   "offline_access"
 ];
 
