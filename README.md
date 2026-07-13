@@ -34,6 +34,8 @@ HareM365Agent/
 
 최초 설치에는 `registry.npmjs.org`가 필수입니다. `npm ci`가 실패하면 백그라운드 실행이나 `npm install` 증분 설치로 우회하지 않고 원인을 보고합니다.
 
+Cowork의 네트워크 허용 기준은 `설정 > 기능 > 도메인 허용 목록` 하나입니다. 연결 폴더용 별도 허용 목록은 없습니다. 프리셋을 `없음`으로 선택하고 필수 도메인을 추가한 뒤, 이미 열려 있던 Cowork 작업이 있다면 새 채팅을 열어 변경된 네트워크 정책을 적용합니다.
+
 ## 설정
 
 기본 Azure Application 설정은 `hare.config.json`에 포함됩니다. 일반 사용자는 `.env`를 만들거나 수정하지 않습니다.
@@ -50,11 +52,15 @@ Mac: ~/Library/Application Support/Ohmyhotel/HareM365Agent
 Linux local default: ~/.local/share/ohmyhotel/hare-m365-agent
 ```
 
-Cowork에서는 위 OS 기본값과 별개로 Windows `%USERPROFILE%\HareM365Agent` 또는 Mac `~/HareM365Agent`를 호스트 고정 폴더로 사용합니다. 연결 도구가 반환한 마운트 루트를 `--data-dir`로 명시합니다. 프로그램도 이 루트의 `app/`에서 실행하므로 코드와 로그인 상태가 임시 컨테이너에 남지 않습니다.
+Cowork에서는 위 OS 기본값과 별개로 Windows `%USERPROFILE%\HareM365Agent` 또는 Mac `~/HareM365Agent`를 호스트 고정 폴더로 사용합니다. 연결 도구가 반환한 마운트 루트를 `--data-dir`로 명시합니다. `/sessions/<session>/mnt/HareM365Agent` 형태로 표시되더라도 이는 로컬 폴더의 정상 마운트 경로입니다. 프로그램도 이 루트의 `app/`에서 실행하므로 코드와 로그인 상태가 임시 컨테이너에 남지 않습니다.
 
 `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 조회 가능한 상태입니다. 캐시 파일이 존재하더라도 토큰을 획득할 수 없으면 로그인 완료로 판단하지 않습니다. `auth login-complete`도 저장된 캐시를 다시 열어 검증한 뒤에만 `COMPLETE`를 반환합니다.
 
-Cowork에서는 작업 전에 고정 호스트 폴더를 연결합니다. startup JSON의 `setup.state`와 `setup.nextAction` 하나만 따르며, CLI가 반환한 `setup.nextCommand`를 수정하지 않고 실행합니다. 이 명령에는 동일한 `--data-dir`가 포함되므로 셸과 채팅이 바뀌어도 같은 캐시를 사용합니다. `/sessions`, `/tmp`, Cowork Linux OS 기본 저장소에서는 로그인이 거부됩니다.
+Cowork에서는 작업 전에 고정 호스트 폴더를 연결합니다. startup JSON의 `setup.state`와 `setup.nextAction` 하나만 따르며, CLI가 반환한 `setup.nextCommand`를 수정하지 않고 실행합니다. 이 명령에는 동일한 `--data-dir`가 포함되므로 셸과 채팅이 바뀌어도 같은 캐시를 사용합니다. 일반 `/sessions`, `/tmp`, Cowork Linux OS 기본 저장소에서는 로그인이 거부되지만 `/sessions/<session>/mnt/HareM365Agent` 마운트는 허용됩니다.
+
+고정 폴더가 없고 `computer-use`를 사용할 수 있으면 LLM이 호스트에 폴더를 먼저 생성한 뒤 정확한 경로의 폴더 접근 요청을 직접 호출합니다. 사용자는 접근 승인만 수행합니다. `computer-use` 또는 폴더 접근 요청 도구가 없는 환경에서만 수동 생성과 선택을 안내합니다.
+
+명령에서 `HTTP 403`과 `X-Proxy-Error: blocked-by-allowlist`가 함께 나오면 인증이나 폴더 문제가 아니라 현재 Cowork 작업의 도메인 정책 문제입니다. 설정을 확인하거나 변경한 뒤 새 Cowork 채팅에서 같은 폴더를 다시 연결하고 실패한 명령만 한 번 재시도합니다. 마운트 폴더와 네트워크가 서로 다른 실행 환경이라고 해석하지 않습니다.
 
 초기 로그인은 45초 셸 제한에 맞춘 두 단계입니다.
 

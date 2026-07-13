@@ -30,6 +30,14 @@ test("an explicit mounted Linux data directory can be persistent", () => {
     isPersistentDataDir("/mnt/hare/HareM365Agent", "environment", "linux"),
     true
   );
+  assert.equal(
+    isPersistentDataDir(
+      "/sessions/example/mnt/HareM365Agent",
+      "command-line",
+      "linux"
+    ),
+    true
+  );
 });
 
 test("hosted temporary paths are rejected even when explicitly selected", () => {

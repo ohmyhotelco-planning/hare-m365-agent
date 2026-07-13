@@ -94,7 +94,10 @@ const llmGuide = `# Hare M365 Agent LLM Guide
 4. 도메인 허용 확인 전에는 git, npm, curl, 로그인, Outlook/Teams/Files 조회를 시작하지 않는다.
 5. GitHub API(api.github.com)나 GitHub Release asset으로 repo 접근을 판단하지 않는다. Cowork에서는 api.github.com이 막혀도 git clone은 성공할 수 있다.
 6. 실제 사용 경로인 git ls-remote 또는 git clone으로 repo 접근을 판단한다.
-7. git이나 npm을 실행하기 전에 Windows %USERPROFILE%\\HareM365Agent 또는 Mac ~/HareM365Agent 호스트 폴더를 연결한다. 연결 도구가 반환한 마운트 루트만 dataDir와 app의 상위 폴더로 사용한다.
+7. Cowork 설정의 기능 > 도메인 허용 목록이 유일한 네트워크 허용 목록이다. 연결 폴더용 별도 허용 목록이나 로컬/클라우드로 분리된 네트워크가 있다고 해석하지 않는다.
+8. 도메인 설정을 현재 Cowork 작업이 시작된 뒤 변경했다면 새 Cowork 채팅을 열어야 변경된 네트워크 정책이 적용된다.
+9. git이나 npm을 실행하기 전에 Windows %USERPROFILE%\\HareM365Agent 또는 Mac ~/HareM365Agent 정확한 경로로 폴더 접근 요청 도구를 직접 호출한다. 경로 없음 오류가 나면 computer-use로 로컬 폴더를 만든 뒤 같은 접근 요청을 한 번 재시도한다. 사용자는 승인만 하게 하고, 말로 Add folder를 누르거나 폴더를 찾아 선택하라고 떠넘기지 않는다.
+10. computer-use나 폴더 접근 요청 도구가 없는 환경에서만 사용자에게 폴더 생성과 선택을 짧게 안내한다. 연결 도구가 반환한 마운트 루트만 dataDir와 app의 상위 폴더로 사용한다.
 
 준비 명령:
 \`\`\`bash
@@ -106,28 +109,27 @@ ${setupCommandForGuide}
 로그인 하드게이트:
 - startup, doctor, auth status의 setup.state만 확인하고 해당 상태의 setup.nextAction 하나만 수행한다.
 - SETUP_REQUIRED: 설정 누락을 한 문장으로 보고하고 멈춘다.
-- FOLDER_REQUIRED: Windows는 %USERPROFILE%\\HareM365Agent, Mac은 ~/HareM365Agent를 사용자에게 한 번 만들고 선택하도록 안내한다. 연결 후 마운트 루트를 --data-dir에 넣어 startup을 다시 실행한다.
-- Cowork Linux의 /root/.local/share 또는 ~/.local/share는 컨테이너 내부 경로이므로 로그인이나 규칙 파일 저장에 사용하지 않는다. 연결된 호스트 폴더를 --data-dir로 명시한다.
+- FOLDER_REQUIRED: 정확한 고정 경로의 폴더 접근 요청 도구를 먼저 직접 호출한다. 경로 없음 오류일 때만 computer-use로 Windows는 Win+R에서 cmd /c if not exist "%USERPROFILE%\\HareM365Agent" mkdir "%USERPROFILE%\\HareM365Agent", Mac은 Terminal에서 mkdir -p "$HOME/HareM365Agent"를 실행한 뒤 같은 접근 요청을 한 번 재시도한다. 사용자의 승인만 기다리고, 도구가 없을 때만 수동 생성·선택을 안내한다. 연결 후 마운트 루트를 --data-dir에 넣어 startup을 다시 실행한다.
+- Cowork Linux의 /root/.local/share 또는 ~/.local/share는 컨테이너 내부 경로이므로 로그인이나 규칙 파일 저장에 사용하지 않는다. 단, 폴더 연결 도구가 반환한 /sessions/<session>/mnt/HareM365Agent 형태는 로컬 호스트 폴더의 정상 마운트 경로다. 이를 임시 경로로 오판하지 말고 --data-dir로 사용한다.
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행하고 Microsoft 로그인 주소와 userCode를 보여준 뒤 멈춘다.
 - LOGIN_COMPLETE_REQUIRED: 사용자가 "로그인 완료"라고 말할 때까지 기다린다. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행한다. COMPLETE는 저장된 캐시 재검증까지 성공했다는 뜻이다.
 - READY: 사용 준비 완료를 보고하고 사용자의 업무 조회 요청을 기다린다.
-- 어느 명령이 실패하면 BLOCKED로 취급해 실패 단계와 오류 한 줄만 보고한다. 다른 경로를 추측하거나 반복 실행하지 않는다.
+- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED로 보고한다. Cowork 설정의 동일한 도메인 허용 목록을 확인하고, 설정을 변경했다면 새 Cowork 채팅에서 같은 폴더를 연결해 실패한 명령만 한 번 재시도하도록 안내한 뒤 멈춘다.
+- 그 밖의 명령 실패는 BLOCKED로 취급해 실패 단계와 오류 한 줄만 보고한다. 다른 경로를 추측하거나 반복 실행하지 않는다.
 
 저장 위치:
 - 로컬 Windows/Mac/Linux에서는 OS 기본 고정 dataDir를 사용한다.
 - Cowork/hosted sandbox에서는 Windows %USERPROFILE%\\HareM365Agent 또는 Mac ~/HareM365Agent 폴더를 연결하고 그 마운트 루트를 고정 dataDir로 사용한다.
-- /sessions 또는 /tmp 기본 경로에서는 login-start가 거부된다.
+- session-local /sessions 또는 /tmp 기본 경로에서는 login-start가 거부된다. /sessions/<session>/mnt/HareM365Agent는 연결된 호스트 폴더이므로 허용한다.
 - Cowork Linux OS 기본 dataDir도 임시 컨테이너 경로로 취급하고 login-start를 거부한다.
 - startup이 반환한 setup.nextCommand에는 동일한 --data-dir가 포함된다. 환경변수에 의존하거나 명령을 다시 조합하지 않고 그대로 실행한다.
 
-hosted sandbox Graph 실패 때:
-- cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed, network_error 등으로 실패하면 토큰 문제가 아니라 sandbox egress 문제로 판단한다.
-- 이때 clone/build를 반복하지 말고, 도메인 사진 확인이나 반복 호출 루프에 들어가지 않는다.
-- 사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.resultsDir에 결과 JSON을 저장하게 한다.
-- 예: node dist/cli.js outlook inbox --limit 1 --out latest-mail.json
-- 일반 조회에서는 --out을 사용하지 않고 화면 출력을 바로 처리한다.
-- --out 값이 상대 경로이면 Hare 고정 resultsDir 아래에 저장되며 7일 후 자동 정리된다.
-- 결과 파일이 생성되면 그 JSON을 읽어 사용자 요청을 처리한다.
+Cowork 네트워크 실패 때:
+- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 로그인이나 캐시 문제가 아니라 현재 Cowork 작업의 네트워크 허용 정책 문제다.
+- Cowork 설정의 기능 > 도메인 허용 목록은 마운트된 폴더에서 실행하는 명령에도 동일하게 적용된다. 별도의 로컬 실행 환경이나 두 번째 허용 목록을 찾지 않는다.
+- 설정을 변경한 뒤에는 새 Cowork 채팅을 열고 같은 HareM365Agent 폴더를 다시 연결해야 새 정책이 적용될 수 있다.
+- 이전 작업에서 반복 진단하지 말고, 새 작업에서 실패했던 명령만 한 번 재시도한다. clone/build/login 전체를 반복하지 않는다.
+- 일반적인 fetch failed 또는 network_error에는 실제 오류 한 줄만 보고하고, 도메인 반복 호출이나 임의 프록시 우회를 시작하지 않는다.
 
 읽기 명령:
 \`\`\`bash
@@ -171,11 +173,17 @@ ohmylab.sharepoint.com
 그런 확인 요청 기능이 없는 환경에서만 짧게 yes/no로 물어봐.
 
 도메인 허용 확인 전에는 git, npm, curl, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
+Cowork 설정의 기능 > 도메인 허용 목록이 유일한 네트워크 허용 목록이야. 연결 폴더용 별도 허용 목록이나 로컬/클라우드로 분리된 실행환경이 있다고 해석하지 마.
+도메인 설정을 이 Cowork 작업을 연 뒤 변경했다면 새 Cowork 채팅을 열어야 변경된 정책이 적용돼.
 GitHub API(api.github.com)나 GitHub Release asset 다운로드로 repo 접근을 판단하지 마.
 이 환경에서는 api.github.com이 403이어도 git clone은 성공할 수 있어.
 repo 접근은 git ls-remote 또는 git clone으로 판단해.
 
-git이나 npm을 실행하기 전에 Windows %USERPROFILE%\\HareM365Agent 또는 Mac ~/HareM365Agent 호스트 폴더 접근을 요청해. 연결 도구가 반환한 마운트 루트만 dataDir와 app의 상위 폴더로 사용해. 폴더가 연결되기 전에는 아래 준비 명령을 실행하지 마.
+git이나 npm을 실행하기 전에 Windows %USERPROFILE%\\HareM365Agent 또는 Mac ~/HareM365Agent 정확한 경로의 폴더 접근 요청 도구를 먼저 직접 호출해.
+경로가 없다는 오류가 날 때만 computer-use로 로컬 폴더를 만들어. Windows에서는 Win+R을 열고 cmd /c if not exist "%USERPROFILE%\\HareM365Agent" mkdir "%USERPROFILE%\\HareM365Agent"를 실행하고, Mac에서는 Terminal에서 mkdir -p "$HOME/HareM365Agent"를 실행해. 생성 후 같은 경로의 폴더 접근 요청을 한 번 다시 호출해.
+사용자에게 Add folder 버튼을 누르거나 폴더를 찾아 선택하라고 말하지 말고, 접근 승인 UI만 띄운 뒤 기다려.
+computer-use나 폴더 접근 요청 도구가 실제로 없는 환경에서만 수동 생성·선택 방법을 한 문장으로 안내해.
+연결 도구가 반환한 마운트 루트만 dataDir와 app의 상위 폴더로 사용해. 폴더가 연결되기 전에는 아래 준비 명령을 실행하지 마.
 
 아래 순서로 준비해.
 
@@ -186,20 +194,18 @@ ${setupCommandForGuide}
 startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계만 수행해. setup.state와 다른 경로를 추측하지 마.
 
 - SETUP_REQUIRED: 설정 누락을 한 문장으로 알려주고 멈춰.
-- FOLDER_REQUIRED: Windows는 %USERPROFILE%\\HareM365Agent, Mac은 ~/HareM365Agent 폴더를 내가 한 번 만들고 선택하도록 안내해. 연결되면 마운트된 폴더 루트를 --data-dir에 넣어 startup을 다시 실행해.
-- Cowork Linux의 /root/.local/share 또는 ~/.local/share는 컨테이너 내부 경로야. 이 경로에서 로그인하거나 규칙 파일을 저장하지 말고, 연결된 호스트 폴더를 --data-dir로 명시해.
+- FOLDER_REQUIRED: 정확한 경로 접근 요청을 먼저 실행하고 경로 없음일 때만 위 자동 생성 후 한 번 재시도해. 말로 폴더 추가를 요구하지 마. 사용자 승인이 끝나면 마운트된 폴더 루트를 --data-dir에 넣어 startup을 다시 실행해.
+- Cowork Linux의 /root/.local/share 또는 ~/.local/share는 컨테이너 내부 경로야. 단, 폴더 연결 도구가 반환한 /sessions/<session>/mnt/HareM365Agent 형태는 내 컴퓨터 폴더의 정상 마운트 경로야. 이를 임시 경로로 오판하지 말고 --data-dir로 사용해.
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행해. 반환된 Microsoft 로그인 주소와 userCode를 보여주고 "로그인 완료"라고 말해달라고 안내한 뒤 멈춰.
 - LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 저장된 캐시 재검증까지 성공한 상태야.
 - READY: "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
-- 명령 실패: BLOCKED로 취급해 실패 단계와 오류 한 줄만 알려주고 멈춰. 다른 경로를 시도하거나 같은 명령을 반복하지 마.
+- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED라고 알려줘. Cowork 설정의 같은 도메인 허용 목록을 확인하고, 설정을 바꿨다면 새 Cowork 채팅에서 같은 폴더를 연결해 실패했던 명령만 한 번 재시도하라고 안내한 뒤 멈춰.
+- 그 밖의 명령 실패: BLOCKED로 취급해 실패 단계와 오류 한 줄만 알려주고 멈춰. 다른 경로를 시도하거나 같은 명령을 반복하지 마.
 
-cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed 또는 network_error로 실패하면 sandbox 네트워크 문제로 판단해.
-clone/build를 반복하지 말고, 도메인 사진확인이나 반복 호출 루프를 시작하지 마.
-사용자의 Windows/Mac 로컬 환경에서 같은 Hare 명령을 실행하고 --out으로 status.resultsDir에 결과 JSON을 저장하게 해.
-예: node dist/cli.js outlook inbox --limit 1 --out latest-mail.json
-일반 조회에서는 --out을 사용하지 말고 화면 출력을 바로 처리해.
---out 값이 상대 경로이면 Hare 고정 resultsDir 아래에 저장되고 7일 후 자동 정리돼.
-결과 파일이 생성되면 그 JSON을 읽어 내 요청을 처리해.
+HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 현재 Cowork 작업에 변경된 도메인 정책이 적용되지 않은 상태로 판단해.
+마운트 폴더와 네트워크가 서로 다른 환경이라고 설명하지 마. 같은 Cowork 셸에서 둘 다 사용 가능해.
+설정을 바꾼 뒤 새 Cowork 채팅을 열고 같은 HareM365Agent 폴더를 연결한 다음 실패했던 명령만 한 번 다시 실행하도록 안내해.
+clone/build 전체 반복, 도메인 반복 진단, 임의 프록시 우회는 시작하지 마.
 
 Outlook 또는 Teams에서 기간·키워드 조회를 요청받으면 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 outlook search 또는 teams search-messages를 사용해.
 메일이 몇 건인지 묻는 정확한 집계 요청은 outlook search 결과를 세지 말고 outlook count를 사용해.

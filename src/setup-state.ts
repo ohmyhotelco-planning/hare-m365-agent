@@ -65,7 +65,7 @@ export function buildSetupContract(
         stopAfterAction: true,
         fixedHostDataDirs: FIXED_HOST_DATA_DIRS,
         instruction:
-          "The current data directory is not persistent. A Cowork Linux OS-default path such as /root/.local/share is container-local and must not be used for login. Use the OS-specific fixed HareM365Agent host path, request access to that folder, and rerun startup with --data-dir set to the mounted folder root."
+          "The current data directory is not persistent; Cowork paths such as /root/.local/share are container-local. Invoke the folder-access tool for the exact fixed HareM365Agent host path instead of asking the user to browse. If the tool reports that the path does not exist, use computer-use to create it on the host and retry the same access request once. The user should only approve access. Use manual folder creation and selection only when those tools are unavailable. Rerun startup with --data-dir set to the mounted folder root. A returned path shaped like /sessions/<session>/mnt/HareM365Agent is the valid mounted host folder, not a temporary session directory."
       };
     case "LOGIN_START_REQUIRED":
       return {

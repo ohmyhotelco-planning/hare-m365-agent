@@ -147,8 +147,13 @@ export function loadConfig(overrides: { dataDir?: string } = {}): AppConfig {
   };
 }
 
+function isCoworkHostMountPath(value: string): boolean {
+  return /(^|[\\/])sessions[\\/][^\\/]+[\\/]mnt[\\/][^\\/]+([\\/]|$)/i.test(value);
+}
+
 function isHostedSessionPath(value: string): boolean {
-  return /(^|[\\/])(sessions|tmp)([\\/]|$)/i.test(value);
+  if (/(^|[\\/])tmp([\\/]|$)/i.test(value)) return true;
+  return /(^|[\\/])sessions([\\/]|$)/i.test(value) && !isCoworkHostMountPath(value);
 }
 
 export function isPersistentDataDir(

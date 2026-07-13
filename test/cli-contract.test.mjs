@@ -122,6 +122,9 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /loggedIn.*tokenUsable/s);
   assert.match(rules, /Do not start a new login/);
   assert.match(rules, /default lookback.*90 days/i);
+  assert.match(rules, /\/sessions\/<session>\/mnt\/HareM365Agent/);
+  assert.match(rules, /NETWORK_PERMISSION_REQUIRED/);
+  assert.match(rules, /single network allowlist/);
 });
 
 test("LLM guide follows the explicit setup state contract", () => {
@@ -142,7 +145,11 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /setup\.nextCommand를 수정하지 않고/);
   assert.match(result.stdout, /%USERPROFILE%\\HareM365Agent/);
   assert.match(result.stdout, /\/root\/\.local\/share/);
-  assert.doesNotMatch(result.stdout, /computer-use/);
+  assert.match(result.stdout, /computer-use/);
+  assert.match(result.stdout, /\/sessions\/<session>\/mnt\/HareM365Agent/);
+  assert.match(result.stdout, /NETWORK_PERMISSION_REQUIRED/);
+  assert.match(result.stdout, /X-Proxy-Error: blocked-by-allowlist/);
+  assert.match(result.stdout, /새 Cowork 채팅/);
   assert.doesNotMatch(result.stdout, /%USERPROFILE%\\Documents/);
 });
 
@@ -167,7 +174,10 @@ test("startup blocks login when the default data directory is a hosted-session p
     windows: "%USERPROFILE%\\HareM365Agent",
     mac: "~/HareM365Agent"
   });
-  assert.doesNotMatch(JSON.stringify(output.setup), /Documents|OneDrive|computer-use/i);
+  assert.doesNotMatch(JSON.stringify(output.setup), /Documents|OneDrive/i);
+  assert.match(output.setup.instruction, /computer-use/);
+  assert.match(output.setup.instruction, /folder-access tool/);
+  assert.match(output.setup.instruction, /user.*only approve access/i);
   assert.match(output.setup.instruction, /\/root\/\.local\/share/);
 });
 
@@ -260,7 +270,17 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /%USERPROFILE%\\HareM365Agent/);
   assert.match(html, /~\/HareM365Agent/);
   assert.match(html, /\/root\/\.local\/share/);
-  assert.doesNotMatch(html, /computer-use/);
+  assert.match(html, /computer-use/);
+  assert.match(html, /Add folder 버튼을 누르거나 폴더를 찾아 선택하라고 말하지 말고/);
+  assert.match(html, /접근 승인 UI만 띄운 뒤 기다려/);
+  assert.match(html, /2-6/);
+  assert.match(html, /새 Cowork 채팅/);
+  assert.match(html, /NETWORK_PERMISSION_REQUIRED/);
+  assert.match(html, /X-Proxy-Error: blocked-by-allowlist/);
+  assert.match(html, /\/sessions\/&lt;session&gt;\/mnt\/HareM365Agent/);
+  assert.match(html, /도메인 허용 목록은 이 설정 한 곳뿐입니다/);
+  assert.doesNotMatch(html, /로컬 실행 환경은 프록시 허용 목록/);
+  assert.doesNotMatch(html, /클라우드 쪽 환경은/);
   assert.doesNotMatch(html, /%USERPROFILE%\\Documents/);
   assert.doesNotMatch(html, /문서\(Documents\) 폴더 접근을 요청해/);
   assert.doesNotMatch(html, /마운트된 Documents/);
