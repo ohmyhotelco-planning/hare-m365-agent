@@ -137,7 +137,9 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /loggedIn.*tokenUsable/s);
   assert.match(rules, /Do not start a new login/);
   assert.match(rules, /default lookback.*90 days/i);
-  assert.match(rules, /\/sessions\/<session>\/mnt\/HareM365Agent/);
+  assert.match(rules, /\/sessions\/<session>\/mnt\/<selected-project>/);
+  assert.match(rules, /actual selected folder, regardless of its name/);
+  assert.match(rules, /Do not search for a folder by the literal name HareM365Agent/);
   assert.match(rules, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(rules, /applies to the session sandbox shell/);
   assert.match(rules, /Never run git, npm, login, or Graph commands in the device shell/);
@@ -162,9 +164,9 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /LOGIN_COMPLETE_REQUIRED/);
   assert.match(result.stdout, /setup\.nextCommand를 수정하지 않고/);
   assert.match(result.stdout, /\/root\/\.local\/share/);
-  assert.match(result.stdout, /HareM365Agent 프로젝트/);
+  assert.match(result.stdout, /현재 Cowork 작업에 선택된 프로젝트 루트/);
   assert.doesNotMatch(result.stdout, /computer-use|folder-access tool|%USERPROFILE%|~\/HareM365Agent/);
-  assert.match(result.stdout, /\/sessions\/<session>\/mnt\/HareM365Agent/);
+  assert.match(result.stdout, /\/sessions\/<session>\/mnt\/<selected-project>/);
   assert.match(result.stdout, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(result.stdout, /X-Proxy-Error: blocked-by-allowlist/);
   assert.match(result.stdout, /새 Cowork 채팅/);
@@ -192,7 +194,7 @@ test("startup blocks login when the default data directory is a hosted-session p
   assert.equal(output.sessionRules.exists, false);
   assert.equal(output.appDir, undefined);
   assert.equal(output.setupCommand, undefined);
-  assert.match(output.setup.instruction, /HareM365Agent project folder/);
+  assert.match(output.setup.instruction, /existing Hare project or folder/);
   assert.match(output.setup.instruction, /stop/i);
   assert.doesNotMatch(output.setup.instruction, /computer-use|folder-access|%USERPROFILE%|~\/HareM365Agent/);
 });
@@ -304,7 +306,8 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.doesNotMatch(html, /id="prompt" rows="64"/);
   assert.match(html, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(html, /X-Proxy-Error: blocked-by-allowlist/);
-  assert.match(html, /\/sessions\/&lt;session&gt;\/mnt\/HareM365Agent/);
+  assert.match(html, /\/sessions\/&lt;session&gt;\/mnt\/&lt;selected-project&gt;/);
+  assert.match(html, /폴더 이름으로 HareM365Agent를 검색하거나 비슷한 이름의 다른 로컬 폴더를 고르지 마/);
   assert.match(html, /설정을 바꿨다면 새 Cowork 채팅을 여세요/);
   assert.match(html, /\.hare-app-snapshot\.tar\.gz/);
   assert.match(html, /HARE_ROOT 판별/);

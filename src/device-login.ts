@@ -152,7 +152,7 @@ export class ResumeDeviceCodeNetworkClient implements INetworkModule {
 export function requirePersistentDataDir(config: AppConfig): void {
   if (config.dataDirPersistent) return;
   throw new Error(
-    "FOLDER_REQUIRED: Start Cowork with the HareM365Agent project folder selected and rerun startup with its mounted root as --data-dir before login."
+    "FOLDER_REQUIRED: Start Cowork with the user's existing Hare project selected and rerun startup with that selected project root as the persistent store before login."
   );
 }
 

@@ -69,7 +69,7 @@ test("missing project folder stops without folder automation", () => {
     "node dist/cli.js"
   );
   assert.equal(contract.nextAction, "SELECT_PROJECT_FOLDER");
-  assert.match(contract.instruction, /HareM365Agent project folder/);
+  assert.match(contract.instruction, /existing Hare project or folder/);
   assert.match(contract.instruction, /stop/i);
   assert.doesNotMatch(contract.instruction, /computer-use|folder-access|%USERPROFILE%|~\/HareM365Agent/);
 });

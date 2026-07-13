@@ -58,7 +58,7 @@ export function buildSetupContract(
         nextAction: "SELECT_PROJECT_FOLDER",
         stopAfterAction: true,
         instruction:
-          "This Cowork task was not started with the HareM365Agent project folder. Report FOLDER_REQUIRED and stop. Tell the user to open a new Cowork task with the HareM365Agent project or folder selected, then paste the same prompt there."
+          "This Cowork task was not started with a project folder. Report FOLDER_REQUIRED and stop. Tell the user to open a new Cowork task with their existing Hare project or folder selected, then paste the same prompt there."
       };
     case "LOGIN_START_REQUIRED":
       return {

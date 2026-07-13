@@ -2,7 +2,7 @@
 
 Hare M365 Agent는 LLM이 Microsoft Graph delegated 권한으로 Outlook, Teams, OneDrive, SharePoint를 조회할 수 있도록 만든 Node/TypeScript CLI입니다.
 
-현재 기본 실행 방식은 Cowork 작업을 만들 때 `HareM365Agent` 프로젝트 폴더를 먼저 선택하고, 그 폴더를 영속 저장소로 사용하는 방식입니다. 실행 자체는 도메인 허용 목록이 적용되는 셸에서 합니다. 표준 Cowork에서는 연결 폴더 마운트가 네트워크가 되는 샌드박스 셸에 보이지 않으므로, 샌드박스 고정 경로에서 실행하고 스냅샷·로그인 캐시를 연결 폴더와 동기화하는 하이브리드 모델을 사용합니다. GitHub API나 GitHub Release asset 다운로드는 Cowork 프록시 정책에 막힐 수 있으므로 사용하지 않습니다.
+현재 기본 실행 방식은 Cowork 작업을 만들 때 기존 Hare 프로젝트 폴더를 먼저 선택하고, 그 실제 선택 프로젝트 루트를 영속 저장소로 사용하는 방식입니다. 폴더 이름으로 저장소를 다시 검색하지 않습니다. 실행 자체는 도메인 허용 목록이 적용되는 셸에서 합니다. 표준 Cowork에서는 프로젝트 마운트가 네트워크가 되는 샌드박스 셸에 보이지 않으므로, 샌드박스 고정 경로에서 실행하고 스냅샷·로그인 캐시를 선택 프로젝트와 동기화하는 하이브리드 모델을 사용합니다. GitHub API나 GitHub Release asset 다운로드는 Cowork 프록시 정책에 막힐 수 있으므로 사용하지 않습니다.
 
 사람이 읽는 안내는 아래 한 장만 사용합니다.
 
@@ -32,7 +32,7 @@ HARE_ROOT/
 └─ logs/
 ```
 
-영속 저장소는 연결된 `HareM365Agent` 프로젝트 폴더입니다. 하이브리드 모델에서는 세션 시작 시 연결 폴더의 `.hare-app-snapshot.tar.gz`, `.hare-app-build-head`, `.cache/msal-cache.json`, `claude/` 문서를 샌드박스 HARE_ROOT로 가져오고, 재빌드나 로그인 캐시 갱신 후 같은 파일들을 연결 폴더로 되돌려 커밋합니다.
+영속 저장소는 현재 Cowork 작업에 선택된 프로젝트 루트입니다. 하이브리드 모델에서는 세션 시작 시 그 프로젝트의 `.hare-app-snapshot.tar.gz`, `.hare-app-build-head`, `.cache/msal-cache.json`, `claude/` 문서를 샌드박스 HARE_ROOT로 가져오고, 재빌드나 로그인 캐시 갱신 후 같은 파일들을 반드시 같은 프로젝트로 되돌려 커밋합니다.
 
 스냅샷이 있으면 setup 명령이 자동으로 풀어 clone을 건너뜁니다. 스냅샷과 app이 모두 없을 때만 `app/`에 저장소를 clone하고, 이후에는 `git fetch`와 `git pull --ff-only`로 최신 `master`를 확인합니다. HEAD가 바뀌었거나 빌드 산출물이 없을 때만 `npm ci`와 빌드를 실행하고, 빌드 후 스냅샷을 재생성합니다. `startup.setupCommand`가 이 절차와 정확한 `--data-dir`를 함께 반환합니다.
 
@@ -56,11 +56,11 @@ Mac: ~/Library/Application Support/Ohmyhotel/HareM365Agent
 Linux local default: ~/.local/share/ohmyhotel/hare-m365-agent
 ```
 
-Cowork에서는 위 OS 기본값과 별개로 HARE_ROOT를 판별해 `--data-dir`로 명시합니다. 네트워크가 되는 실행 셸에서 연결 폴더 마운트(`/sessions/<session>/mnt/HareM365Agent` — 로컬 프로젝트 폴더의 정상 마운트 경로)가 직접 보이면 그 마운트 루트를 사용합니다. 보이지 않는 표준 Cowork에서는 샌드박스 고정 경로(예: `/home/claude/hare`)를 사용하고, 로그인 캐시와 스냅샷을 연결 폴더로 동기화해 임시 컨테이너 회수 후에도 상태가 유지되게 합니다.
+Cowork에서는 위 OS 기본값과 별개로 HARE_ROOT를 판별해 `--data-dir`로 명시합니다. 네트워크가 되는 실행 셸에서 현재 선택된 프로젝트 마운트(`/sessions/<session>/mnt/<selected-project>`)가 직접 보이면 그 마운트 루트를 사용합니다. 보이지 않는 표준 Cowork에서는 샌드박스 고정 경로(예: `/home/claude/hare`)를 사용하고, 로그인 캐시와 스냅샷을 현재 선택된 프로젝트 루트로 동기화해 임시 컨테이너 회수 후에도 상태가 유지되게 합니다.
 
 `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 조회 가능한 상태입니다. 캐시 파일이 존재하더라도 토큰을 획득할 수 없으면 로그인 완료로 판단하지 않습니다. `auth login-complete`도 저장된 캐시를 다시 열어 검증한 뒤에만 `COMPLETE`를 반환합니다.
 
-Cowork에서는 작업을 만들 때 `HareM365Agent` 프로젝트 또는 폴더를 먼저 선택합니다. startup JSON의 `setup.state`와 `setup.nextAction` 하나만 따르며, CLI가 반환한 `setup.nextCommand`를 수정하지 않고 실행합니다. 이 명령에는 동일한 `--data-dir`가 포함되므로 셸과 채팅이 바뀌어도 같은 캐시를 사용합니다. 일반 `/sessions`, `/tmp`, Cowork Linux OS 기본 저장소에서는 로그인이 거부되지만 `/sessions/<session>/mnt/HareM365Agent` 마운트는 허용됩니다.
+Cowork에서는 작업을 만들 때 기존 Hare 프로젝트 또는 폴더를 먼저 선택합니다. startup JSON의 `setup.state`와 `setup.nextAction` 하나만 따르며, CLI가 반환한 `setup.nextCommand`를 수정하지 않고 실행합니다. 이 명령에는 동일한 `--data-dir`가 포함되므로 셸과 채팅이 바뀌어도 같은 캐시를 사용합니다. 일반 `/sessions`, `/tmp`, Cowork Linux OS 기본 저장소에서는 로그인이 거부되지만 `/sessions/<session>/mnt/<selected-project>` 형태의 현재 프로젝트 마운트는 허용됩니다.
 
 프로젝트 폴더 없이 작업을 시작하면 Hare는 `FOLDER_REQUIRED`로 중단합니다. 사용자는 `HareM365Agent` 프로젝트 또는 폴더를 선택해 새 Cowork 작업을 연 뒤 같은 프롬프트를 붙여넣습니다. 실행 중인 작업에서 AI가 폴더를 생성하거나 추가 접근 요청을 반복하지 않습니다.
 

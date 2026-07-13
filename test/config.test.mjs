@@ -32,7 +32,15 @@ test("an explicit mounted Linux data directory can be persistent", () => {
   );
   assert.equal(
     isPersistentDataDir(
-      "/sessions/example/mnt/HareM365Agent",
+      "/sessions/example/mnt/HareM365Agent2",
+      "command-line",
+      "linux"
+    ),
+    true
+  );
+  assert.equal(
+    isPersistentDataDir(
+      "/sessions/example/mnt/company-selected-project",
       "command-line",
       "linux"
     ),
