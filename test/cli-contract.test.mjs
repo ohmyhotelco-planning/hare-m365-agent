@@ -41,6 +41,16 @@ test("startup never treats cache existence alone as a successful login", () => {
   assert.equal(output.status.loggedIn, false);
   assert.equal(output.status.tokenUsable, false);
   assert.equal(output.nextCommand, "LOGIN_REQUIRED_HARD_GATE");
+  assert.deepEqual(output.requiredDomains, [
+    "github.com",
+    "registry.npmjs.org",
+    "graph.microsoft.com",
+    "login.microsoftonline.com",
+    "ohmylab-my.sharepoint.com",
+    "ohmylab.sharepoint.com"
+  ]);
+  assert.match(output.setupCommand, /npm ci --prefer-offline --no-audit --no-fund/);
+  assert.doesNotMatch(JSON.stringify(output), /required only if npm ci/);
   assert.match(output.instruction, /foreground/);
   assert.match(output.instruction, /Never use background/);
 });
@@ -50,6 +60,10 @@ test("LLM guide requires foreground login and all generated runtime files", () =
   const result = run(["llm-guide"], dataDir);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /백그라운드, detached, setsid, nohup/);
+  assert.match(result.stdout, /아래 6개 도메인/);
+  assert.match(result.stdout, /registry\.npmjs\.org/);
+  assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
+  assert.match(result.stdout, /npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 않는다/);
   assert.match(result.stdout, /dist\/msal-network\.js/);
 });
 

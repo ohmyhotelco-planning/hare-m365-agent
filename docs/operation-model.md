@@ -9,7 +9,7 @@ LLM이 사용자의 자연어 요청을 받아 Microsoft 365 업무 데이터를
 ## 기본 실행 모델
 
 ```text
-LLM -> local shell/Cowork sandbox -> git clone -> npm ci -> npm run build -> Hare CLI -> Microsoft Graph delegated access
+LLM -> local shell/Cowork sandbox -> git clone -> npm ci(--prefer-offline, no audit/fund) -> npm run build -> Hare CLI -> Microsoft Graph delegated access
 ```
 
 사람은 인증, 승인, 권한 판단, 되돌리기 어려운 작업에만 개입합니다. 조회, 요약, 진단, 재시도, smoke test는 CLI와 LLM이 처리합니다.
@@ -24,7 +24,7 @@ LLM -> local shell/Cowork sandbox -> git clone -> npm ci -> npm run build -> Har
 ## 사람이 담당하는 일
 
 - Azure Application 및 Graph permission 승인
-- Claude/Cowork 도메인 허용 목록에 `github.com`, `graph.microsoft.com`, `login.microsoftonline.com`, `ohmylab-my.sharepoint.com`, `ohmylab.sharepoint.com` 추가
+- Claude/Cowork 도메인 허용 목록에 `github.com`, `registry.npmjs.org`, `graph.microsoft.com`, `login.microsoftonline.com`, `ohmylab-my.sharepoint.com`, `ohmylab.sharepoint.com` 추가
 - 기본 `hare.config.json` 설정 확인
 - Microsoft 로그인 및 consent 완료
 - 향후 write/send/delete/share 기능을 열기 전 명시 승인
@@ -34,7 +34,7 @@ LLM -> local shell/Cowork sandbox -> git clone -> npm ci -> npm run build -> Har
 - 문서화된 CLI만 사용
 - repo 접근 확인은 `git ls-remote` 또는 `git clone`으로 수행
 - GitHub API 또는 GitHub Release asset 다운로드를 기본 경로로 사용하지 않음
-- `npm ci`, `npm run build`, `node dist/cli.js` 실행
+- `npm ci --prefer-offline --no-audit --no-fund`, `npm run build`, `node dist/cli.js` 실행
 - `doctor`, `auth status` 진단
 - `auth login`을 동일한 셸 호출의 포그라운드에서 완료하고 성공 응답 후 상태 재확인
 - 조회 limit을 작게 시작하고 필요한 만큼만 확장

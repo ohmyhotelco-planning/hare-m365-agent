@@ -7,7 +7,7 @@ Hare M365 Agent는 LLM이 Microsoft Graph delegated 권한으로 Outlook, Teams,
 사람이 읽는 안내는 아래 한 장만 사용합니다.
 
 ```text
-release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드.html
+release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed.html
 ```
 
 ## 실행 개요
@@ -26,7 +26,7 @@ test ! -e /tmp/hare-m365-agent
 git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
 git -C /tmp/hare-m365-agent rev-parse --short HEAD
 test ! -d /tmp/hare-m365-agent/node_modules
-cd /tmp/hare-m365-agent && npm ci
+cd /tmp/hare-m365-agent && npm ci --prefer-offline --no-audit --no-fund
 cd /tmp/hare-m365-agent && npm run build
 test -f /tmp/hare-m365-agent/dist/cli.js
 test -f /tmp/hare-m365-agent/dist/proxy.js
@@ -38,14 +38,14 @@ cd /tmp/hare-m365-agent && node dist/cli.js
 
 ```bash
 git -C /tmp/hare-m365-agent pull
-cd /tmp/hare-m365-agent && npm ci
+cd /tmp/hare-m365-agent && npm ci --prefer-offline --no-audit --no-fund
 cd /tmp/hare-m365-agent && npm run build
 cd /tmp/hare-m365-agent && node dist/cli.js
 ```
 
 Cowork의 셸 호출마다 작업 폴더가 초기화될 수 있으므로 각 명령에 `/tmp/hare-m365-agent`를 명시합니다. 준비나 빌드 단계가 실패하면 다른 폴더의 `node_modules` 또는 `dist`로 대체하지 않습니다.
 
-`npm ci` 단계에서 npm registry 접근 오류가 발생할 때만 `registry.npmjs.org` 도메인 허용이 필요합니다.
+최초 설치에는 `registry.npmjs.org`가 필수입니다. `npm ci`가 실패하면 백그라운드 실행이나 `npm install` 증분 설치로 우회하지 않고 원인을 보고합니다.
 
 ## 설정
 
@@ -105,7 +105,7 @@ npm start
 
 ## 배포 판단
 
-- 기본: Cowork `git clone` + `npm ci` + `npm run build` + `node dist/cli.js`
+- 기본: Cowork `git clone` + `npm ci --prefer-offline --no-audit --no-fund` + `npm run build` + `node dist/cli.js`
 - 보류: npmjs publish
 - 보조/비권장: GitHub Release asset 직접 다운로드
 - 폐기: exe/pkg/SharePoint zip 중심 배포

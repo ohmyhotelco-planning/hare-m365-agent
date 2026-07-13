@@ -34,6 +34,7 @@ const defaultCliCommand = `node "${path.join(packageRoot, "dist", "cli.js")}"`;
 
 const requiredDomains = [
   "github.com",
+  "registry.npmjs.org",
   "graph.microsoft.com",
   "login.microsoftonline.com",
   "ohmylab-my.sharepoint.com",
@@ -51,8 +52,9 @@ const llmGuide = `# Hare M365 Agent LLM Guide
 목적: 사용자의 자연어 요청을 Microsoft Graph delegated 권한으로 조회한다. 기본 정책은 read-only다.
 
 시작 순서:
-1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 5개 도메인 허용 여부를 사용자에게 확인한다.
+1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 6개 도메인 허용 여부를 사용자에게 확인한다.
    - github.com
+   - registry.npmjs.org
    - graph.microsoft.com
    - login.microsoftonline.com
    - ohmylab-my.sharepoint.com
@@ -71,7 +73,7 @@ test ! -e ${defaultWorkDir}
 git clone ${repoUrl} ${defaultWorkDir}
 git -C ${defaultWorkDir} rev-parse --short HEAD
 test ! -d ${defaultWorkDir}/node_modules
-cd ${defaultWorkDir} && npm ci
+cd ${defaultWorkDir} && npm ci --prefer-offline --no-audit --no-fund
 cd ${defaultWorkDir} && npm run build
 test -f ${defaultWorkDir}/dist/cli.js
 test -f ${defaultWorkDir}/dist/proxy.js
@@ -79,9 +81,7 @@ test -f ${defaultWorkDir}/dist/msal-network.js
 cd ${defaultWorkDir} && node dist/cli.js
 \`\`\`
 
-각 셸 호출은 작업 폴더가 초기화될 수 있으므로 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시한다. 준비부터 로그인까지 새로 clone한 이 폴더만 사용한다. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고한다.
-
-npm ci가 npm registry 접근 오류로 실패하면 registry.npmjs.org 허용이 추가로 필요하다고 보고하고 멈춘다.
+각 셸 호출은 작업 폴더가 초기화될 수 있으므로 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시한다. 준비부터 로그인까지 새로 clone한 이 폴더만 사용한다. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고한다. npm 설치를 백그라운드로 전환하거나 npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 않는다.
 
 로그인 하드게이트:
 - 시작 명령 또는 auth status 결과에서 loggedIn이 false이면 Outlook/Teams/Files 조회를 실행하지 않는다.
@@ -144,8 +144,9 @@ const llmPrompt = `목적: Hare M365 Agent로 내 Microsoft 365 업무 요청을
 저장소:
 ${repoUrl}
 
-Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 5개 도메인이 허용되어 있는지 확인해.
+Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 6개 도메인이 허용되어 있는지 확인해.
 github.com
+registry.npmjs.org
 graph.microsoft.com
 login.microsoftonline.com
 ohmylab-my.sharepoint.com
@@ -167,16 +168,14 @@ test ! -e ${defaultWorkDir}
 git clone ${repoUrl} ${defaultWorkDir}
 git -C ${defaultWorkDir} rev-parse --short HEAD
 test ! -d ${defaultWorkDir}/node_modules
-cd ${defaultWorkDir} && npm ci
+cd ${defaultWorkDir} && npm ci --prefer-offline --no-audit --no-fund
 cd ${defaultWorkDir} && npm run build
 test -f ${defaultWorkDir}/dist/cli.js
 test -f ${defaultWorkDir}/dist/proxy.js
 test -f ${defaultWorkDir}/dist/msal-network.js
 cd ${defaultWorkDir} && node dist/cli.js
 
-npm ci가 npm registry 접근 오류로 실패하면 registry.npmjs.org 허용이 추가로 필요하다고 보고하고 멈춰.
-
-각 셸 호출은 작업 폴더가 초기화될 수 있어. 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시해. 준비부터 로그인까지 새로 clone한 이 폴더만 사용해. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고해.
+각 셸 호출은 작업 폴더가 초기화될 수 있어. 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시해. 준비부터 로그인까지 새로 clone한 이 폴더만 사용해. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고해. npm 설치를 백그라운드로 돌리거나 npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 마.
 
 결과에서 loggedIn이 true이면 바로 내 요청을 처리해.
 loggedIn이 false이면 결과 JSON의 dataDir/cacheFile 기준으로 판단해.
@@ -283,9 +282,9 @@ program
           version: packageVersion,
           mode: "startup",
           repository: repoUrl,
-          setupCommand: `rm -rf ${defaultWorkDir} && test ! -e ${defaultWorkDir} && git clone ${repoUrl} ${defaultWorkDir} && cd ${defaultWorkDir} && npm ci && npm run build && test -f dist/cli.js && test -f dist/proxy.js && test -f dist/msal-network.js && node dist/cli.js`,
+          setupCommand: `rm -rf ${defaultWorkDir} && test ! -e ${defaultWorkDir} && git clone ${repoUrl} ${defaultWorkDir} && cd ${defaultWorkDir} && npm ci --prefer-offline --no-audit --no-fund && npm run build && test -f dist/cli.js && test -f dist/proxy.js && test -f dist/msal-network.js && node dist/cli.js`,
           requiredDomains,
-          conditionalDomain: "registry.npmjs.org is required only if npm ci cannot reach npm registry.",
+          installRule: "registry.npmjs.org is required before npm ci. Do not switch to background or incremental npm install when npm ci fails.",
           searchDefaults: {
             lookbackDays: config.policy.defaultSearchLookbackDays,
             maxResults: config.policy.maxSearchResults,

@@ -12,14 +12,16 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git HEAD
 rm -rf /tmp/hare-m365-agent
 git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
-cd /tmp/hare-m365-agent && npm ci && npm run build
+cd /tmp/hare-m365-agent && npm ci --prefer-offline --no-audit --no-fund && npm run build
 test -f /tmp/hare-m365-agent/dist/cli.js
 test -f /tmp/hare-m365-agent/dist/proxy.js
 test -f /tmp/hare-m365-agent/dist/msal-network.js
 cd /tmp/hare-m365-agent && node dist/cli.js
 ```
 
-필수 도메인은 `github.com`, `login.microsoftonline.com`, `graph.microsoft.com`, `ohmylab-my.sharepoint.com`, `ohmylab.sharepoint.com`입니다. `npm ci`가 registry 연결 오류로 실패할 때만 `registry.npmjs.org`를 추가로 요청합니다.
+필수 도메인은 `github.com`, `registry.npmjs.org`, `login.microsoftonline.com`, `graph.microsoft.com`, `ohmylab-my.sharepoint.com`, `ohmylab.sharepoint.com`입니다.
+
+`npm ci`가 실패하면 백그라운드 실행, `npm install` 전환, 셸 호출별 증분 설치로 우회하지 않고 실패 단계와 오류만 보고합니다.
 
 ## 로그인 하드게이트
 
