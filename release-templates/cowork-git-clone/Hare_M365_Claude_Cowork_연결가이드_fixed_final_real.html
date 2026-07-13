@@ -18,7 +18,6 @@
     button { appearance: none; border: 0; border-radius: 6px; background: var(--brand); color: #fff; padding: 10px 14px; font-weight: 700; cursor: pointer; margin: 8px 8px 0 0; }
     button.secondary { background: var(--dark); }
     .muted { color: var(--muted); }
-    .notice { border: 1px solid #ffd0b8; background: var(--soft); padding: 16px; border-radius: 8px; margin: 18px 0; }
     .preview-warning { border: 3px solid var(--brand); background: #fff; padding: 18px; border-radius: 8px; margin: 0 0 20px; font-size: 18px; font-weight: 800; }
     .preview-warning span { display: block; margin-top: 5px; color: var(--muted); font-size: 15px; font-weight: 600; }
     .step { border: 1px solid var(--line); border-radius: 8px; padding: 0 18px 18px; margin: 20px 0; overflow: hidden; }
@@ -53,6 +52,11 @@
     .troubleshoot h3 { margin: 0 0 8px; font-size: 18px; }
     .troubleshoot ol { margin: 10px 0 14px; padding-left: 22px; }
     .troubleshoot li { margin: 6px 0; }
+    details.troubleshoot { padding: 0; }
+    details.troubleshoot > summary, .optional-details > summary { cursor: pointer; list-style-position: inside; padding: 14px 16px; font-size: 17px; font-weight: 800; }
+    details.troubleshoot[open] > summary, .optional-details[open] > summary { border-bottom: 1px solid var(--line); }
+    .details-body { padding: 2px 16px 16px; }
+    .optional-details { margin: 12px 0 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     .copy-fallback { margin: 10px 0; padding: 11px 13px; border-radius: 6px; background: #fffbea; color: #6e4c00; font-weight: 700; }
     textarea.prompt-box { display: block; width: 100%; margin-top: 10px; padding: 14px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; background: var(--code); color: var(--text); line-height: 1.55; white-space: pre-wrap; }
     figure { margin: 14px 0 4px; }
@@ -80,11 +84,6 @@
     <div class="preview-warning">
       Teams 또는 OneDrive 미리보기에서는 복사 버튼이 작동하지 않습니다.
       <span>먼저 이 HTML 파일을 PC에 다운로드한 뒤, 다운로드된 파일을 Edge 또는 Chrome으로 열어주세요.</span>
-    </div>
-
-    <div class="notice">
-      <strong>핵심 원칙:</strong>
-      GitHub API나 Release asset이 아니라 <code>git clone</code> 경로를 사용합니다. Microsoft 계정 외 별도 배포 계정을 요구하지 않는 것을 우선합니다.
     </div>
 
     <section class="step">
@@ -146,8 +145,9 @@
         </figure>
       </div>
 
-      <div class="troubleshoot">
-        <h3>Cowork가 열리지 않을 때만 진행하세요</h3>
+      <details class="troubleshoot">
+        <summary>Cowork가 열리지 않을 때만 펼치세요</summary>
+        <div class="details-body">
         <ol>
           <li><strong>Windows 키</strong>를 누르고 <strong>Windows 기능 켜기/끄기</strong>를 입력한 뒤 Enter를 누르세요.</li>
           <li><strong>Virtual Machine Platform</strong> 항목을 체크하세요.</li>
@@ -164,7 +164,8 @@
             <figcaption>Virtual Machine Platform을 체크하고 확인을 누른 뒤 재부팅합니다.</figcaption>
           </figure>
         </div>
-      </div>
+        </div>
+      </details>
     </section>
 
     <section class="step">
@@ -219,18 +220,20 @@
         <div class="domain-row"><input class="domain" readonly value="ohmylab.sharepoint.com" aria-label="ohmylab.sharepoint.com"><button type="button" class="secondary" onclick="copyLiteral('ohmylab.sharepoint.com')">복사</button></div>
       </div>
       <div class="copy-fallback">복사 버튼이 반응하지 않으면 도메인 입력 칸을 클릭한 뒤 Ctrl+A → Ctrl+C를 누르세요. Mac은 Command+A → Command+C입니다.</div>
-      <div class="preview-warning"><strong>도메인 허용 목록은 세션 샌드박스 셸에 적용됩니다.</strong> 연결 폴더가 마운트된 디바이스 셸은 이 설정과 무관하게 모든 도메인이 차단될 수 있으므로, 네트워크가 필요한 명령은 샌드박스 셸에서 실행합니다. 설정을 바꾼 뒤에는 새 Cowork 채팅을 열어야 변경 내용이 적용됩니다.</div>
+      <div class="preview-warning"><strong>설정을 바꿨다면 새 Cowork 채팅을 여세요.</strong> 새 채팅부터 변경된 도메인 허용 설정이 적용됩니다.</div>
     </section>
 
     <section class="step">
       <div class="step-title"><span class="step-kicker">STEP 3</span><span>초기 연결용 프롬프트</span></div>
       <div class="action-callout">아래 버튼을 눌러 프롬프트를 복사하세요.
-        <span>STEP 2를 마친 뒤 “HareM365Agent” 프로젝트에서 새로 연 Cowork 채팅창에 붙여넣고 Enter를 누르세요. 업무 조회 전에 한 번만 진행하세요.</span>
+        <span>STEP 2를 마친 뒤 “HareM365Agent” 프로젝트에서 새로 연 Cowork 채팅창에 붙여넣고 Enter를 누르세요. 처음 연결할 때 한 번만 진행합니다.</span>
       </div>
-      <div class="preview-warning"><strong>STEP 1에서 “HareM365Agent” 프로젝트를 선택한 Cowork 채팅인지 확인하세요.</strong> 다른 프로젝트나 프로젝트 없는 채팅에 붙여넣지 마세요. 이후 새 작업도 같은 HareM365Agent 프로젝트에서 시작하면 기존 설치와 로그인을 그대로 사용합니다.</div>
       <button type="button" onclick="copyText('prompt')">초기 연결용 프롬프트 복사</button>
-      <div class="copy-fallback">복사 버튼이 반응하지 않으면 아래 프롬프트 영역을 클릭한 뒤 Ctrl+A → Ctrl+C를 누르세요. Mac은 Command+A → Command+C입니다.</div>
-      <textarea class="prompt-box" id="prompt" rows="64" readonly>목적은 Hare M365 Agent를 준비하고 로그인 상태를 확인하는 것이야. 실행은 도메인 허용 목록이 적용되는 셸에서 하고, 영속 저장은 연결된 HareM365Agent 프로젝트 폴더를 사용해. 이 단계에서는 Outlook/Teams/Files 업무 조회를 실행하지 마.
+      <div class="copy-fallback">복사 버튼이 반응하지 않으면 아래 “프롬프트 직접 보기”를 펼치세요.</div>
+      <details class="optional-details">
+        <summary>프롬프트 직접 보기</summary>
+        <div class="details-body">
+      <textarea class="prompt-box" id="prompt" rows="16" readonly>목적은 Hare M365 Agent를 준비하고 로그인 상태를 확인하는 것이야. 실행은 도메인 허용 목록이 적용되는 셸에서 하고, 영속 저장은 연결된 HareM365Agent 프로젝트 폴더를 사용해. 이 단계에서는 Outlook/Teams/Files 업무 조회를 실행하지 마.
 
 저장소:
 https://github.com/ohmyhotelco-planning/hare-m365-agent.git
@@ -316,6 +319,8 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 저장이 불가능한 환경이면 같은 채팅 안에서 자연어로 업무 조회를 요청하라고 짧게 알려줘.
 
 그 외 막히는 부분이 있으면 한두 문장으로 무엇이 막혔는지만 말해.</textarea>
+        </div>
+      </details>
     </section>
 
     <section class="step">

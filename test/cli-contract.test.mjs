@@ -297,10 +297,15 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.doesNotMatch(html, /computer-use|%USERPROFILE%|~\/HareM365Agent/);
   assert.match(html, /2-6/);
   assert.match(html, /새 Cowork 채팅/);
+  assert.match(html, /<details class="troubleshoot">\s*<summary>Cowork가 열리지 않을 때만 펼치세요<\/summary>/);
+  assert.match(html, /<details class="optional-details">\s*<summary>프롬프트 직접 보기<\/summary>/);
+  assert.match(html, /id="prompt" rows="16"/);
+  assert.doesNotMatch(html, /<details class="(?:troubleshoot|optional-details)" open/);
+  assert.doesNotMatch(html, /id="prompt" rows="64"/);
   assert.match(html, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(html, /X-Proxy-Error: blocked-by-allowlist/);
   assert.match(html, /\/sessions\/&lt;session&gt;\/mnt\/HareM365Agent/);
-  assert.match(html, /도메인 허용 목록은 세션 샌드박스 셸에 적용됩니다/);
+  assert.match(html, /설정을 바꿨다면 새 Cowork 채팅을 여세요/);
   assert.match(html, /\.hare-app-snapshot\.tar\.gz/);
   assert.match(html, /HARE_ROOT 판별/);
   assert.doesNotMatch(html, /유일한 네트워크 허용 목록/);
