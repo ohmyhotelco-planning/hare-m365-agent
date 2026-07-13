@@ -8,6 +8,7 @@
   "maxMailFetchLimit": 20,
   "maxTeamsFetchLimit": 50,
   "maxFileSearchLimit": 25,
+  "maxDownloadBytes": 104857600,
   "retentionDays": 7,
   "requireConfirmationFor": [
     "send_mail",

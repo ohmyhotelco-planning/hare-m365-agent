@@ -28,7 +28,10 @@ type GraphMail = {
   importance?: string;
   bodyPreview?: string;
   webLink?: string;
+  parentFolderId?: string;
 };
+
+type GraphMailFolder = { id: string };
 
 export type MailFolderScope = "all" | "inbox" | "sent";
 
@@ -52,15 +55,19 @@ export type MailCountResult = {
     range: SearchRange;
     scannedCount: number;
     matchedCount: number;
+    earliestDateTime?: string;
+    latestDateTime?: string;
     earliestReceivedDateTime?: string;
     latestReceivedDateTime?: string;
+    dateProperty: "receivedDateTime" | "sentDateTime";
+    excludedDeletedItems: boolean;
     complete: true;
   };
   breakdownBySender: Array<{ sender: string; count: number }>;
 };
 
 export async function listInbox(config: AppConfig, limit: number): Promise<MailSummary[]> {
-  const top = Math.min(limit, config.policy.maxMailFetchLimit);
+  const top = normalizeSearchLimit(limit, config.policy.maxMailFetchLimit);
   const select = [
     "id",
     "receivedDateTime",
@@ -105,7 +112,13 @@ export async function searchMailbox(
     throw new Error("query must not be empty.");
   }
 
-  const range = resolveSearchRange(since, until, config.policy.defaultSearchLookbackDays);
+  const range = resolveSearchRange(
+    since,
+    until,
+    config.policy.defaultSearchLookbackDays,
+    new Date(),
+    config.timeZone
+  );
   const maxResults = normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults);
   const select = [
     "id",
@@ -118,10 +131,14 @@ export async function searchMailbox(
     "hasAttachments",
     "importance",
     "bodyPreview",
-    "webLink"
+    "webLink",
+    "parentFolderId"
   ].join(",");
   const folderPath = getFolderPath(folderScope);
-  const kql = `${trimmedQuery} AND sent>=${range.since} AND sent<=${range.until}`;
+  const dateProperty = getDateProperty(folderScope);
+  const kqlDateProperty = dateProperty === "sentDateTime" ? "sent" : "received";
+  const kql = `${trimmedQuery} AND ${kqlDateProperty}>=${range.since} AND ${kqlDateProperty}<=${range.until}`;
+  const deletedItemsFolderId = folderScope === "all" ? await getDeletedItemsFolderId(config) : undefined;
   const params = new URLSearchParams({
     "$top": String(Math.min(100, maxResults)),
     "$search": `"${escapeSearchValue(kql)}"`,
@@ -134,10 +151,13 @@ export async function searchMailbox(
 
   while (nextUrl && messages.length < maxResults) {
     const page: GraphPage<GraphMail> = await graphGet<GraphPage<GraphMail>>(config, nextUrl);
+    const eligible = (page.value ?? []).filter(
+      (mail) => !deletedItemsFolderId || mail.parentFolderId !== deletedItemsFolderId
+    );
     const remaining = maxResults - messages.length;
-    messages.push(...(page.value ?? []).slice(0, remaining));
+    messages.push(...eligible.slice(0, remaining));
     nextUrl = page["@odata.nextLink"];
-    hasMore = Boolean(nextUrl);
+    hasMore = Boolean(nextUrl) || eligible.length > remaining;
   }
 
   const summaries = messages.map(toMailSummary);
@@ -164,17 +184,25 @@ export async function countMailboxMessages(
 ): Promise<MailCountResult> {
   const subjectNeedle = subjectContains?.trim().toLocaleLowerCase();
   const fromNeedle = fromContains?.trim().toLocaleLowerCase();
-  const range = resolveSearchRange(since, until, config.policy.defaultSearchLookbackDays);
+  const range = resolveSearchRange(
+    since,
+    until,
+    config.policy.defaultSearchLookbackDays,
+    new Date(),
+    config.timeZone
+  );
   const folderPath = getFolderPath(folderScope);
+  const dateProperty = getDateProperty(folderScope);
+  const deletedItemsFolderId = folderScope === "all" ? await getDeletedItemsFolderId(config) : undefined;
   const filter = [
-    `receivedDateTime ge ${range.since}T00:00:00Z`,
-    `receivedDateTime lt ${nextDate(range.until)}T00:00:00Z`
+    `${dateProperty} ge ${range.startDateTime}`,
+    `${dateProperty} lt ${range.endDateTimeExclusive}`
   ].join(" and ");
   const params = new URLSearchParams({
     "$top": "500",
     "$filter": filter,
-    "$orderby": "receivedDateTime desc",
-    "$select": "id,subject,receivedDateTime,from"
+    "$orderby": `${dateProperty} desc`,
+    "$select": "id,subject,receivedDateTime,sentDateTime,from,parentFolderId"
   });
 
   let nextUrl: string | undefined = `${folderPath}?${params.toString()}`;
@@ -187,6 +215,7 @@ export async function countMailboxMessages(
   while (nextUrl) {
     const page: GraphPage<GraphMail> = await graphGet<GraphPage<GraphMail>>(config, nextUrl);
     for (const mail of page.value ?? []) {
+      if (deletedItemsFolderId && mail.parentFolderId === deletedItemsFolderId) continue;
       scannedCount += 1;
       const subject = mail.subject?.toLocaleLowerCase() ?? "";
       const senderAddress = mail.from?.emailAddress?.address ?? "";
@@ -196,12 +225,12 @@ export async function countMailboxMessages(
       if (fromNeedle && !senderText.includes(fromNeedle)) continue;
 
       matchedCount += 1;
-      const received = mail.receivedDateTime;
-      if (received && (!earliestReceivedDateTime || received < earliestReceivedDateTime)) {
-        earliestReceivedDateTime = received;
+      const messageDate = mail[dateProperty];
+      if (messageDate && (!earliestReceivedDateTime || messageDate < earliestReceivedDateTime)) {
+        earliestReceivedDateTime = messageDate;
       }
-      if (received && (!latestReceivedDateTime || received > latestReceivedDateTime)) {
-        latestReceivedDateTime = received;
+      if (messageDate && (!latestReceivedDateTime || messageDate > latestReceivedDateTime)) {
+        latestReceivedDateTime = messageDate;
       }
       const sender = senderAddress || senderName || "(unknown)";
       senderCounts.set(sender, (senderCounts.get(sender) ?? 0) + 1);
@@ -217,8 +246,12 @@ export async function countMailboxMessages(
       range,
       scannedCount,
       matchedCount,
+      earliestDateTime: earliestReceivedDateTime,
+      latestDateTime: latestReceivedDateTime,
       earliestReceivedDateTime,
       latestReceivedDateTime,
+      dateProperty,
+      excludedDeletedItems: folderScope === "all",
       complete: true
     },
     breakdownBySender: [...senderCounts.entries()]
@@ -256,6 +289,15 @@ function getFolderPath(folderScope: MailFolderScope): string {
   return "/me/messages";
 }
 
+function getDateProperty(folderScope: MailFolderScope): "receivedDateTime" | "sentDateTime" {
+  return folderScope === "sent" ? "sentDateTime" : "receivedDateTime";
+}
+
+async function getDeletedItemsFolderId(config: AppConfig): Promise<string> {
+  const folder = await graphGet<GraphMailFolder>(config, "/me/mailFolders/deleteditems?$select=id");
+  return folder.id;
+}
+
 function escapeSearchValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
@@ -265,9 +307,4 @@ function normalizeSearchLimit(requested: number, policyMaximum: number): number 
     throw new Error("limit must be a positive number.");
   }
   return Math.min(Math.floor(requested), policyMaximum, 1000);
-}
-
-function nextDate(value: string): string {
-  const date = new Date(`${value}T00:00:00Z`);
-  return new Date(date.getTime() + 86_400_000).toISOString().slice(0, 10);
 }

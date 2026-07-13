@@ -1,6 +1,9 @@
 export type SearchRange = {
   since: string;
   until: string;
+  startDateTime: string;
+  endDateTimeExclusive: string;
+  timeZone: string;
   days: number;
   usedDefaultLookback: boolean;
   notice: string;
@@ -12,55 +15,108 @@ export function resolveSearchRange(
   since: string | undefined,
   until: string | undefined,
   defaultLookbackDays: number,
-  now = new Date()
+  now = new Date(),
+  timeZone = "Asia/Seoul"
 ): SearchRange {
-  const resolvedUntil = until ? parseDateOnly(until, "until") : startOfUtcDay(now);
+  validateTimeZone(timeZone);
+  const resolvedUntil = until ? validateDateOnly(until, "until") : dateInTimeZone(now, timeZone);
   const usedDefaultLookback = !since;
   const resolvedSince = since
-    ? parseDateOnly(since, "since")
-    : addUtcDays(resolvedUntil, -(defaultLookbackDays - 1));
+    ? validateDateOnly(since, "since")
+    : addCalendarDays(resolvedUntil, -(defaultLookbackDays - 1));
 
-  if (resolvedSince.getTime() > resolvedUntil.getTime()) {
+  if (resolvedSince > resolvedUntil) {
     throw new Error("since must be on or before until.");
   }
 
-  const sinceText = formatDateOnly(resolvedSince);
-  const untilText = formatDateOnly(resolvedUntil);
-  const days = Math.floor((resolvedUntil.getTime() - resolvedSince.getTime()) / 86_400_000) + 1;
+  const endExclusiveDate = addCalendarDays(resolvedUntil, 1);
+  const days = calendarDayDifference(resolvedSince, resolvedUntil) + 1;
   const notice = usedDefaultLookback
-    ? `기간 미지정: 최근 ${days}일(${sinceText} ~ ${untilText})을 조회했습니다.`
-    : `요청 기간: ${sinceText} ~ ${untilText}(${days}일)을 조회했습니다.`;
+    ? `기간 미지정: 최근 ${days}일(${resolvedSince} ~ ${resolvedUntil}, ${timeZone})을 조회했습니다.`
+    : `요청 기간: ${resolvedSince} ~ ${resolvedUntil}(${days}일, ${timeZone})을 조회했습니다.`;
 
   return {
-    since: sinceText,
-    until: untilText,
+    since: resolvedSince,
+    until: resolvedUntil,
+    startDateTime: zonedMidnightToUtc(resolvedSince, timeZone).toISOString(),
+    endDateTimeExclusive: zonedMidnightToUtc(endExclusiveDate, timeZone).toISOString(),
+    timeZone,
     days,
     usedDefaultLookback,
     notice
   };
 }
 
-function parseDateOnly(value: string, optionName: string): Date {
+function validateDateOnly(value: string, optionName: string): string {
   if (!datePattern.test(value)) {
     throw new Error(`${optionName} must use YYYY-MM-DD format.`);
   }
 
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  if (formatDateOnly(date) !== value) {
+  if (date.toISOString().slice(0, 10) !== value) {
     throw new Error(`${optionName} is not a valid calendar date.`);
   }
-  return date;
+  return value;
 }
 
-function startOfUtcDay(value: Date): Date {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+function validateTimeZone(timeZone: string): void {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+  } catch {
+    throw new Error(`Invalid IANA time zone: ${timeZone}`);
+  }
 }
 
-function addUtcDays(value: Date, days: number): Date {
-  return new Date(value.getTime() + days * 86_400_000);
+function dateInTimeZone(value: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
-function formatDateOnly(value: Date): string {
-  return value.toISOString().slice(0, 10);
+function addCalendarDays(value: string, days: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function calendarDayDifference(from: string, to: string): number {
+  return Math.floor((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+function zonedMidnightToUtc(dateOnly: string, timeZone: string): Date {
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  const utcGuess = Date.UTC(year, month - 1, day);
+  let candidate = utcGuess;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(new Date(candidate));
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const representedAsUtc = Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      Number(values.hour),
+      Number(values.minute),
+      Number(values.second)
+    );
+    const correction = representedAsUtc - utcGuess;
+    if (correction === 0) break;
+    candidate -= correction;
+  }
+
+  return new Date(candidate);
 }

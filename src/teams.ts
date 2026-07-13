@@ -97,8 +97,8 @@ type GraphSearchResponse = {
 };
 
 export async function listJoinedTeams(config: AppConfig): Promise<TeamSummary[]> {
-  const page = await graphGet<GraphPage<GraphTeam>>(config, "/me/joinedTeams");
-  return (page.value ?? []).map((team) => ({
+  const teams = await collectPages<GraphTeam>(config, "/me/joinedTeams");
+  return teams.map((team) => ({
     id: team.id,
     displayName: team.displayName,
     description: team.description
@@ -106,12 +106,11 @@ export async function listJoinedTeams(config: AppConfig): Promise<TeamSummary[]>
 }
 
 export async function listChats(config: AppConfig, limit: number): Promise<ChatSummary[]> {
-  const top = Math.min(limit, config.policy.maxTeamsFetchLimit);
-  const page = await graphGet<GraphPage<GraphChat>>(
-    config,
-    `/me/chats?$top=${top}&$expand=lastMessagePreview&$orderby=lastMessagePreview/createdDateTime%20desc`
-  );
-  return (page.value ?? [])
+  const top = normalizeSearchLimit(limit, config.policy.maxTeamsFetchLimit);
+  const chats = await fetchAllChats(config);
+  return chats
+    .sort((a, b) => (b.lastMessagePreview?.createdDateTime ?? "").localeCompare(a.lastMessagePreview?.createdDateTime ?? ""))
+    .slice(0, top)
     .map((chat) => ({
       id: chat.id,
       topic: chat.topic,
@@ -129,12 +128,14 @@ export async function listChatMessages(
   chatId: string,
   limit: number
 ): Promise<ChatMessageSummary[]> {
-  const top = Math.min(limit, config.policy.maxTeamsFetchLimit);
-  const page = await graphGet<GraphPage<GraphChatMessage>>(
+  if (!chatId.trim()) throw new Error("chat-id must not be empty.");
+  const top = normalizeSearchLimit(limit, config.policy.maxTeamsFetchLimit);
+  const messages = await collectPages<GraphChatMessage>(
     config,
-    `/chats/${encodeURIComponent(chatId)}/messages?$top=${top}`
+    `/chats/${encodeURIComponent(chatId)}/messages?$top=${Math.min(top, 50)}&$orderby=createdDateTime%20desc`,
+    top
   );
-  return (page.value ?? []).map((message) => ({
+  return messages.map((message) => ({
     id: message.id,
     createdDateTime: message.createdDateTime,
     from: message.from?.user?.displayName ?? message.from?.user?.userIdentityType,
@@ -156,7 +157,13 @@ export async function searchChatMessages(
     throw new Error("query must not be empty.");
   }
 
-  const range = resolveSearchRange(since, until, config.policy.defaultSearchLookbackDays);
+  const range = resolveSearchRange(
+    since,
+    until,
+    config.policy.defaultSearchLookbackDays,
+    new Date(),
+    config.timeZone
+  );
   const maxResults = normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults);
   const graphQuery = `${trimmedQuery} AND sent>=${range.since} AND sent<=${range.until}`;
   const hits: GraphChatMessageSearchHit[] = [];
@@ -184,7 +191,7 @@ export async function searchChatMessages(
     moreResultsAvailable = Boolean(container?.moreResultsAvailable) && pageHits.length > 0;
   }
 
-  const chats = await listChats(config, config.policy.maxTeamsFetchLimit);
+  const chats = (await fetchAllChats(config)).map((chat) => ({ id: chat.id, topic: chat.topic }));
   const topicByChatId = new Map(chats.map((chat) => [chat.id, chat.topic]));
   const messages = hits.map((hit) => {
     const resource = hit.resource;
@@ -211,6 +218,28 @@ export async function searchChatMessages(
     },
     messages
   };
+}
+
+async function fetchAllChats(config: AppConfig): Promise<GraphChat[]> {
+  return collectPages<GraphChat>(config, "/me/chats?$top=50&$expand=lastMessagePreview");
+}
+
+async function collectPages<T>(
+  config: AppConfig,
+  initialUrl: string,
+  maximum = Number.POSITIVE_INFINITY
+): Promise<T[]> {
+  const values: T[] = [];
+  let nextUrl: string | undefined = initialUrl;
+
+  while (nextUrl && values.length < maximum) {
+    const page: GraphPage<T> = await graphGet<GraphPage<T>>(config, nextUrl);
+    const remaining = maximum - values.length;
+    values.push(...(page.value ?? []).slice(0, remaining));
+    nextUrl = page["@odata.nextLink"];
+  }
+
+  return values;
 }
 
 function stripHtml(value: string): string {

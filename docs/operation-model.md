@@ -36,6 +36,7 @@ LLM -> local shell/Cowork sandbox -> git clone -> npm ci -> npm run build -> Har
 - GitHub API 또는 GitHub Release asset 다운로드를 기본 경로로 사용하지 않음
 - `npm ci`, `npm run build`, `node dist/cli.js` 실행
 - `doctor`, `auth status` 진단
+- `auth login`을 동일한 셸 호출의 포그라운드에서 완료하고 성공 응답 후 상태 재확인
 - 조회 limit을 작게 시작하고 필요한 만큼만 확장
 - 메일/채팅/파일/토큰/캐시 원문 덤프 지양
 - 인증, 승인, 권한 전략, 되돌리기 어려운 작업은 사람에게 요청
@@ -58,11 +59,11 @@ LLM -> local shell/Cowork sandbox -> git clone -> npm ci -> npm run build -> Har
 - 비권장: GitHub Release asset 직접 다운로드
 - 폐기: exe/pkg/SharePoint zip 중심 배포
 
-## 남은 과제
+## 운영 검증 기준
 
-- Cowork 도메인 허용과 Microsoft Graph/Login 접근 가능성 반복 검증
-- OS-backed credential store 검토
-- silent token usability를 더 명확히 확인하는 `auth status` 강화
-- `Chat.ReadWrite` scope 제거 가능성 검토
-- SharePoint/Teams 파일 검색 범위 확장
-- release ownership, versioning, update, rollback, audit 기준 정의
+- `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 조회 실행
+- 캐시 파일 존재만으로 로그인 성공을 판단하지 않음
+- Graph 일시 오류는 제한된 횟수와 `Retry-After` 기준으로 재시도
+- 기간 미지정 검색은 `Asia/Seoul` 기준 최근 90일로 고정
+- 전체 메일 집계에서 삭제된 메일 제외
+- release ownership, versioning, update, rollback 기준은 운영 전 별도 확정

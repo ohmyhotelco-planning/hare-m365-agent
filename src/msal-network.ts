@@ -18,7 +18,7 @@ export class ProxyAwareNetworkClient implements INetworkModule {
     url: string,
     options?: NetworkRequestOptions
   ): Promise<NetworkResponse<T>> {
-    return this.send<T>(url, "POST", options);
+    return this.send<T>(url, "POST", options, 30_000);
   }
 
   private async send<T>(
@@ -27,15 +27,16 @@ export class ProxyAwareNetworkClient implements INetworkModule {
     options?: NetworkRequestOptions,
     timeout?: number
   ): Promise<NetworkResponse<T>> {
-    const controller = timeout ? new AbortController() : undefined;
-    const timer = controller ? setTimeout(() => controller.abort(), timeout) : undefined;
+    const effectiveTimeout = timeout && timeout > 0 ? timeout : 30_000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), effectiveTimeout);
 
     try {
       const response = await fetchWithProxy(url, {
         method,
         headers: options?.headers,
         body: method === "POST" ? options?.body : undefined,
-        signal: controller?.signal
+        signal: controller.signal
       });
       const text = await response.text();
 
@@ -45,7 +46,7 @@ export class ProxyAwareNetworkClient implements INetworkModule {
         status: response.status
       };
     } finally {
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
     }
   }
 }

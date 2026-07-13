@@ -30,6 +30,7 @@ cd /tmp/hare-m365-agent && npm ci
 cd /tmp/hare-m365-agent && npm run build
 test -f /tmp/hare-m365-agent/dist/cli.js
 test -f /tmp/hare-m365-agent/dist/proxy.js
+test -f /tmp/hare-m365-agent/dist/msal-network.js
 cd /tmp/hare-m365-agent && node dist/cli.js
 ```
 
@@ -62,7 +63,9 @@ Mac: ~/Library/Application Support/Ohmyhotel/HareM365Agent
 Linux: ~/.local/share/ohmyhotel/hare-m365-agent
 ```
 
-`loggedIn: false`는 출력 JSON의 `dataDir`/`cacheFile` 기준 상태입니다. hosted sandbox나 컨테이너 경로에서 나온 `false`를 사용자 PC 로그인 실패로 해석하지 않습니다. Cowork처럼 사용자 폴더를 마운트할 수 있는 환경에서는 사용자 PC의 고정 Hare 폴더를 연결하고, 이후 모든 Hare 명령에 `HARE_M365_DATA_DIR="<마운트된 Hare 폴더 경로>"`를 붙여 같은 캐시를 사용합니다.
+`loggedIn`과 `tokenUsable`이 모두 `true`일 때만 조회 가능한 상태입니다. 캐시 파일이 존재하더라도 토큰을 획득할 수 없으면 로그인 완료로 판단하지 않습니다.
+
+초기 로그인은 `node dist/cli.js auth login`을 동일한 셸 호출에서 포그라운드로 실행합니다. 백그라운드·detached·`setsid`·`nohup`으로 분리하지 않으며, Microsoft 브라우저 로그인이 끝난 뒤 명령이 `ok: true`를 반환하고 캐시 저장이 완료될 때까지 호출을 유지합니다.
 
 ## 주요 명령
 
@@ -83,9 +86,9 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 
 일반 조회 결과는 화면 출력을 바로 사용합니다. 별도 파일이 필요한 경우에만 `--out <path>`를 사용하며, 상대 경로는 Hare 고정 `resultsDir` 아래에 저장되고 7일 후 자동 정리됩니다.
 
-기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 최근 90일을 조회하며 최대 1,000건을 반환합니다. 결과 JSON의 `search.range.notice`에 실제 조회 기간이 표시되고, `search.limitReached`로 결과 한도 도달 여부를 확인할 수 있습니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
+기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회하며 최대 1,000건을 반환합니다. 결과 JSON의 `search.range.notice`에 실제 조회 기간이 표시되고, `search.limitReached`로 결과 한도 도달 여부를 확인할 수 있습니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
 
-정확한 메일 건수 집계는 검색 인덱스를 사용하는 `outlook search` 대신 `outlook count`를 사용합니다. `outlook count`는 지정 기간의 모든 메일 페이지를 순회하고 `--subject-contains`와 `--from` 조건을 직접 대조합니다.
+정확한 메일 건수 집계는 검색 인덱스를 사용하는 `outlook search` 대신 `outlook count`를 사용합니다. `outlook count`는 지정 기간의 모든 메일 페이지를 순회하고 `--subject-contains`와 `--from` 조건을 직접 대조합니다. `--folder all`은 삭제된 메일을 제외하며, 보낸편지함은 `sentDateTime`, 나머지는 `receivedDateTime`을 기준으로 집계합니다.
 
 SharePoint 사이트의 존재 여부는 `sharepoint sites`로 확인합니다. `files search`는 현재 개인 OneDrive 범위이므로, 해당 결과만으로 SharePoint 사이트 존재 여부나 접근 권한을 판단하지 않습니다.
 
@@ -95,6 +98,8 @@ SharePoint 사이트의 존재 여부는 `sharepoint sites`로 확인합니다. 
 npm install
 npm run typecheck
 npm run build
+npm test
+npm run verify
 npm start
 ```
 

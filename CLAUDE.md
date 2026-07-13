@@ -1,40 +1,13 @@
-# Hare M365 Agent For Claude/Cowork
+# Hare M365 Agent for Claude/Cowork
 
-Use git clone as the default setup path.
+이 저장소에서는 [AGENTS.md](AGENTS.md)를 Hare 실행의 단일 기준으로 사용합니다.
 
-```bash
-git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
-cd /tmp/hare-m365-agent
-npm ci
-npm run build
-node dist/cli.js
-```
+핵심 규칙:
 
-Before running commands in Cowork, confirm the allow-list contains:
-
-```text
-github.com
-login.microsoftonline.com
-graph.microsoft.com
-ohmylab-my.sharepoint.com
-ohmylab.sharepoint.com
-```
-
-SharePoint/OneDrive file content downloads may resolve to the tenant SharePoint host, not only Graph. If wildcard domains are supported, `*.sharepoint.com` can cover these hosts.
-
-If `npm ci` fails because it cannot reach npm registry, report that `registry.npmjs.org` is additionally required and stop.
-
-Do not test repo access with `api.github.com`. Use `git ls-remote` or `git clone`.
-
-After startup, read the JSON and follow these rules:
-
-- Use only the printed `dataDir` and `cacheFile` state.
-- If the user's fixed Hare folder is mounted, set `HARE_M365_DATA_DIR="<mounted Hare folder path>"` for every command.
-- If `loggedIn` is false, do not query Outlook/Teams/Files.
-- If `cacheFileExists` is true, do not ask the user to login again; continue with the requested read command.
-- For initial connection, run `humanLoginCommand` in the same shell. Do not ask the user to type a shell command or navigate to the clone folder. The user enters the Microsoft device code in the browser, signs in, then says "로그인 완료".
-- If Graph calls fail in the hosted sandbox but cache exists, run the command on the user's local machine with `--out`, then read the output JSON.
-
-Do not use computer-use or File Explorer when shell commands are available.
-
-Do not perform write/change actions unless explicitly enabled and confirmed.
+1. GitHub API가 아닌 `git clone` 경로를 사용합니다.
+2. `dist/cli.js`, `dist/proxy.js`, `dist/msal-network.js`를 모두 확인합니다.
+3. `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365를 조회합니다.
+4. `auth login`은 같은 셸 호출의 포그라운드에서 실행하며 성공 JSON이 나올 때까지 호출을 유지합니다.
+5. 백그라운드, detached, `setsid`, `nohup` 로그인을 사용하지 않습니다.
+6. 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
+7. 기본 동작은 읽기 전용입니다.

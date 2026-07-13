@@ -26,6 +26,7 @@ export type Policy = {
   maxMailFetchLimit: number;
   maxTeamsFetchLimit: number;
   maxFileSearchLimit: number;
+  maxDownloadBytes: number;
   retentionDays: number;
   requireConfirmationFor: string[];
 };
@@ -39,6 +40,7 @@ export type AppConfig = {
   downloadDir: string;
   logsDir: string;
   resultsDir: string;
+  timeZone: string;
   policyPath: string;
   policy: Policy;
 };
@@ -53,6 +55,7 @@ const defaultPolicy: Policy = {
   maxMailFetchLimit: 20,
   maxTeamsFetchLimit: 50,
   maxFileSearchLimit: 25,
+  maxDownloadBytes: 104857600,
   retentionDays: 7,
   requireConfirmationFor: [
     "send_mail",
@@ -105,6 +108,7 @@ export function loadConfig(): AppConfig {
   const downloadDir = path.join(dataDir, "downloads");
   const logsDir = path.join(dataDir, "logs");
   const resultsDir = path.join(dataDir, "results");
+  const timeZone = process.env.HARE_M365_TIME_ZONE ?? "Asia/Seoul";
 
   const policy = {
     ...defaultPolicy,
@@ -120,6 +124,7 @@ export function loadConfig(): AppConfig {
     downloadDir,
     logsDir,
     resultsDir,
+    timeZone,
     policyPath,
     policy
   };

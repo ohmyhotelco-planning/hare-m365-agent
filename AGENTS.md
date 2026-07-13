@@ -1,83 +1,42 @@
-# Hare M365 Agent Instructions
+# Hare M365 Agent LLM 지침
 
-## Purpose
+## 목적
 
-Hare M365 Agent lets an LLM query Microsoft 365 through Microsoft Graph delegated permissions. Default operation is read-only.
+Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDrive를 조회하는 읽기 전용 CLI입니다.
 
-## Default Cowork Flow
+## 준비
 
-Use git clone as the default setup path. Do not use GitHub API, GitHub Release asset downloads, or npmjs publish as the primary path.
+기본 경로는 GitHub API나 Release asset이 아닌 `git clone`입니다.
 
 ```bash
+git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git HEAD
+rm -rf /tmp/hare-m365-agent
 git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
-cd /tmp/hare-m365-agent
-npm ci
-npm run build
-node dist/cli.js
+cd /tmp/hare-m365-agent && npm ci && npm run build
+test -f /tmp/hare-m365-agent/dist/cli.js
+test -f /tmp/hare-m365-agent/dist/proxy.js
+test -f /tmp/hare-m365-agent/dist/msal-network.js
+cd /tmp/hare-m365-agent && node dist/cli.js
 ```
 
-If the repository already exists:
+필수 도메인은 `github.com`, `login.microsoftonline.com`, `graph.microsoft.com`, `ohmylab-my.sharepoint.com`, `ohmylab.sharepoint.com`입니다. `npm ci`가 registry 연결 오류로 실패할 때만 `registry.npmjs.org`를 추가로 요청합니다.
 
-```bash
-cd /tmp/hare-m365-agent
-git pull
-npm ci
-npm run build
-node dist/cli.js
-```
+## 로그인 하드게이트
 
-## Domain Checks
+- `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365 조회를 실행합니다.
+- 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
+- 초기 연결에서는 출력된 `humanLoginCommand`를 동일한 셸 호출에서 **포그라운드로 직접 실행**합니다.
+- 백그라운드, detached, `setsid`, `nohup` 또는 별도 프로세스로 로그인하지 않습니다.
+- Microsoft 브라우저 로그인이 끝나도 로그인 명령을 종료하지 않습니다. 명령이 `ok: true`를 반환하고 캐시 저장이 끝날 때까지 같은 호출을 유지합니다.
+- 이후 같은 `dataDir`에서 `auth status`를 실행해 `loggedIn: true`, `tokenUsable: true`를 확인합니다.
+- 사용자는 Microsoft 로그인 주소와 device code를 보고 회사 계정으로 로그인하는 과정만 수행합니다.
 
-Initial required domains:
+## 조회 기준
 
-```text
-github.com
-login.microsoftonline.com
-graph.microsoft.com
-ohmylab-my.sharepoint.com
-ohmylab.sharepoint.com
-```
+- 기간 미지정 검색은 `Asia/Seoul` 기준 최근 90일입니다. 결과의 `search.range.notice`를 답변에 포함합니다.
+- 정확한 메일 건수는 `outlook count`를 사용합니다. 기본 `all` 범위는 삭제된 메일을 제외합니다.
+- 최신 Teams 채팅은 실제 마지막 메시지 생성 시각으로 판단합니다.
+- SharePoint 사이트 존재 여부는 `sharepoint sites`로 확인합니다.
+- 일반 조회는 화면 출력을 사용하고, 파일 결과가 필요한 경우에만 `--out`을 사용합니다.
 
-SharePoint/OneDrive file content downloads may resolve to the tenant SharePoint host, not only Graph. If wildcard domains are supported, `*.sharepoint.com` can cover these hosts.
-
-If `npm ci` fails with an npm registry access error, report that `registry.npmjs.org` is additionally required and stop.
-
-Do not use `api.github.com` as the repo access test. In Cowork, GitHub API may be blocked while `git clone` succeeds. Use `git ls-remote` or `git clone`.
-
-## Storage
-
-Hare uses a fixed OS data folder. Do not create an arbitrary runtime folder.
-
-```text
-Windows: %LOCALAPPDATA%\Ohmyhotel\HareM365Agent
-Mac: ~/Library/Application Support/Ohmyhotel/HareM365Agent
-Linux: ~/.local/share/ohmyhotel/hare-m365-agent
-```
-
-If Claude/Cowork mounts the user's fixed Hare folder, set `HARE_M365_DATA_DIR="<mounted Hare folder path>"` for every Hare command so the same cache is used.
-
-## Login Gate
-
-If `loggedIn` is false, do not run Outlook, Teams, or Files lookup.
-
-`loggedIn` is scoped to the printed `dataDir` and `cacheFile`. A false value from a hosted sandbox path is not proof that the user's PC is not logged in.
-
-If a cache file exists in the fixed Hare folder, do not ask the user to login again. Run the requested read command with the same `HARE_M365_DATA_DIR`.
-
-For initial connection, run the printed `humanLoginCommand` in the same shell. Do not ask the user to type a shell command or navigate to the clone folder. The user enters the Microsoft device code in the browser, signs in with the company account, then says "로그인 완료".
-
-## Read Commands
-
-```bash
-node dist/cli.js outlook inbox --limit 10 --out latest-mail.json
-node dist/cli.js teams teams --out teams.json
-node dist/cli.js teams chats --limit 20 --out chats.json
-node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20 --out chat-messages.json
-node dist/cli.js files search --query "keyword" --limit 10 --out files.json
-```
-
-If a hosted sandbox can read the cache but Graph calls fail with `fetch failed` or `network_error`, treat it as sandbox egress trouble. Do not loop on diagnostics. Run the same command locally with `--out`, then read the JSON output.
-
-## Safety Boundary
-
-Do not send mail, post Teams messages, create calendar events, upload/delete/share files, or change permissions unless the policy explicitly allows it and the user confirms the exact action.
+메일 발송, Teams 게시, 일정 생성, 파일 업로드·삭제·공유, 권한 변경은 서비스하지 않습니다.
