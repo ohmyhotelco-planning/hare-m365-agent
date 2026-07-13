@@ -43,7 +43,8 @@ test("startup never treats cache existence alone as a successful login", () => {
   assert.equal(output.status.cacheFileExists, true);
   assert.equal(output.status.loggedIn, false);
   assert.equal(output.status.tokenUsable, false);
-  assert.equal(output.nextCommand, "LOGIN_REQUIRED_HARD_GATE");
+  assert.equal(output.setup.state, "LOGIN_START_REQUIRED");
+  assert.equal(output.setup.nextAction, "RUN_LOGIN_START");
   assert.deepEqual(output.requiredDomains, [
     "github.com",
     "registry.npmjs.org",
@@ -56,25 +57,57 @@ test("startup never treats cache existence alone as a successful login", () => {
   assert.match(output.setupCommand, /refs\/heads\/master/);
   assert.match(output.setupCommand, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.doesNotMatch(JSON.stringify(output), /required only if npm ci/);
-  assert.match(output.humanLoginCommand, /auth login-start/);
-  assert.match(output.humanLoginCompleteCommand, /auth login-complete/);
-  assert.match(output.instruction, /must finish within 25 seconds/);
-  assert.match(output.instruction, /Never keep a poller alive/);
+  assert.match(output.setup.nextCommand, /auth login-start/);
+  assert.match(output.setup.nextCommand, /--data-dir/);
+  assert.match(output.setup.nextCommand, new RegExp(escapeRegExp(dataDir)));
+  assert.match(output.setup.instruction, /Never start a background or detached poller/);
+  assert.equal(output.nextCommand, undefined);
+  assert.equal(output.llmAction, undefined);
 });
 
-test("LLM guide requires split login and all generated runtime files", () => {
+test("explicit data-dir survives as part of every follow-up command", () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare explicit data "));
+  const result = spawnSync(process.execPath, [cli, "--data-dir", dataDir], {
+    cwd: process.cwd(),
+    env: { ...process.env },
+    encoding: "utf8"
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.status.dataDir, dataDir);
+  assert.equal(output.status.dataDirSource, "command-line");
+  assert.match(output.setup.nextCommand, /--data-dir/);
+  assert.match(output.setup.nextCommand, new RegExp(escapeRegExp(dataDir)));
+
+  const statusResult = spawnSync(
+    process.execPath,
+    [cli, "--data-dir", dataDir, "auth", "status"],
+    { cwd: process.cwd(), env: { ...process.env }, encoding: "utf8" }
+  );
+  assert.equal(statusResult.status, 0, statusResult.stderr);
+  const statusOutput = JSON.parse(statusResult.stdout);
+  assert.equal(statusOutput.dataDir, dataDir);
+  assert.equal(statusOutput.setup.state, "LOGIN_START_REQUIRED");
+});
+
+test("LLM guide follows the explicit setup state contract", () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-guide-"));
   const result = run(["llm-guide"], dataDir);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /백그라운드, detached, setsid, nohup/);
   assert.match(result.stdout, /아래 6개 도메인/);
   assert.match(result.stdout, /registry\.npmjs\.org/);
   assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(result.stdout, /npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 않는다/);
   assert.match(result.stdout, /dist\/msal-network\.js/);
-  assert.match(result.stdout, /auth login-start/);
-  assert.match(result.stdout, /auth login-complete/);
-  assert.match(result.stdout, /dataDirPersistent가 false/);
+  assert.match(result.stdout, /setup\.state/);
+  assert.match(result.stdout, /FOLDER_REQUIRED/);
+  assert.match(result.stdout, /LOGIN_START_REQUIRED/);
+  assert.match(result.stdout, /LOGIN_COMPLETE_REQUIRED/);
+  assert.match(result.stdout, /setup\.nextCommand를 수정하지 않고/);
+  assert.match(result.stdout, /%USERPROFILE%\\HareM365Agent/);
+  assert.doesNotMatch(result.stdout, /computer-use/);
+  assert.doesNotMatch(result.stdout, /%USERPROFILE%\\Documents/);
 });
 
 test("startup blocks login when the default data directory is a hosted-session path", () => {
@@ -89,9 +122,47 @@ test("startup blocks login when the default data directory is a hosted-session p
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.status.dataDirPersistent, false);
-  assert.equal(output.nextCommand, "PERSISTENT_DATA_DIR_REQUIRED");
-  assert.equal(output.llmAction, "REQUEST_DOCUMENTS_FOLDER_ACCESS");
-  assert.equal(output.humanLoginCommand, undefined);
+  assert.equal(output.setup.state, "FOLDER_REQUIRED");
+  assert.equal(output.setup.nextAction, "CONNECT_FIXED_FOLDER");
+  assert.deepEqual(output.setup.fixedHostDataDirs, {
+    windows: "%USERPROFILE%\\HareM365Agent",
+    mac: "~/HareM365Agent"
+  });
+  assert.doesNotMatch(JSON.stringify(output.setup), /Documents|OneDrive|computer-use/i);
+});
+
+test("--data-dir cannot falsely mark a hosted-session path as persistent", () => {
+  const hostedPath = path.join(path.parse(process.cwd()).root, "sessions", "temporary-hare-data");
+  const result = spawnSync(process.execPath, [cli, "--data-dir", hostedPath], {
+    cwd: process.cwd(),
+    env: { ...process.env },
+    encoding: "utf8"
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.status.dataDirPersistent, false);
+  assert.equal(output.setup.state, "FOLDER_REQUIRED");
+});
+
+test("startup, doctor, and auth status expose the same setup state", () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-consistent-state-"));
+  const startup = run([], dataDir);
+  const doctor = run(["doctor"], dataDir);
+  const authStatus = run(["auth", "status"], dataDir);
+
+  assert.equal(startup.status, 0, startup.stderr);
+  assert.equal(doctor.status, 0, doctor.stderr);
+  assert.equal(authStatus.status, 0, authStatus.stderr);
+
+  const setupStates = [startup, doctor, authStatus].map(
+    (result) => JSON.parse(result.stdout).setup.state
+  );
+  assert.deepEqual(setupStates, [
+    "LOGIN_START_REQUIRED",
+    "LOGIN_START_REQUIRED",
+    "LOGIN_START_REQUIRED"
+  ]);
 });
 
 test("parallel status checks serialize cache access without leaving a lock", async () => {
@@ -124,6 +195,20 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.match(html, /auth login-start/);
   assert.match(html, /auth login-complete/);
-  assert.match(html, /문서\(Documents\).*선택하고 허용하세요/);
+  assert.match(html, /setup\.state만 확인하고/);
+  assert.match(html, /FOLDER_REQUIRED/);
+  assert.match(html, /LOGIN_START_REQUIRED/);
+  assert.match(html, /LOGIN_COMPLETE_REQUIRED/);
+  assert.match(html, /setup\.nextCommand를 수정하지 않고/);
+  assert.match(html, /%USERPROFILE%\\HareM365Agent/);
+  assert.match(html, /~\/HareM365Agent/);
+  assert.doesNotMatch(html, /computer-use/);
+  assert.doesNotMatch(html, /%USERPROFILE%\\Documents/);
+  assert.doesNotMatch(html, /문서\(Documents\) 폴더 접근을 요청해/);
+  assert.doesNotMatch(html, /마운트된 Documents/);
   assert.doesNotMatch(html, /셸 호출을 닫거나 반환하지 말고 Microsoft 로그인 완료 후/);
 });
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

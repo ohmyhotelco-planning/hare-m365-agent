@@ -90,7 +90,7 @@ test("login-start refuses an unmounted hosted-session data directory", async () 
   };
   await assert.rejects(
     () => startDeviceLogin(config, ["User.Read"]),
-    /PERSISTENT_DATA_DIR_REQUIRED/
+    /FOLDER_REQUIRED/
   );
 });
 

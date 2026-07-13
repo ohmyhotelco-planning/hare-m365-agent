@@ -99,7 +99,9 @@ async function acquireFileLock(lockPath: string): Promise<() => void> {
       };
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
+      const windowsLockContention =
+        (code === "EPERM" || code === "EACCES") && fs.existsSync(lockPath);
+      if (code !== "EEXIST" && !windowsLockContention) throw error;
 
       try {
         const lockAge = Date.now() - fs.statSync(lockPath).mtimeMs;
@@ -109,7 +111,15 @@ async function acquireFileLock(lockPath: string): Promise<() => void> {
           continue;
         }
       } catch (statError) {
-        if ((statError as NodeJS.ErrnoException).code === "ENOENT") continue;
+        const statCode = (statError as NodeJS.ErrnoException).code;
+        if (statCode === "ENOENT") continue;
+        if (statCode === "EPERM" || statCode === "EACCES") {
+          if (Date.now() >= deadline) {
+            throw new Error("Timed out waiting for the Hare login cache lock.");
+          }
+          await new Promise((resolve) => setTimeout(resolve, cacheLockRetryMs));
+          continue;
+        }
         throw statError;
       }
 
@@ -182,6 +192,20 @@ export async function completeLogin(
   }
 
   if (!result) throw new Error("Login failed: Microsoft returned no authentication result.");
+  if (!result.account || !result.accessToken) {
+    clearDeviceLoginState(config);
+    throw new Error(
+      "LOGIN_CACHE_VERIFICATION_FAILED: Microsoft sign-in returned without a usable account or access token. Run auth login-start again."
+    );
+  }
+
+  const verifiedStatus = await getAuthStatus(config);
+  if (!verifiedStatus.loggedIn || !verifiedStatus.tokenUsable) {
+    clearDeviceLoginState(config);
+    throw new Error(
+      `LOGIN_CACHE_VERIFICATION_FAILED: ${verifiedStatus.reason ?? "Persisted token is unavailable"}. Run auth login-start again.`
+    );
+  }
   clearDeviceLoginState(config);
   return result;
 }

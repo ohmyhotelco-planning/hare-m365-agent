@@ -152,7 +152,7 @@ export class ResumeDeviceCodeNetworkClient implements INetworkModule {
 export function requirePersistentDataDir(config: AppConfig): void {
   if (config.dataDirPersistent) return;
   throw new Error(
-    "PERSISTENT_DATA_DIR_REQUIRED: This Cowork session is using a temporary /sessions or /tmp data folder. Request access to the user's Documents folder, create a 'Hare M365 Agent' subfolder there, set HARE_M365_DATA_DIR to that mounted subfolder for every Hare command, and retry."
+    "FOLDER_REQUIRED: Connect the fixed HareM365Agent folder and rerun startup with --data-dir set to its mounted root before login."
   );
 }
 

@@ -36,7 +36,7 @@ export type AppConfig = {
   tenantId: string;
   authority: string;
   dataDir: string;
-  dataDirSource: "environment" | "os-default";
+  dataDirSource: "command-line" | "environment" | "os-default";
   dataDirPersistent: boolean;
   cacheDir: string;
   downloadDir: string;
@@ -78,7 +78,13 @@ function readDefaultConfig(): HareDefaultConfig {
   return readJson<HareDefaultConfig>(path.join(packageRoot, "hare.config.json"), {});
 }
 
-function defaultDataDir(): { value: string; source: "environment" | "os-default" } {
+function defaultDataDir(
+  commandLineDataDir?: string
+): { value: string; source: "command-line" | "environment" | "os-default" } {
+  if (commandLineDataDir) {
+    return { value: commandLineDataDir, source: "command-line" };
+  }
+
   const explicitDataDir = process.env.HARE_M365_DATA_DIR ?? process.env.OMH_M365_DATA_DIR;
   if (explicitDataDir) {
     return { value: explicitDataDir, source: "environment" };
@@ -103,14 +109,13 @@ function resolvePackagePath(value: string | undefined, fallback: string): string
   return path.resolve(path.isAbsolute(value) ? value : path.join(packageRoot, value));
 }
 
-export function loadConfig(): AppConfig {
+export function loadConfig(overrides: { dataDir?: string } = {}): AppConfig {
   const defaults = readDefaultConfig();
   const clientId = process.env.OMH_M365_CLIENT_ID ?? defaults.clientId ?? "";
   const tenantId = process.env.OMH_M365_TENANT_ID ?? defaults.tenantId ?? "";
-  const dataDirSetting = defaultDataDir();
+  const dataDirSetting = defaultDataDir(overrides.dataDir);
   const dataDir = path.resolve(dataDirSetting.value);
-  const dataDirPersistent =
-    dataDirSetting.source === "environment" || !isHostedSessionPath(dataDir);
+  const dataDirPersistent = !isHostedSessionPath(dataDir);
   const policyPath = resolvePackagePath(process.env.OMH_M365_POLICY_PATH ?? defaults.policyPath, path.join(packageRoot, "policy.json"));
   const cacheDir = path.join(dataDir, ".cache");
   const downloadDir = path.join(dataDir, "downloads");

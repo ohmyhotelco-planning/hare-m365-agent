@@ -57,9 +57,9 @@ Mac: ~/Library/Application Support/Ohmyhotel/HareM365Agent
 Linux: ~/.local/share/ohmyhotel/hare-m365-agent
 ```
 
-`loggedIn`과 `tokenUsable`이 모두 `true`일 때만 조회 가능한 상태입니다. 캐시 파일이 존재하더라도 토큰을 획득할 수 없으면 로그인 완료로 판단하지 않습니다.
+`loggedIn`과 `tokenUsable`이 모두 `true`일 때만 조회 가능한 상태입니다. 캐시 파일이 존재하더라도 토큰을 획득할 수 없으면 로그인 완료로 판단하지 않습니다. `auth login-complete`도 저장된 캐시를 다시 열어 검증한 뒤에만 `COMPLETE`를 반환합니다.
 
-Cowork에서 `dataDirPersistent: false`가 나오면 로그인 전에 사용자의 Documents 폴더를 연결하고, 마운트된 폴더 아래 `Hare M365 Agent`를 `HARE_M365_DATA_DIR`로 지정합니다. `/sessions` 또는 `/tmp` 기본 저장소에서는 로그인이 거부됩니다.
+Cowork에서는 startup JSON의 `setup.state`와 `setup.nextAction` 하나만 따릅니다. `FOLDER_REQUIRED`이면 Windows `%USERPROFILE%\HareM365Agent` 또는 Mac `~/HareM365Agent` 폴더를 최초 1회 만들고 연결한 뒤, 마운트된 폴더를 `--data-dir`로 지정해 startup을 다시 실행합니다. 이후에는 CLI가 반환한 `setup.nextCommand`를 수정하지 않고 실행합니다. 이 명령에는 동일한 `--data-dir`가 포함되므로 셸이 바뀌어도 같은 캐시를 사용합니다. `/sessions` 또는 `/tmp` 기본 저장소에서는 로그인이 거부됩니다.
 
 초기 로그인은 45초 셸 제한에 맞춘 두 단계입니다.
 
