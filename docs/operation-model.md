@@ -36,7 +36,8 @@ LLM -> local shell/Cowork sandbox -> git clone -> npm ci(--prefer-offline, no au
 - GitHub API 또는 GitHub Release asset 다운로드를 기본 경로로 사용하지 않음
 - `npm ci --prefer-offline --no-audit --no-fund`, `npm run build`, `node dist/cli.js` 실행
 - `doctor`, `auth status` 진단
-- `auth login`을 동일한 셸 호출의 포그라운드에서 완료하고 성공 응답 후 상태 재확인
+- Cowork Documents 폴더를 연결하고 영구 `HARE_M365_DATA_DIR` 준비
+- `auth login-start`와 `auth login-complete`로 45초 제한 안에서 인증 완료 후 상태 재확인
 - 조회 limit을 작게 시작하고 필요한 만큼만 확장
 - 메일/채팅/파일/토큰/캐시 원문 덤프 지양
 - 인증, 승인, 권한 전략, 되돌리기 어려운 작업은 사람에게 요청

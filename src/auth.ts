@@ -4,9 +4,17 @@ import {
   PublicClientApplication,
   type AccountInfo,
   type AuthenticationResult,
-  type Configuration
+  type Configuration,
+  type INetworkModule
 } from "@azure/msal-node";
 import type { AppConfig } from "./config.js";
+import {
+  clearDeviceLoginState,
+  readDeviceLoginState,
+  ResumeDeviceCodeNetworkClient,
+  startDeviceLogin,
+  type DeviceLoginStartResult
+} from "./device-login.js";
 import { ProxyAwareNetworkClient } from "./msal-network.js";
 
 const scopes = [
@@ -29,7 +37,10 @@ function cachePath(config: AppConfig): string {
   return path.join(config.cacheDir, "msal-cache.json");
 }
 
-async function buildPca(config: AppConfig): Promise<PublicClientApplication> {
+async function buildPca(
+  config: AppConfig,
+  networkClient: INetworkModule = new ProxyAwareNetworkClient()
+): Promise<PublicClientApplication> {
   let releaseCacheLock: (() => void) | undefined;
   const msalConfig: Configuration = {
     auth: {
@@ -65,7 +76,7 @@ async function buildPca(config: AppConfig): Promise<PublicClientApplication> {
       }
     },
     system: {
-      networkClient: new ProxyAwareNetworkClient()
+      networkClient
     }
   };
 
@@ -134,16 +145,44 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export async function login(config: AppConfig): Promise<AuthenticationResult> {
-  const pca = await buildPca(config);
-  const result = await pca.acquireTokenByDeviceCode({
-    scopes,
-    deviceCodeCallback: (response) => {
-      console.log(response.message);
+export async function startLogin(config: AppConfig): Promise<DeviceLoginStartResult> {
+  return startDeviceLogin(config, scopes);
+}
+
+export async function completeLogin(
+  config: AppConfig,
+  networkClient: INetworkModule = new ProxyAwareNetworkClient()
+): Promise<AuthenticationResult> {
+  const state = readDeviceLoginState(config);
+  if ([...state.scopes].sort().join(" ") !== [...scopes].sort().join(" ")) {
+    clearDeviceLoginState(config);
+    throw new Error("Pending login scopes changed. Run auth login-start again.");
+  }
+  const pca = await buildPca(config, new ResumeDeviceCodeNetworkClient(state, networkClient));
+  let result: AuthenticationResult | null;
+  try {
+    result = await pca.acquireTokenByDeviceCode({
+      scopes: state.scopes,
+      deviceCodeCallback: () => undefined,
+      timeout: 25
+    });
+  } catch (error) {
+    const message = errorMessage(error);
+    const diagnostic = `${(error as { errorCode?: string }).errorCode ?? ""} ${message}`;
+    if (/expired/i.test(diagnostic)) {
+      clearDeviceLoginState(config);
+      throw new Error("LOGIN_CODE_EXPIRED: Run auth login-start again.");
     }
-  });
+    if (/polling_cancelled|authorization_pending|timeout/i.test(diagnostic)) {
+      throw new Error(
+        "LOGIN_PENDING: Microsoft sign-in is not complete yet. Keep the existing code, finish the browser sign-in, then run auth login-complete again."
+      );
+    }
+    throw error;
+  }
 
   if (!result) throw new Error("Login failed: Microsoft returned no authentication result.");
+  clearDeviceLoginState(config);
   return result;
 }
 
@@ -193,7 +232,7 @@ export async function getAccessToken(config: AppConfig): Promise<string> {
   const account = accounts[0] ?? null;
   if (!account) {
     throw new Error(
-      "Not logged in for this Hare dataDir/cacheFile. During initial connection, run Hare auth login in the same shell, let the user complete Microsoft device-code login, then retry in the same dataDir/cacheFile."
+      "Not logged in for this Hare dataDir/cacheFile. Run auth login-start, let the user finish Microsoft sign-in, then run auth login-complete and retry in the same dataDir."
     );
   }
 
@@ -209,6 +248,7 @@ export async function getAccessToken(config: AppConfig): Promise<string> {
 export function logout(config: AppConfig): void {
   const file = cachePath(config);
   if (fs.existsSync(file)) fs.rmSync(file, { force: true });
+  clearDeviceLoginState(config);
 }
 
 export function getScopeList(): string[] {

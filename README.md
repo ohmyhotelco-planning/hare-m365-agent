@@ -21,10 +21,13 @@ https://github.com/ohmyhotelco-planning/hare-m365-agent.git
 초기 준비:
 
 ```bash
+REMOTE_HEAD=$(git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git refs/heads/master | awk '{print $1}')
+test -n "$REMOTE_HEAD"
 rm -rf /tmp/hare-m365-agent
 test ! -e /tmp/hare-m365-agent
-git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
-git -C /tmp/hare-m365-agent rev-parse --short HEAD
+git clone --branch master --single-branch --no-tags https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
+LOCAL_HEAD=$(git -C /tmp/hare-m365-agent rev-parse HEAD)
+test "$LOCAL_HEAD" = "$REMOTE_HEAD"
 test ! -d /tmp/hare-m365-agent/node_modules
 cd /tmp/hare-m365-agent && npm ci --prefer-offline --no-audit --no-fund
 cd /tmp/hare-m365-agent && npm run build
@@ -34,16 +37,7 @@ test -f /tmp/hare-m365-agent/dist/msal-network.js
 cd /tmp/hare-m365-agent && node dist/cli.js
 ```
 
-이미 clone되어 있으면:
-
-```bash
-git -C /tmp/hare-m365-agent pull
-cd /tmp/hare-m365-agent && npm ci --prefer-offline --no-audit --no-fund
-cd /tmp/hare-m365-agent && npm run build
-cd /tmp/hare-m365-agent && node dist/cli.js
-```
-
-Cowork의 셸 호출마다 작업 폴더가 초기화될 수 있으므로 각 명령에 `/tmp/hare-m365-agent`를 명시합니다. 준비나 빌드 단계가 실패하면 다른 폴더의 `node_modules` 또는 `dist`로 대체하지 않습니다.
+Cowork에서는 기존 clone을 업데이트해 재사용하지 않습니다. 매번 임시 작업 폴더를 지우고 `master`를 새로 clone한 뒤 `LOCAL_HEAD`와 `REMOTE_HEAD`가 일치할 때만 빌드합니다. 셸 호출마다 작업 폴더가 초기화될 수 있으므로 각 명령에 `/tmp/hare-m365-agent`를 명시합니다.
 
 최초 설치에는 `registry.npmjs.org`가 필수입니다. `npm ci`가 실패하면 백그라운드 실행이나 `npm install` 증분 설치로 우회하지 않고 원인을 보고합니다.
 
@@ -65,7 +59,18 @@ Linux: ~/.local/share/ohmyhotel/hare-m365-agent
 
 `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 조회 가능한 상태입니다. 캐시 파일이 존재하더라도 토큰을 획득할 수 없으면 로그인 완료로 판단하지 않습니다.
 
-초기 로그인은 `node dist/cli.js auth login`을 동일한 셸 호출에서 포그라운드로 실행합니다. 백그라운드·detached·`setsid`·`nohup`으로 분리하지 않으며, Microsoft 브라우저 로그인이 끝난 뒤 명령이 `ok: true`를 반환하고 캐시 저장이 완료될 때까지 호출을 유지합니다.
+Cowork에서 `dataDirPersistent: false`가 나오면 로그인 전에 사용자의 Documents 폴더를 연결하고, 마운트된 폴더 아래 `Hare M365 Agent`를 `HARE_M365_DATA_DIR`로 지정합니다. `/sessions` 또는 `/tmp` 기본 저장소에서는 로그인이 거부됩니다.
+
+초기 로그인은 45초 셸 제한에 맞춘 두 단계입니다.
+
+```bash
+node dist/cli.js auth login-start
+# 사용자가 브라우저에서 회사 Microsoft 계정 로그인
+node dist/cli.js auth login-complete
+node dist/cli.js auth status
+```
+
+`login-start`는 주소와 user code를 즉시 반환하고 종료합니다. `login-complete`는 최대 25초만 토큰을 확인하므로 장기 poller나 백그라운드 프로세스가 필요하지 않습니다.
 
 ## 주요 명령
 

@@ -9,9 +9,12 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 기본 경로는 GitHub API나 Release asset이 아닌 `git clone`입니다.
 
 ```bash
-git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git HEAD
+REMOTE_HEAD=$(git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git refs/heads/master | awk '{print $1}')
+test -n "$REMOTE_HEAD"
 rm -rf /tmp/hare-m365-agent
-git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
+git clone --branch master --single-branch --no-tags https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
+LOCAL_HEAD=$(git -C /tmp/hare-m365-agent rev-parse HEAD)
+test "$LOCAL_HEAD" = "$REMOTE_HEAD"
 cd /tmp/hare-m365-agent && npm ci --prefer-offline --no-audit --no-fund && npm run build
 test -f /tmp/hare-m365-agent/dist/cli.js
 test -f /tmp/hare-m365-agent/dist/proxy.js
@@ -27,11 +30,13 @@ cd /tmp/hare-m365-agent && node dist/cli.js
 
 - `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365 조회를 실행합니다.
 - 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
-- 초기 연결에서는 출력된 `humanLoginCommand`를 동일한 셸 호출에서 **포그라운드로 직접 실행**합니다.
-- 백그라운드, detached, `setsid`, `nohup` 또는 별도 프로세스로 로그인하지 않습니다.
-- Microsoft 브라우저 로그인이 끝나도 로그인 명령을 종료하지 않습니다. 명령이 `ok: true`를 반환하고 캐시 저장이 끝날 때까지 같은 호출을 유지합니다.
+- `dataDirPersistent: false`이면 폴더 연결 도구로 사용자의 Documents 폴더 접근을 요청하고, 마운트된 폴더에 `Hare M365 Agent` 하위 폴더를 만든 뒤 모든 Hare 명령에 동일한 `HARE_M365_DATA_DIR`를 사용합니다.
+- `auth login-start`는 Microsoft 로그인 주소와 코드를 즉시 반환하고 종료합니다.
+- 사용자가 브라우저 로그인을 완료하면 별도 셸 호출에서 `auth login-complete`를 실행합니다. 이 명령은 최대 25초만 실행됩니다.
+- 장기 poller, 백그라운드, detached, `setsid`, `nohup`을 사용하지 않습니다.
+- `LOGIN_PENDING`이면 기존 코드로 `auth login-complete`만 다시 실행하고, 코드가 만료된 경우에만 `auth login-start`를 다시 실행합니다.
 - 이후 같은 `dataDir`에서 `auth status`를 실행해 `loggedIn: true`, `tokenUsable: true`를 확인합니다.
-- 사용자는 Microsoft 로그인 주소와 device code를 보고 회사 계정으로 로그인하는 과정만 수행합니다.
+- 사용자는 Microsoft 로그인 주소와 user code를 보고 회사 계정으로 로그인하는 과정만 수행합니다.
 
 ## 조회 기준
 

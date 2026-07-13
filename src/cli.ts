@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { getAuthStatus, getScopeList, login, logout } from "./auth.js";
+import { completeLogin, getAuthStatus, getScopeList, startLogin, logout } from "./auth.js";
 import { ensureRuntimeDirs, loadConfig, requireConfigured } from "./config.js";
+import { deviceLoginStatePath } from "./device-login.js";
 import {
   countMailboxMessages,
   listInbox,
@@ -67,11 +68,13 @@ const llmGuide = `# Hare M365 Agent LLM Guide
 
 준비 명령:
 \`\`\`bash
-git ls-remote ${repoUrl} HEAD
+REMOTE_HEAD=$(git ls-remote ${repoUrl} refs/heads/master | awk '{print $1}')
+test -n "$REMOTE_HEAD"
 rm -rf ${defaultWorkDir}
 test ! -e ${defaultWorkDir}
-git clone ${repoUrl} ${defaultWorkDir}
-git -C ${defaultWorkDir} rev-parse --short HEAD
+git clone --branch master --single-branch --no-tags ${repoUrl} ${defaultWorkDir}
+LOCAL_HEAD=$(git -C ${defaultWorkDir} rev-parse HEAD)
+test "$LOCAL_HEAD" = "$REMOTE_HEAD"
 test ! -d ${defaultWorkDir}/node_modules
 cd ${defaultWorkDir} && npm ci --prefer-offline --no-audit --no-fund
 cd ${defaultWorkDir} && npm run build
@@ -84,26 +87,22 @@ cd ${defaultWorkDir} && node dist/cli.js
 각 셸 호출은 작업 폴더가 초기화될 수 있으므로 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시한다. 준비부터 로그인까지 새로 clone한 이 폴더만 사용한다. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고한다. npm 설치를 백그라운드로 전환하거나 npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 않는다.
 
 로그인 하드게이트:
-- 시작 명령 또는 auth status 결과에서 loggedIn이 false이면 Outlook/Teams/Files 조회를 실행하지 않는다.
-- loggedIn 값은 출력 JSON의 dataDir/cacheFile 기준 상태다. hosted sandbox나 컨테이너의 dataDir에서 나온 false를 사용자 PC 로그인 실패로 해석하지 않는다.
-- 사용자가 이미 로그인했다고 말했는데 dataDir가 /sessions, /tmp 같은 임시 샌드박스 경로라면 로그인 실패가 아니라 파일시스템 저장 위치 불일치로 판단한다.
-- 그 경우 이미 git clone/build가 끝났다면 소스 분석이나 네트워크 진단으로 빠지지 말고, 출력 JSON의 cacheFile 또는 OS별 고정 Hare 저장 위치 접근 권한을 요청해 로그인 캐시 파일 존재 여부를 확인한다.
-- cacheFile 존재만으로 로그인 성공으로 판단하지 않는다. loggedIn/tokenUsable이 true일 때만 조회를 진행한다.
-- 초기 연결에서는 humanLoginCommand를 안내만 하지 말고 LLM이 같은 셸 호출에서 포그라운드로 직접 실행한다.
-- auth login을 백그라운드, detached, setsid, nohup 또는 별도 프로세스로 실행하지 않는다.
-- auth login 셸 호출을 닫거나 반환하지 말고 Microsoft 로그인 완료 후 ok:true 성공 JSON과 캐시 저장이 확인될 때까지 유지한다.
-- 사용자가 브라우저 로그인을 마쳤다고 말해도 실행 중인 auth login을 종료하지 않는다. auth login 자체가 성공 반환한 다음 auth status를 확인한다.
-- 사용자는 명령어를 복사해 실행하지 않는다. 사용자는 auth login 출력에 표시되는 Microsoft 로그인 주소와 device code만 보고 브라우저에서 입력한다.
-- 사용자에게 다음 로그인 절차를 짧게 안내한다: 브라우저에서 코드 입력 -> 회사 Microsoft 계정 로그인 -> 완료 후 "로그인 완료"라고 말하기.
-- 브라우저가 자동으로 열리지 않으면 터미널에 표시된 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 직접 붙여 넣도록 안내한다. Mac에서는 Command+클릭도 가능하다고 안내한다.
-- 사용자가 "로그인 완료"라고 말하면 다시 시작 명령 또는 auth status를 실행한 뒤 원래 요청을 이어간다.
+- 시작 명령 또는 auth status 결과에서 loggedIn/tokenUsable이 false이면 Outlook/Teams/Files 조회를 실행하지 않는다.
+- dataDirPersistent가 false이면 Microsoft 로그인을 시작하지 않는다. 폴더 연결 도구로 사용자의 Documents 폴더 접근을 요청하고, 마운트된 폴더 안에 "Hare M365 Agent" 하위 폴더를 만든다.
+- 이후 모든 Hare 명령에 HARE_M365_DATA_DIR="<마운트된 Documents>/Hare M365 Agent"를 사용한다. 사용자에게 경로를 입력하거나 선택지를 고르라고 요구하지 않는다.
+- 같은 dataDir로 다시 시작 상태를 확인한 뒤 humanLoginCommand(auth login-start)를 한 번 실행한다. 이 명령은 로그인 주소와 userCode를 즉시 반환하고 종료된다.
+- 주소와 코드를 사용자에게 보여주고 브라우저에서 회사 Microsoft 계정으로 로그인한 뒤 "로그인 완료"라고 말하도록 안내한다.
+- 사용자가 완료를 알리면 humanLoginCompleteCommand(auth login-complete)를 새 포그라운드 셸 호출로 실행한다. 이 명령은 최대 25초만 폴링한다.
+- poller를 계속 실행하거나 백그라운드, detached, setsid, nohup을 사용하지 않는다.
+- login-complete가 authorization_pending이면 login-start를 다시 실행하지 말고 사용자 로그인 완료 여부를 확인한 뒤 login-complete만 재실행한다. 코드가 만료된 경우에만 login-start를 다시 실행한다.
+- login-complete 성공 후 같은 dataDir에서 auth status를 실행해 loggedIn/tokenUsable이 모두 true인지 확인한다.
+- cacheFile 존재만으로 로그인 성공으로 판단하지 않는다.
 
 저장 위치:
-- Hare는 항상 status.dataDir에 표시되는 고정 저장 위치를 사용한다.
-- 임의의 별도 저장 폴더를 만들지 않는다.
-- LLM 실행환경에서 사용자 PC의 고정 Hare 폴더 접근 권한이 없으면 선택지를 묻지 말고 그 고정 폴더 저장 접근 허용을 요청한다.
-- Cowork/hosted sandbox에서 고정 Hare 폴더가 마운트되면 이후 모든 Hare 명령 앞에 HARE_M365_DATA_DIR="<마운트된 Hare 폴더 경로>"를 붙여 같은 캐시를 사용한다.
-- 접근 허용 후 같은 HARE_M365_DATA_DIR 값으로 다시 시작 명령 또는 auth status를 실행한다.
+- 로컬 Windows/Mac/Linux에서는 OS 기본 고정 dataDir를 사용한다.
+- Cowork/hosted sandbox에서는 연결된 Documents 폴더 아래 "Hare M365 Agent"를 고정 dataDir로 사용한다.
+- /sessions 또는 /tmp 기본 경로에서는 login-start가 거부된다.
+- 연결 후 모든 Hare 명령에 동일한 HARE_M365_DATA_DIR 값을 사용한다.
 
 hosted sandbox Graph 실패 때:
 - cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed, network_error 등으로 실패하면 토큰 문제가 아니라 sandbox egress 문제로 판단한다.
@@ -135,7 +134,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - 메일 건수 질문은 검색 인덱스 결과를 세지 말고 outlook count로 전체 페이지를 검사한다.
 - SharePoint 사이트 존재 여부는 sharepoint sites로 확인한다. 개인 OneDrive만 검색하는 files search 결과로 사이트 존재나 접근 권한을 판단하지 않는다.
 - 메일 발송, Teams 게시, 일정 생성, 파일 업로드/삭제/공유, 권한 변경은 수행하지 않는다.
-- Microsoft device code, 토큰 캐시, 쿠키, credential 값은 채팅에 붙여 넣거나 출력하지 않는다.
+- login-start의 userCode와 verificationUri는 현재 사용자에게 한 번 보여준다. 내부 device_code, 토큰 캐시, 쿠키, credential 값은 출력하거나 반복하지 않는다.
 - Teams 최신 채팅 판단은 lastMessageCreatedDateTime을 우선한다. lastUpdatedDateTime만으로 최신 메시지 방을 판단하지 않는다.
 `;
 
@@ -162,11 +161,13 @@ repo 접근은 git ls-remote 또는 git clone으로 판단해.
 
 아래 순서로 준비해.
 
-git ls-remote ${repoUrl} HEAD
+REMOTE_HEAD=$(git ls-remote ${repoUrl} refs/heads/master | awk '{print $1}')
+test -n "$REMOTE_HEAD"
 rm -rf ${defaultWorkDir}
 test ! -e ${defaultWorkDir}
-git clone ${repoUrl} ${defaultWorkDir}
-git -C ${defaultWorkDir} rev-parse --short HEAD
+git clone --branch master --single-branch --no-tags ${repoUrl} ${defaultWorkDir}
+LOCAL_HEAD=$(git -C ${defaultWorkDir} rev-parse HEAD)
+test "$LOCAL_HEAD" = "$REMOTE_HEAD"
 test ! -d ${defaultWorkDir}/node_modules
 cd ${defaultWorkDir} && npm ci --prefer-offline --no-audit --no-fund
 cd ${defaultWorkDir} && npm run build
@@ -177,27 +178,17 @@ cd ${defaultWorkDir} && node dist/cli.js
 
 각 셸 호출은 작업 폴더가 초기화될 수 있어. 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시해. 준비부터 로그인까지 새로 clone한 이 폴더만 사용해. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고해. npm 설치를 백그라운드로 돌리거나 npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 마.
 
-결과에서 loggedIn이 true이면 바로 내 요청을 처리해.
-loggedIn이 false이면 결과 JSON의 dataDir/cacheFile 기준으로 판단해.
-단, loggedIn 값은 결과 JSON의 dataDir/cacheFile 기준 상태야. hosted sandbox나 컨테이너 경로에서 나온 false를 사용자 PC 로그인 실패로 해석하지 마.
-내가 이미 로그인했다고 말했는데 dataDir가 /sessions, /tmp 같은 임시 샌드박스 경로라면 로그인 실패가 아니라 파일시스템 저장 위치 불일치로 판단해.
-그 경우 이미 git clone/build가 끝났다면 추가 소스 분석이나 네트워크 진단으로 빠지지 말고, 결과 JSON의 cacheFile 또는 OS별 고정 Hare 저장 위치 접근 권한을 요청해서 로그인 캐시 파일 존재 여부부터 확인해.
-cacheFile 존재만으로 로그인 성공으로 판단하지 마. loggedIn과 tokenUsable이 true일 때만 요청된 조회를 진행해.
-초기 연결에서는 humanLoginCommand를 안내만 하지 말고 같은 셸 호출에서 포그라운드로 직접 실행해.
-auth login을 백그라운드, detached, setsid, nohup 또는 별도 프로세스로 실행하지 마.
-auth login 셸 호출을 닫거나 반환하지 말고 Microsoft 로그인 완료 후 ok:true 성공 JSON과 캐시 저장이 확인될 때까지 유지해.
-내가 브라우저 로그인을 마쳤다고 말해도 실행 중인 auth login을 종료하지 마. auth login 자체가 성공 반환한 다음 auth status를 확인해.
-사용자에게 명령어를 복사해 실행하라고 시키지 마.
-사용자는 auth login 출력에 표시되는 Microsoft 로그인 주소와 device code만 보고 브라우저에서 입력하면 돼.
-사용자가 해야 할 로그인 절차도 같이 안내해: 브라우저에서 코드 입력 -> 회사 Microsoft 계정 로그인 -> 완료 후 "로그인 완료"라고 말하기.
-브라우저가 자동으로 열리지 않으면 터미널에 표시된 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 직접 붙여 넣으라고 안내해. Mac에서는 Command+클릭도 가능하다고 안내해.
-git clone/build 이후에는 소스 재확인, 도메인 사진, network_error 원인 분석 루프를 시작하지 마.
-내가 "로그인 완료"라고 말하면 다시 시작 명령 또는 auth status를 확인하고 원래 요청을 이어서 처리해.
+결과에서 loggedIn과 tokenUsable이 모두 true이면 바로 내 요청을 처리해.
+둘 중 하나라도 false이고 dataDirPersistent가 false이면 로그인부터 시도하지 마. 폴더 연결 도구로 내 Documents 폴더 접근을 요청하고, 연결된 폴더 안에 "Hare M365 Agent" 하위 폴더를 만들어. 선택지를 묻거나 경로를 직접 입력하라고 하지 마.
+이후 모든 Hare 명령에 HARE_M365_DATA_DIR="<마운트된 Documents>/Hare M365 Agent"를 붙이고 같은 값으로 시작 상태를 다시 확인해.
 
-Hare는 고정 저장 위치만 사용해. 임의의 별도 저장 폴더를 만들지 마.
-네 실행환경에서 사용자 PC의 고정 Hare 폴더 접근 권한이 없으면 선택지를 묻지 말고 그 고정 폴더 접근 허용을 요청해.
-Cowork/hosted sandbox에서 고정 Hare 폴더가 마운트되면 이후 모든 Hare 명령 앞에 HARE_M365_DATA_DIR="<마운트된 Hare 폴더 경로>"를 붙여 같은 캐시를 사용해.
-허용되면 같은 HARE_M365_DATA_DIR 값으로 다시 시작 명령 또는 auth status를 실행하고 이어서 처리해.
+dataDirPersistent가 true인데 로그인이 필요하면 humanLoginCommand(auth login-start)를 네가 실행해. 이 명령은 Microsoft 로그인 주소와 userCode를 즉시 반환하고 끝나야 해.
+주소와 코드를 나에게 보여주고 브라우저에서 회사 Microsoft 계정으로 로그인한 뒤 "로그인 완료"라고 말하라고 짧게 안내해.
+내가 "로그인 완료"라고 말하면 humanLoginCompleteCommand(auth login-complete)를 새 포그라운드 셸 호출로 실행해. 이 명령은 25초 안에 끝나야 해.
+poller를 계속 실행하거나 백그라운드, detached, setsid, nohup을 사용하지 마.
+authorization_pending이면 login-start를 다시 실행하지 말고 login-complete만 다시 실행해. 코드가 만료된 경우에만 login-start를 다시 실행해.
+성공 후 같은 HARE_M365_DATA_DIR로 auth status를 실행하고 loggedIn과 tokenUsable이 모두 true인지 확인해.
+cacheFile 존재만으로 로그인 성공으로 판단하지 마.
 
 cacheFile이 있는데 Outlook/Teams/Files 조회가 fetch failed 또는 network_error로 실패하면 sandbox 네트워크 문제로 판단해.
 clone/build를 반복하지 말고, 도메인 사진확인이나 반복 호출 루프를 시작하지 마.
@@ -218,7 +209,11 @@ function getSelfCommand(): string {
 }
 
 function getLoginCommand(): string {
-  return `${getSelfCommand()} auth login`;
+  return `${getSelfCommand()} auth login-start`;
+}
+
+function getLoginCompleteCommand(): string {
+  return `${getSelfCommand()} auth login-complete`;
 }
 
 function emitJson(payload: unknown, out?: string): void {
@@ -246,10 +241,13 @@ async function getDoctorStatus() {
     tokenUsable: authStatus.tokenUsable,
     authReason: authStatus.reason,
     dataDir: config.dataDir,
+    dataDirSource: config.dataDirSource,
+    dataDirPersistent: config.dataDirPersistent,
     policyPath: config.policyPath,
     cacheDir: config.cacheDir,
     cacheFile,
     cacheFileExists: fs.existsSync(cacheFile),
+    pendingLoginStateExists: fs.existsSync(deviceLoginStatePath(config)),
     downloadDir: config.downloadDir,
     logsDir: config.logsDir,
     resultsDir: config.resultsDir,
@@ -257,14 +255,23 @@ async function getDoctorStatus() {
   };
 }
 
-function loginGateFields(loggedIn: boolean) {
+function loginGateFields(loggedIn: boolean, dataDirPersistent: boolean) {
   if (loggedIn) return {};
+  if (!dataDirPersistent) {
+    return {
+      nextCommand: "PERSISTENT_DATA_DIR_REQUIRED",
+      llmAction: "REQUEST_DOCUMENTS_FOLDER_ACCESS",
+      instruction:
+        "Request access to the user's Documents folder, create a 'Hare M365 Agent' subfolder in the mounted folder, and set HARE_M365_DATA_DIR to that subfolder for every Hare command. Do not start Microsoft login in a temporary /sessions or /tmp dataDir."
+    };
+  }
   return {
     nextCommand: "LOGIN_REQUIRED_HARD_GATE",
-    llmAction: "INITIAL_CONNECTION_RUN_LOGIN_COMMAND",
+    llmAction: "RUN_SPLIT_DEVICE_LOGIN",
     humanLoginCommand: getLoginCommand(),
+    humanLoginCompleteCommand: getLoginCompleteCommand(),
     instruction:
-      "Run humanLoginCommand in the foreground in this same shell call. Never use background, detached, setsid, or nohup. Keep the call alive until auth login returns ok:true after the user completes Microsoft device-code login and the cache is written. Cache-file existence alone is not a successful login. Then run auth status in the same dataDir/cacheFile."
+      "Run humanLoginCommand once; it returns the Microsoft URL and user code immediately. Show them to the user and end the shell call. After the user says login complete, run humanLoginCompleteCommand in a new foreground shell call; it must finish within 25 seconds. Never keep a poller alive, use background/detached processes, or rerun login-start unless the code expired. Then run auth status in the same dataDir."
   };
 }
 
@@ -282,7 +289,8 @@ program
           version: packageVersion,
           mode: "startup",
           repository: repoUrl,
-          setupCommand: `rm -rf ${defaultWorkDir} && test ! -e ${defaultWorkDir} && git clone ${repoUrl} ${defaultWorkDir} && cd ${defaultWorkDir} && npm ci --prefer-offline --no-audit --no-fund && npm run build && test -f dist/cli.js && test -f dist/proxy.js && test -f dist/msal-network.js && node dist/cli.js`,
+          setupCommand: `REMOTE_HEAD=$(git ls-remote ${repoUrl} refs/heads/master | awk '{print $1}') && test -n "$REMOTE_HEAD" && rm -rf ${defaultWorkDir} && test ! -e ${defaultWorkDir} && git clone --branch master --single-branch --no-tags ${repoUrl} ${defaultWorkDir} && LOCAL_HEAD=$(git -C ${defaultWorkDir} rev-parse HEAD) && test "$LOCAL_HEAD" = "$REMOTE_HEAD" && cd ${defaultWorkDir} && npm ci --prefer-offline --no-audit --no-fund && npm run build && test -f dist/cli.js && test -f dist/proxy.js && test -f dist/msal-network.js && node dist/cli.js`,
+          cloneVerification: "LOCAL_HEAD must exactly equal REMOTE_HEAD from refs/heads/master before npm ci.",
           requiredDomains,
           installRule: "registry.npmjs.org is required before npm ci. Do not switch to background or incremental npm install when npm ci fails.",
           searchDefaults: {
@@ -294,14 +302,25 @@ program
           status,
           storageRule:
             "Use the fixed Hare data folder only. In Cowork/hosted sandbox, mount the user's fixed Hare folder and set HARE_M365_DATA_DIR to that mounted path for every Hare command.",
-          ...(status.configured ? loginGateFields(status.loggedIn) : {}),
+          ...(status.configured ? loginGateFields(status.loggedIn, status.dataDirPersistent) : {}),
           nextCommand: status.configured
             ? status.loggedIn
               ? `${getSelfCommand()} auth status`
-              : "LOGIN_REQUIRED_HARD_GATE"
+              : status.dataDirPersistent
+                ? "LOGIN_REQUIRED_HARD_GATE"
+                : "PERSISTENT_DATA_DIR_REQUIRED"
             : "Check hare.config.json or set local environment overrides.",
-          llmAction: status.configured && !status.loggedIn ? "INITIAL_CONNECTION_RUN_LOGIN_COMMAND" : undefined,
-          humanLoginCommand: status.configured && !status.loggedIn ? getLoginCommand() : undefined
+          llmAction: status.configured && !status.loggedIn
+            ? status.dataDirPersistent
+              ? "RUN_SPLIT_DEVICE_LOGIN"
+              : "REQUEST_DOCUMENTS_FOLDER_ACCESS"
+            : undefined,
+          humanLoginCommand: status.configured && !status.loggedIn && status.dataDirPersistent
+            ? getLoginCommand()
+            : undefined,
+          humanLoginCompleteCommand: status.configured && !status.loggedIn && status.dataDirPersistent
+            ? getLoginCompleteCommand()
+            : undefined
         },
         null,
         2
@@ -311,16 +330,38 @@ program
 
 const auth = program.command("auth").description("Authentication commands");
 
-auth.command("login").description("Sign in with Microsoft device code flow").action(async () => {
+async function runLoginStart(): Promise<void> {
   requireConfigured(config);
-  const result = await login(config);
+  const result = await startLogin(config);
+  console.log(
+    JSON.stringify(
+      {
+        ...result,
+        nextCommand: getLoginCompleteCommand(),
+        instruction:
+          "Show verificationUri and userCode to the user. End this shell call. After the user completes Microsoft sign-in, run nextCommand in a new foreground shell call."
+      },
+      null,
+      2
+    )
+  );
+}
+
+auth.command("login").description("Start the split Microsoft device-code login flow").action(runLoginStart);
+auth.command("login-start").description("Issue a Microsoft device code and return immediately").action(runLoginStart);
+
+auth.command("login-complete").description("Complete a pending Microsoft device-code login").action(async () => {
+  requireConfigured(config);
+  const result = await completeLogin(config);
   console.log(
     JSON.stringify(
       {
         ok: true,
+        stage: "COMPLETE",
         account: result.account?.username,
         tenantId: result.tenantId,
-        scopes: getScopeList()
+        scopes: getScopeList(),
+        nextCommand: `${getSelfCommand()} auth status`
       },
       null,
       2
@@ -342,6 +383,8 @@ auth.command("status").description("Show current login and policy status").actio
         account: authStatus.account?.username,
         policy: config.policy,
         dataDir: config.dataDir,
+        dataDirSource: config.dataDirSource,
+        dataDirPersistent: config.dataDirPersistent,
         cacheDir: config.cacheDir,
         cacheFile,
         cacheFileExists: fs.existsSync(cacheFile),
@@ -349,7 +392,8 @@ auth.command("status").description("Show current login and policy status").actio
         logsDir: config.logsDir,
         resultsDir: config.resultsDir,
         resultRetentionDays: config.policy.retentionDays,
-        ...loginGateFields(loggedIn)
+        pendingLoginStateExists: fs.existsSync(deviceLoginStatePath(config)),
+        ...loginGateFields(loggedIn, config.dataDirPersistent)
       },
       null,
       2

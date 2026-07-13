@@ -36,6 +36,8 @@ export type AppConfig = {
   tenantId: string;
   authority: string;
   dataDir: string;
+  dataDirSource: "environment" | "os-default";
+  dataDirPersistent: boolean;
   cacheDir: string;
   downloadDir: string;
   logsDir: string;
@@ -76,21 +78,24 @@ function readDefaultConfig(): HareDefaultConfig {
   return readJson<HareDefaultConfig>(path.join(packageRoot, "hare.config.json"), {});
 }
 
-function defaultDataDir(): string {
+function defaultDataDir(): { value: string; source: "environment" | "os-default" } {
   const explicitDataDir = process.env.HARE_M365_DATA_DIR ?? process.env.OMH_M365_DATA_DIR;
   if (explicitDataDir) {
-    return explicitDataDir;
+    return { value: explicitDataDir, source: "environment" };
   }
 
   if (process.platform === "win32") {
-    return path.join(process.env.LOCALAPPDATA ?? os.homedir(), "Ohmyhotel", "HareM365Agent");
+    return { value: path.join(process.env.LOCALAPPDATA ?? os.homedir(), "Ohmyhotel", "HareM365Agent"), source: "os-default" };
   }
 
   if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "Ohmyhotel", "HareM365Agent");
+    return { value: path.join(os.homedir(), "Library", "Application Support", "Ohmyhotel", "HareM365Agent"), source: "os-default" };
   }
 
-  return path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), "ohmyhotel", "hare-m365-agent");
+  return {
+    value: path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), "ohmyhotel", "hare-m365-agent"),
+    source: "os-default"
+  };
 }
 
 function resolvePackagePath(value: string | undefined, fallback: string): string {
@@ -102,7 +107,10 @@ export function loadConfig(): AppConfig {
   const defaults = readDefaultConfig();
   const clientId = process.env.OMH_M365_CLIENT_ID ?? defaults.clientId ?? "";
   const tenantId = process.env.OMH_M365_TENANT_ID ?? defaults.tenantId ?? "";
-  const dataDir = path.resolve(defaultDataDir());
+  const dataDirSetting = defaultDataDir();
+  const dataDir = path.resolve(dataDirSetting.value);
+  const dataDirPersistent =
+    dataDirSetting.source === "environment" || !isHostedSessionPath(dataDir);
   const policyPath = resolvePackagePath(process.env.OMH_M365_POLICY_PATH ?? defaults.policyPath, path.join(packageRoot, "policy.json"));
   const cacheDir = path.join(dataDir, ".cache");
   const downloadDir = path.join(dataDir, "downloads");
@@ -120,6 +128,8 @@ export function loadConfig(): AppConfig {
     tenantId,
     authority: tenantId ? `https://login.microsoftonline.com/${tenantId}` : "",
     dataDir,
+    dataDirSource: dataDirSetting.source,
+    dataDirPersistent,
     cacheDir,
     downloadDir,
     logsDir,
@@ -128,6 +138,10 @@ export function loadConfig(): AppConfig {
     policyPath,
     policy
   };
+}
+
+function isHostedSessionPath(value: string): boolean {
+  return /(^|[\\/])(sessions|tmp)([\\/]|$)/i.test(value);
 }
 
 export function ensureRuntimeDirs(config: AppConfig): void {

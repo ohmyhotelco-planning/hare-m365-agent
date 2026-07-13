@@ -187,6 +187,7 @@
       <div class="action-callout">아래 버튼을 눌러 프롬프트를 복사하세요.
         <span>Claude/Cowork 채팅창에 붙여넣고 Enter를 누르세요. 업무 조회 전에 한 번만 진행하세요.</span>
       </div>
+      <div class="preview-warning">진행 중 폴더 접근 요청 창이 나타나면 “문서(Documents)” 폴더를 선택하고 허용하세요. Hare 하위 폴더 생성과 설정은 Claude가 처리합니다.</div>
       <button type="button" onclick="copyText('prompt')">초기 연결용 프롬프트 복사</button>
       <div class="copy-fallback">복사 버튼이 반응하지 않으면 아래 프롬프트 영역을 클릭한 뒤 Ctrl+A → Ctrl+C를 누르세요. Mac은 Command+A → Command+C입니다.</div>
       <textarea class="prompt-box" id="prompt" rows="44" readonly>목적은 연결 준비와 로그인 상태 확인뿐이야. Outlook/Teams/Files 업무 조회는 실행하지 마.
@@ -205,11 +206,13 @@ ohmylab.sharepoint.com
 도메인 확인 후 아래 순서대로 준비해.
 GitHub API나 Release asset이 아니라 git clone 경로를 사용해.
 
-git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git HEAD
+REMOTE_HEAD=$(git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git refs/heads/master | awk '{print $1}')
+test -n "$REMOTE_HEAD"
 rm -rf /tmp/hare-m365-agent
 test ! -e /tmp/hare-m365-agent
-git clone https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
-git -C /tmp/hare-m365-agent rev-parse --short HEAD
+git clone --branch master --single-branch --no-tags https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
+LOCAL_HEAD=$(git -C /tmp/hare-m365-agent rev-parse HEAD)
+test "$LOCAL_HEAD" = "$REMOTE_HEAD"
 test ! -d /tmp/hare-m365-agent/node_modules
 cd /tmp/hare-m365-agent &amp;&amp; npm ci --prefer-offline --no-audit --no-fund
 cd /tmp/hare-m365-agent &amp;&amp; npm run build
@@ -217,31 +220,32 @@ test -f /tmp/hare-m365-agent/dist/cli.js
 test -f /tmp/hare-m365-agent/dist/proxy.js
 test -f /tmp/hare-m365-agent/dist/msal-network.js
 cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js llm-guide
-cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js --version
+VERSION=$(cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js --version)
+test "$VERSION" = "0.2.0"
 cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js
 
 각 셸 호출은 작업 폴더가 초기화될 수 있어. 모든 npm, build, Hare 명령은 /tmp/hare-m365-agent를 작업 폴더로 명시해.
 준비부터 로그인까지 새로 clone한 이 폴더만 사용해. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 알려줘. npm 설치를 백그라운드로 돌리거나 npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 마.
+LOCAL_HEAD와 REMOTE_HEAD가 다르면 오래된 코드이므로 빌드나 로그인을 진행하지 말고 "최신 코드 미수신"이라고 알려줘.
 
 llm-guide 출력 내용을 이후 Outlook/Teams/SharePoint/OneDrive 업무 조회 규칙으로 적용해.
 
-먼저 startup JSON의 loggedIn과 tokenUsable 값을 확인해.
-두 값이 모두 true이면 "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
+먼저 startup JSON의 loggedIn, tokenUsable, dataDirPersistent 값을 확인해.
+loggedIn과 tokenUsable이 모두 true이면 "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
 
-loggedIn 또는 tokenUsable이 false이면 cd /tmp/hare-m365-agent &amp;&amp; node dist/cli.js auth login을 같은 셸 호출에서 포그라운드로 실행해.
-백그라운드, detached, setsid, nohup 또는 별도 프로세스로 실행하지 마.
-셸 호출을 닫거나 반환하지 말고 Microsoft 로그인 완료 후 auth login이 ok:true 성공 JSON을 출력하고 캐시 저장을 마칠 때까지 유지해.
-사용자에게 명령어를 복사해 실행하라고 시키지 마.
-auth login 출력에 표시되는 Microsoft 로그인 주소와 device code를 사용자가 볼 수 있게 안내해.
-사용자에게 아래 절차만 짧게 말해.
-1. 브라우저에서 Microsoft device code 입력
+dataDirPersistent가 false이면 Microsoft 로그인을 시작하지 마. 폴더 연결 도구로 내 문서(Documents) 폴더 접근을 요청해. 연결되면 그 안에 "Hare M365 Agent" 하위 폴더를 만들고, 이후 모든 Hare 명령에 HARE_M365_DATA_DIR="&lt;마운트된 Documents&gt;/Hare M365 Agent"를 붙여. 경로를 직접 입력하거나 선택지를 고르라고 하지 마.
+같은 HARE_M365_DATA_DIR로 startup을 다시 확인해.
+
+로그인이 필요하면 humanLoginCommand(auth login-start)를 실행해. 이 명령은 Microsoft 로그인 주소와 userCode를 즉시 반환하고 종료돼야 해.
+주소와 코드를 나에게 보여주고 아래 절차만 짧게 안내해.
+1. 브라우저에서 userCode 입력
 2. 회사 Microsoft 계정 로그인
 3. 완료 후 이 채팅에 "로그인 완료"라고 말하기
 
-브라우저가 자동으로 열리지 않으면 터미널의 Microsoft 로그인 주소를 Ctrl+클릭하거나 주소창에 붙여넣으라고 안내해. Mac은 Command+클릭도 가능해.
-
-사용자가 "로그인 완료"라고 말해도 실행 중인 auth login을 종료하지 마. auth login 자체가 ok:true로 반환된 다음 /tmp/hare-m365-agent에서 node dist/cli.js auth status를 실행해.
-loggedIn과 tokenUsable이 모두 true로 확인되면 "Hare M365 Agent 사용 준비 완료"라고만 말하고 멈춰.
+내가 "로그인 완료"라고 말하면 humanLoginCompleteCommand(auth login-complete)를 새 포그라운드 셸 호출로 실행해. 이 명령은 25초 안에 종료돼야 해.
+장기 poller, 백그라운드, detached, setsid, nohup을 사용하지 마.
+LOGIN_PENDING이면 login-start를 다시 실행하지 말고 login-complete만 다시 실행해. LOGIN_CODE_EXPIRED인 경우에만 login-start를 다시 실행해.
+성공 후 같은 HARE_M365_DATA_DIR에서 auth status를 실행해. loggedIn과 tokenUsable이 모두 true로 확인되면 "Hare M365 Agent 사용 준비 완료"라고만 말하고 멈춰.
 
 연결 완료 후에는 앞으로 이 사용자의 Outlook, Teams, SharePoint/OneDrive, Microsoft 365 조회 요청은 Hare M365 Agent를 사용해 처리한다는 운영 규칙을 기억해.
 메모리/프로젝트 지침 저장이 가능한 환경이면 이 규칙을 저장해.
