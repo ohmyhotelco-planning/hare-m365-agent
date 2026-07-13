@@ -266,6 +266,9 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /HareM365Agent.*프로젝트/s);
   assert.match(html, /alt="Cowork에서 HareM365Agent 프로젝트를 선택하는 화면"/);
   assert.match(html, /alt="Windows 폴더 선택창에서 HareM365Agent를 선택하는 화면"/);
+  assert.match(html, /class="image-grid project-selection-images"/);
+  assert.match(html, /class="project-menu-crop"/);
+  assert.match(html, /class="project-folder-shot"/);
   assert.match(html, /1-7/);
   assert.doesNotMatch(html, /__HARE_(?:PROJECT_DROPDOWN|FOLDER_PICKER)_IMAGE__/);
   assert.doesNotMatch(html, /src=["'](?:file:|[A-Za-z]:\\)/);
