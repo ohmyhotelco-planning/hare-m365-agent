@@ -26,10 +26,11 @@ try {
 
 const preferredCommand = "hare-m365";
 const packageName = "@ohmyhotel/hare-m365-agent";
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageVersion = readPackageVersion();
 const repoUrl = "https://github.com/ohmyhotelco-planning/hare-m365-agent.git";
 const defaultWorkDir = "/tmp/hare-m365-agent";
-const defaultCliCommand = "node dist/cli.js";
+const defaultCliCommand = `node "${path.join(packageRoot, "dist", "cli.js")}"`;
 
 const requiredDomains = [
   "github.com",
@@ -40,7 +41,7 @@ const requiredDomains = [
 ];
 
 function readPackageVersion(): string {
-  const packageJsonPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+  const packageJsonPath = path.join(packageRoot, "package.json");
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: string };
   return packageJson.version ?? "0.0.0";
 }
@@ -66,12 +67,18 @@ const llmGuide = `# Hare M365 Agent LLM Guide
 \`\`\`bash
 git ls-remote ${repoUrl} HEAD
 rm -rf ${defaultWorkDir}
+test ! -e ${defaultWorkDir}
 git clone ${repoUrl} ${defaultWorkDir}
-cd ${defaultWorkDir}
-npm ci
-npm run build
-node dist/cli.js
+git -C ${defaultWorkDir} rev-parse --short HEAD
+test ! -d ${defaultWorkDir}/node_modules
+cd ${defaultWorkDir} && npm ci
+cd ${defaultWorkDir} && npm run build
+test -f ${defaultWorkDir}/dist/cli.js
+test -f ${defaultWorkDir}/dist/proxy.js
+cd ${defaultWorkDir} && node dist/cli.js
 \`\`\`
+
+각 셸 호출은 작업 폴더가 초기화될 수 있으므로 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시한다. 준비부터 로그인까지 새로 clone한 이 폴더만 사용한다. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고한다.
 
 npm ci가 npm registry 접근 오류로 실패하면 registry.npmjs.org 허용이 추가로 필요하다고 보고하고 멈춘다.
 
@@ -152,13 +159,19 @@ repo 접근은 git ls-remote 또는 git clone으로 판단해.
 
 git ls-remote ${repoUrl} HEAD
 rm -rf ${defaultWorkDir}
+test ! -e ${defaultWorkDir}
 git clone ${repoUrl} ${defaultWorkDir}
-cd ${defaultWorkDir}
-npm ci
-npm run build
-node dist/cli.js
+git -C ${defaultWorkDir} rev-parse --short HEAD
+test ! -d ${defaultWorkDir}/node_modules
+cd ${defaultWorkDir} && npm ci
+cd ${defaultWorkDir} && npm run build
+test -f ${defaultWorkDir}/dist/cli.js
+test -f ${defaultWorkDir}/dist/proxy.js
+cd ${defaultWorkDir} && node dist/cli.js
 
 npm ci가 npm registry 접근 오류로 실패하면 registry.npmjs.org 허용이 추가로 필요하다고 보고하고 멈춰.
+
+각 셸 호출은 작업 폴더가 초기화될 수 있어. 모든 npm, build, Hare 명령에 동일한 ${defaultWorkDir} 작업 경로를 명시해. 준비부터 로그인까지 새로 clone한 이 폴더만 사용해. 어느 단계든 실패하면 기존 node_modules, dist, 다른 복사본으로 대체하지 말고 실패 단계와 오류 한 줄만 보고해.
 
 결과에서 loggedIn이 true이면 바로 내 요청을 처리해.
 loggedIn이 false이면 결과 JSON의 dataDir/cacheFile 기준으로 판단해.
@@ -260,7 +273,7 @@ program
           version: packageVersion,
           mode: "startup",
           repository: repoUrl,
-          setupCommand: `git clone ${repoUrl} ${defaultWorkDir} && cd ${defaultWorkDir} && npm ci && npm run build && node dist/cli.js`,
+          setupCommand: `rm -rf ${defaultWorkDir} && test ! -e ${defaultWorkDir} && git clone ${repoUrl} ${defaultWorkDir} && cd ${defaultWorkDir} && npm ci && npm run build && test -f dist/cli.js && test -f dist/proxy.js && node dist/cli.js`,
           requiredDomains,
           conditionalDomain: "registry.npmjs.org is required only if npm ci cannot reach npm registry.",
           searchDefaults: {
