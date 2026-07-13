@@ -234,6 +234,7 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 
 - SETUP_REQUIRED: 설정 누락을 한 문장으로 알려주고 멈춰.
 - FOLDER_REQUIRED: Windows는 %USERPROFILE%\HareM365Agent, Mac은 ~/HareM365Agent 폴더를 내가 한 번 만들고 선택하도록 안내해. 연결되면 마운트된 폴더 루트를 --data-dir에 넣어 startup을 다시 실행해.
+- Cowork Linux의 /root/.local/share 또는 ~/.local/share는 컨테이너 내부 경로야. 이 경로에서 로그인하거나 규칙 파일을 저장하지 말고, 연결된 호스트 폴더를 --data-dir로 명시해.
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행해. 반환된 Microsoft 로그인 주소와 userCode를 보여주고 "로그인 완료"라고 말해달라고 안내한 뒤 멈춰.
 - LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 저장된 캐시 재검증까지 성공한 상태야.
 - READY: "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.

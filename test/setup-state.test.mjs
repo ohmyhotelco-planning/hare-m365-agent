@@ -70,6 +70,13 @@ test("fixed host folders avoid Documents and OneDrive", () => {
     mac: "~/HareM365Agent"
   });
   assert.doesNotMatch(JSON.stringify(FIXED_HOST_DATA_DIRS), /Documents|OneDrive/i);
+
+  const contract = buildSetupContract(
+    { ...readySnapshot, dataDirPersistent: false },
+    "node dist/cli.js"
+  );
+  assert.match(contract.instruction, /\/root\/\.local\/share/);
+  assert.match(contract.instruction, /container-local/);
 });
 
 test("pending login contract keeps the same device code flow", () => {

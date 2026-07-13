@@ -31,12 +31,14 @@ export type Policy = {
   requireConfirmationFor: string[];
 };
 
+export type DataDirSource = "command-line" | "environment" | "os-default";
+
 export type AppConfig = {
   clientId: string;
   tenantId: string;
   authority: string;
   dataDir: string;
-  dataDirSource: "command-line" | "environment" | "os-default";
+  dataDirSource: DataDirSource;
   dataDirPersistent: boolean;
   cacheDir: string;
   downloadDir: string;
@@ -80,7 +82,7 @@ function readDefaultConfig(): HareDefaultConfig {
 
 function defaultDataDir(
   commandLineDataDir?: string
-): { value: string; source: "command-line" | "environment" | "os-default" } {
+): { value: string; source: DataDirSource } {
   if (commandLineDataDir) {
     return { value: commandLineDataDir, source: "command-line" };
   }
@@ -115,7 +117,7 @@ export function loadConfig(overrides: { dataDir?: string } = {}): AppConfig {
   const tenantId = process.env.OMH_M365_TENANT_ID ?? defaults.tenantId ?? "";
   const dataDirSetting = defaultDataDir(overrides.dataDir);
   const dataDir = path.resolve(dataDirSetting.value);
-  const dataDirPersistent = !isHostedSessionPath(dataDir);
+  const dataDirPersistent = isPersistentDataDir(dataDir, dataDirSetting.source);
   const policyPath = resolvePackagePath(process.env.OMH_M365_POLICY_PATH ?? defaults.policyPath, path.join(packageRoot, "policy.json"));
   const cacheDir = path.join(dataDir, ".cache");
   const downloadDir = path.join(dataDir, "downloads");
@@ -147,6 +149,16 @@ export function loadConfig(overrides: { dataDir?: string } = {}): AppConfig {
 
 function isHostedSessionPath(value: string): boolean {
   return /(^|[\\/])(sessions|tmp)([\\/]|$)/i.test(value);
+}
+
+export function isPersistentDataDir(
+  value: string,
+  source: DataDirSource,
+  platform: NodeJS.Platform = process.platform
+): boolean {
+  if (isHostedSessionPath(value)) return false;
+  if (platform === "linux" && source === "os-default") return false;
+  return true;
 }
 
 export function ensureRuntimeDirs(config: AppConfig): void {

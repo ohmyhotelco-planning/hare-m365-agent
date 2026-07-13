@@ -30,7 +30,8 @@ cd /tmp/hare-m365-agent && node dist/cli.js
 
 - `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365 조회를 실행합니다.
 - 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
-- `dataDirPersistent: false`이면 폴더 연결 도구로 사용자의 Documents 폴더 접근을 요청하고, 마운트된 폴더에 `Hare M365 Agent` 하위 폴더를 만든 뒤 모든 Hare 명령에 동일한 `HARE_M365_DATA_DIR`를 사용합니다.
+- `dataDirPersistent: false`이면 Windows `%USERPROFILE%\HareM365Agent` 또는 Mac `~/HareM365Agent` 고정 폴더 접근을 요청하고, 연결된 마운트 루트를 모든 Hare 명령의 동일한 `--data-dir`로 사용합니다.
+- Cowork Linux의 OS 기본 경로(`/root/.local/share/...`, `~/.local/share/...`)는 컨테이너 내부이므로 로그인이나 규칙 파일 저장에 사용하지 않습니다.
 - `auth login-start`는 Microsoft 로그인 주소와 코드를 즉시 반환하고 종료합니다.
 - 사용자가 브라우저 로그인을 완료하면 별도 셸 호출에서 `auth login-complete`를 실행합니다. 이 명령은 최대 25초만 실행됩니다.
 - 장기 poller, 백그라운드, detached, `setsid`, `nohup`을 사용하지 않습니다.

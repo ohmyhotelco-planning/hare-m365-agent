@@ -15,6 +15,7 @@ import {
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
 import { listChatMessages, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
 import { cleanupExpiredResults, resolveResultPath } from "./results.js";
+import { writeSessionRules } from "./session-rules.js";
 import { buildSetupContract } from "./setup-state.js";
 
 const program = new Command();
@@ -43,6 +44,14 @@ const requiredDomains = [
   "ohmylab-my.sharepoint.com",
   "ohmylab.sharepoint.com"
 ];
+
+const rulesFile = writeSessionRules(config, {
+  commandPrefix: getExplicitSelfCommand(),
+  repository: repoUrl,
+  branch: "master",
+  workDir: defaultWorkDir,
+  requiredDomains
+});
 
 function readPackageVersion(): string {
   const packageJsonPath = path.join(packageRoot, "package.json");
@@ -101,6 +110,7 @@ cd ${defaultWorkDir} && node dist/cli.js
 - startup, doctor, auth status의 setup.state만 확인하고 해당 상태의 setup.nextAction 하나만 수행한다.
 - SETUP_REQUIRED: 설정 누락을 한 문장으로 보고하고 멈춘다.
 - FOLDER_REQUIRED: Windows는 %USERPROFILE%\\HareM365Agent, Mac은 ~/HareM365Agent를 사용자에게 한 번 만들고 선택하도록 안내한다. 연결 후 마운트 루트를 --data-dir에 넣어 startup을 다시 실행한다.
+- Cowork Linux의 /root/.local/share 또는 ~/.local/share는 컨테이너 내부 경로이므로 로그인이나 규칙 파일 저장에 사용하지 않는다. 연결된 호스트 폴더를 --data-dir로 명시한다.
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행하고 Microsoft 로그인 주소와 userCode를 보여준 뒤 멈춘다.
 - LOGIN_COMPLETE_REQUIRED: 사용자가 "로그인 완료"라고 말할 때까지 기다린다. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행한다. COMPLETE는 저장된 캐시 재검증까지 성공했다는 뜻이다.
 - READY: 사용 준비 완료를 보고하고 사용자의 업무 조회 요청을 기다린다.
@@ -110,6 +120,7 @@ cd ${defaultWorkDir} && node dist/cli.js
 - 로컬 Windows/Mac/Linux에서는 OS 기본 고정 dataDir를 사용한다.
 - Cowork/hosted sandbox에서는 Windows %USERPROFILE%\\HareM365Agent 또는 Mac ~/HareM365Agent 폴더를 연결하고 그 마운트 루트를 고정 dataDir로 사용한다.
 - /sessions 또는 /tmp 기본 경로에서는 login-start가 거부된다.
+- Cowork Linux OS 기본 dataDir도 임시 컨테이너 경로로 취급하고 login-start를 거부한다.
 - startup이 반환한 setup.nextCommand에는 동일한 --data-dir가 포함된다. 환경변수에 의존하거나 명령을 다시 조합하지 않고 그대로 실행한다.
 
 hosted sandbox Graph 실패 때:
@@ -190,6 +201,7 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 
 - SETUP_REQUIRED: 설정 누락을 한 문장으로 알려주고 멈춰.
 - FOLDER_REQUIRED: Windows는 %USERPROFILE%\\HareM365Agent, Mac은 ~/HareM365Agent 폴더를 내가 한 번 만들고 선택하도록 안내해. 연결되면 마운트된 폴더 루트를 --data-dir에 넣어 startup을 다시 실행해.
+- Cowork Linux의 /root/.local/share 또는 ~/.local/share는 컨테이너 내부 경로야. 이 경로에서 로그인하거나 규칙 파일을 저장하지 말고, 연결된 호스트 폴더를 --data-dir로 명시해.
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행해. 반환된 Microsoft 로그인 주소와 userCode를 보여주고 "로그인 완료"라고 말해달라고 안내한 뒤 멈춰.
 - LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 저장된 캐시 재검증까지 성공한 상태야.
 - READY: "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
@@ -212,6 +224,11 @@ search.limitReached가 true이면 검색 결과 한도에 도달했다고 알려
 function getSelfCommand(): string {
   const command = process.env.HARE_M365_COMMAND ?? defaultCliCommand;
   if (config.dataDirSource === "os-default") return command;
+  return `${command} --data-dir ${quoteCommandArgument(config.dataDir)}`;
+}
+
+function getExplicitSelfCommand(): string {
+  const command = process.env.HARE_M365_COMMAND ?? defaultCliCommand;
   return `${command} --data-dir ${quoteCommandArgument(config.dataDir)}`;
 }
 
@@ -263,7 +280,9 @@ async function getDoctorStatus() {
     downloadDir: config.downloadDir,
     logsDir: config.logsDir,
     resultsDir: config.resultsDir,
-    resultRetentionDays: config.policy.retentionDays
+    resultRetentionDays: config.policy.retentionDays,
+    rulesFile,
+    rulesFileExists: Boolean(rulesFile && fs.existsSync(rulesFile))
   };
 }
 
@@ -294,6 +313,13 @@ program
           },
           status,
           setup,
+          sessionRules: {
+            path: rulesFile,
+            exists: Boolean(rulesFile && fs.existsSync(rulesFile)),
+            instruction: rulesFile
+              ? "Read this file before login or Microsoft 365 lookup, and keep using the exact data directory and command prefix recorded there."
+              : "Connect the fixed HareM365Agent host folder first; the session rules file is created only in a persistent data directory."
+          },
           storageRule:
             "Use setup.state and perform setup.nextAction only. Do not infer a different setup path."
         },
@@ -382,6 +408,8 @@ auth.command("status").description("Show current login and policy status").actio
         logsDir: config.logsDir,
         resultsDir: config.resultsDir,
         resultRetentionDays: config.policy.retentionDays,
+        rulesFile,
+        rulesFileExists: Boolean(rulesFile && fs.existsSync(rulesFile)),
         pendingLoginStateExists,
         setup
       },

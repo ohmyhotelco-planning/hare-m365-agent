@@ -7,7 +7,7 @@ import test from "node:test";
 
 const cli = path.resolve("dist/cli.js");
 const htmlGuide = path.resolve(
-  "release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed_final.html"
+  "release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed_final_real.html"
 );
 
 function run(args, dataDir) {
@@ -91,6 +91,33 @@ test("explicit data-dir survives as part of every follow-up command", () => {
   assert.equal(statusOutput.setup.state, "LOGIN_START_REQUIRED");
 });
 
+test("startup writes persistent Claude rules with the exact Hare paths", () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-rules-"));
+  const result = run([], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  const output = JSON.parse(result.stdout);
+  const rulesFile = path.join(dataDir, "claude", "hare-m365-agent-rules.md");
+  assert.equal(output.status.rulesFile, rulesFile);
+  assert.equal(output.status.rulesFileExists, true);
+  assert.equal(output.sessionRules.path, rulesFile);
+  assert.equal(output.sessionRules.exists, true);
+  assert.match(output.sessionRules.instruction, /Read this file before login or Microsoft 365 lookup/);
+  assert.equal(fs.existsSync(rulesFile), true);
+
+  const rules = fs.readFileSync(rulesFile, "utf8");
+  assert.match(rules, new RegExp(escapeRegExp(dataDir)));
+  assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, ".cache", "msal-cache.json"))));
+  assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "downloads"))));
+  assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "results"))));
+  assert.match(rules, /--data-dir/);
+  assert.match(rules, /\/tmp\/hare-m365-agent/);
+  assert.match(rules, /refs\/heads\/master/);
+  assert.match(rules, /loggedIn.*tokenUsable/s);
+  assert.match(rules, /Do not start a new login/);
+  assert.match(rules, /default lookback.*90 days/i);
+});
+
 test("LLM guide follows the explicit setup state contract", () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-guide-"));
   const result = run(["llm-guide"], dataDir);
@@ -106,6 +133,7 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /LOGIN_COMPLETE_REQUIRED/);
   assert.match(result.stdout, /setup\.nextCommand를 수정하지 않고/);
   assert.match(result.stdout, /%USERPROFILE%\\HareM365Agent/);
+  assert.match(result.stdout, /\/root\/\.local\/share/);
   assert.doesNotMatch(result.stdout, /computer-use/);
   assert.doesNotMatch(result.stdout, /%USERPROFILE%\\Documents/);
 });
@@ -124,11 +152,13 @@ test("startup blocks login when the default data directory is a hosted-session p
   assert.equal(output.status.dataDirPersistent, false);
   assert.equal(output.setup.state, "FOLDER_REQUIRED");
   assert.equal(output.setup.nextAction, "CONNECT_FIXED_FOLDER");
+  assert.equal(output.sessionRules.exists, false);
   assert.deepEqual(output.setup.fixedHostDataDirs, {
     windows: "%USERPROFILE%\\HareM365Agent",
     mac: "~/HareM365Agent"
   });
   assert.doesNotMatch(JSON.stringify(output.setup), /Documents|OneDrive|computer-use/i);
+  assert.match(output.setup.instruction, /\/root\/\.local\/share/);
 });
 
 test("--data-dir cannot falsely mark a hosted-session path as persistent", () => {
@@ -143,6 +173,11 @@ test("--data-dir cannot falsely mark a hosted-session path as persistent", () =>
   const output = JSON.parse(result.stdout);
   assert.equal(output.status.dataDirPersistent, false);
   assert.equal(output.setup.state, "FOLDER_REQUIRED");
+  assert.equal(output.status.rulesFile, undefined);
+  assert.equal(
+    fs.existsSync(path.join(hostedPath, "claude", "hare-m365-agent-rules.md")),
+    false
+  );
 });
 
 test("startup, doctor, and auth status expose the same setup state", () => {
@@ -202,6 +237,7 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /setup\.nextCommand를 수정하지 않고/);
   assert.match(html, /%USERPROFILE%\\HareM365Agent/);
   assert.match(html, /~\/HareM365Agent/);
+  assert.match(html, /\/root\/\.local\/share/);
   assert.doesNotMatch(html, /computer-use/);
   assert.doesNotMatch(html, /%USERPROFILE%\\Documents/);
   assert.doesNotMatch(html, /문서\(Documents\) 폴더 접근을 요청해/);
