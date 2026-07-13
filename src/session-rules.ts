@@ -69,8 +69,9 @@ Cowork Linux defaults such as /root/.local/share are container-local and are nev
 
 - Repository: ${options.repository}
 - Branch: ${options.branch}
-- Cowork work directory: ${options.workDir}
+- Local app directory: ${options.workDir}
 - Verify latest code with refs/heads/${options.branch} before building.
+- Reuse this app directory in every chat. Run git fetch and git pull --ff-only; build only when HEAD changed or build files are missing.
 - Command prefix for this mounted folder:
 
 \`\`\`text
@@ -89,7 +90,7 @@ ${startupCommand}
 ${statusCommand}
 \`\`\`
 
-Always keep the exact --data-dir argument shown above. A fresh clone does not require a new Microsoft login when this same data directory contains a usable cache.
+Always keep the exact --data-dir argument shown above. Updating or rebuilding the local app does not require a new Microsoft login when this same data directory contains a usable cache.
 
 ## Startup state
 

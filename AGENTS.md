@@ -6,21 +6,7 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 
 ## 준비
 
-기본 경로는 GitHub API나 Release asset이 아닌 `git clone`입니다.
-
-```bash
-REMOTE_HEAD=$(git ls-remote https://github.com/ohmyhotelco-planning/hare-m365-agent.git refs/heads/master | awk '{print $1}')
-test -n "$REMOTE_HEAD"
-rm -rf /tmp/hare-m365-agent
-git clone --branch master --single-branch --no-tags https://github.com/ohmyhotelco-planning/hare-m365-agent.git /tmp/hare-m365-agent
-LOCAL_HEAD=$(git -C /tmp/hare-m365-agent rev-parse HEAD)
-test "$LOCAL_HEAD" = "$REMOTE_HEAD"
-cd /tmp/hare-m365-agent && npm ci --prefer-offline --no-audit --no-fund && npm run build
-test -f /tmp/hare-m365-agent/dist/cli.js
-test -f /tmp/hare-m365-agent/dist/proxy.js
-test -f /tmp/hare-m365-agent/dist/msal-network.js
-cd /tmp/hare-m365-agent && node dist/cli.js
-```
+기본 경로는 GitHub API나 Release asset이 아닌 `git clone`입니다. 다만 clone 위치는 임시 컨테이너가 아니라 연결된 호스트 `HareM365Agent/app`입니다. 최초에는 clone하고 이후에는 기존 app에서 `git fetch`와 `git pull --ff-only`를 실행합니다. HEAD가 바뀌었거나 빌드가 없을 때만 `npm ci`와 `npm run build`를 실행합니다.
 
 필수 도메인은 `github.com`, `registry.npmjs.org`, `login.microsoftonline.com`, `graph.microsoft.com`, `ohmylab-my.sharepoint.com`, `ohmylab.sharepoint.com`입니다.
 
@@ -30,8 +16,10 @@ cd /tmp/hare-m365-agent && node dist/cli.js
 
 - `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365 조회를 실행합니다.
 - 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
-- `dataDirPersistent: false`이면 Windows `%USERPROFILE%\HareM365Agent` 또는 Mac `~/HareM365Agent` 고정 폴더 접근을 요청하고, 연결된 마운트 루트를 모든 Hare 명령의 동일한 `--data-dir`로 사용합니다.
+- 작업 시작 전에 Windows `%USERPROFILE%\HareM365Agent` 또는 Mac `~/HareM365Agent` 고정 폴더 접근을 요청하고, 연결된 마운트 루트를 모든 Hare 명령의 동일한 `--data-dir`로 사용합니다.
+- 프로그램은 해당 루트의 `app`, 인증 캐시는 `.cache`, 세션 규칙은 `claude`에 둡니다. 새 채팅에서도 같은 폴더를 연결하고 `claude/hare-m365-agent-rules.md`를 읽습니다.
 - Cowork Linux의 OS 기본 경로(`/root/.local/share/...`, `~/.local/share/...`)는 컨테이너 내부이므로 로그인이나 규칙 파일 저장에 사용하지 않습니다.
+- 코드, node_modules, dist도 `/sessions`, `/tmp`, `/root` 아래에 설치하거나 실행하지 않습니다.
 - `auth login-start`는 Microsoft 로그인 주소와 코드를 즉시 반환하고 종료합니다.
 - 사용자가 브라우저 로그인을 완료하면 별도 셸 호출에서 `auth login-complete`를 실행합니다. 이 명령은 최대 25초만 실행됩니다.
 - 장기 poller, 백그라운드, detached, `setsid`, `nohup`을 사용하지 않습니다.

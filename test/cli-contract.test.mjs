@@ -53,9 +53,14 @@ test("startup never treats cache existence alone as a successful login", () => {
     "ohmylab-my.sharepoint.com",
     "ohmylab.sharepoint.com"
   ]);
+  assert.equal(output.appDir, path.join(dataDir, "app"));
   assert.match(output.setupCommand, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(output.setupCommand, /refs\/heads\/master/);
   assert.match(output.setupCommand, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
+  assert.match(output.setupCommand, /pull --ff-only/);
+  assert.match(output.setupCommand, /--data-dir/);
+  assert.match(output.setupCommand, new RegExp(escapeRegExp(dataDir)));
+  assert.doesNotMatch(output.setupCommand, /\/tmp\/hare-m365-agent|rm -rf/);
   assert.doesNotMatch(JSON.stringify(output), /required only if npm ci/);
   assert.match(output.setup.nextCommand, /auth login-start/);
   assert.match(output.setup.nextCommand, /--data-dir/);
@@ -111,7 +116,8 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "downloads"))));
   assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "results"))));
   assert.match(rules, /--data-dir/);
-  assert.match(rules, /\/tmp\/hare-m365-agent/);
+  assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "app"))));
+  assert.doesNotMatch(rules, /\/tmp\/hare-m365-agent/);
   assert.match(rules, /refs\/heads\/master/);
   assert.match(rules, /loggedIn.*tokenUsable/s);
   assert.match(rules, /Do not start a new login/);
@@ -125,6 +131,8 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /아래 6개 도메인/);
   assert.match(result.stdout, /registry\.npmjs\.org/);
   assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
+  assert.match(result.stdout, /pull --ff-only/);
+  assert.doesNotMatch(result.stdout, /\/tmp\/hare-m365-agent|rm -rf/);
   assert.match(result.stdout, /npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 않는다/);
   assert.match(result.stdout, /dist\/msal-network\.js/);
   assert.match(result.stdout, /setup\.state/);
@@ -153,6 +161,8 @@ test("startup blocks login when the default data directory is a hosted-session p
   assert.equal(output.setup.state, "FOLDER_REQUIRED");
   assert.equal(output.setup.nextAction, "CONNECT_FIXED_FOLDER");
   assert.equal(output.sessionRules.exists, false);
+  assert.equal(output.appDir, undefined);
+  assert.equal(output.setupCommand, undefined);
   assert.deepEqual(output.setup.fixedHostDataDirs, {
     windows: "%USERPROFILE%\\HareM365Agent",
     mac: "~/HareM365Agent"
@@ -178,6 +188,15 @@ test("--data-dir cannot falsely mark a hosted-session path as persistent", () =>
     fs.existsSync(path.join(hostedPath, "claude", "hare-m365-agent-rules.md")),
     false
   );
+
+  const guideResult = spawnSync(
+    process.execPath,
+    [cli, "--data-dir", hostedPath, "llm-guide"],
+    { cwd: process.cwd(), env: { ...process.env }, encoding: "utf8" }
+  );
+  assert.equal(guideResult.status, 0, guideResult.stderr);
+  assert.match(guideResult.stdout, /FOLDER_REQUIRED/);
+  assert.doesNotMatch(guideResult.stdout, new RegExp(escapeRegExp(hostedPath)));
 });
 
 test("startup, doctor, and auth status expose the same setup state", () => {
@@ -226,6 +245,9 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.equal((html.match(/class="domain-row"/g) ?? []).length, 6);
   assert.match(html, /auth login-start --help/);
   assert.match(html, /auth login-complete --help/);
+  assert.match(html, /HARE_ROOT/);
+  assert.match(html, /pull --ff-only/);
+  assert.doesNotMatch(html, /\/tmp\/hare-m365-agent|rm -rf/);
   assert.doesNotMatch(html, /test "\$VERSION" = "/);
   assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.match(html, /auth login-start/);
