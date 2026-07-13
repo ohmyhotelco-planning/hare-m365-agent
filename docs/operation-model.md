@@ -9,8 +9,12 @@ LLM이 사용자의 자연어 요청을 받아 Microsoft 365 업무 데이터를
 ## 기본 실행 모델
 
 ```text
-LLM -> local shell/Cowork sandbox -> git clone -> npm ci(--prefer-offline, no audit/fund) -> npm run build -> Hare CLI -> Microsoft Graph delegated access
+LLM -> Cowork sandbox shell(도메인 허용 목록 적용) -> 스냅샷 복원 또는 git clone -> HEAD 검증 -> 필요 시 npm ci + npm run build -> Hare CLI -> Microsoft Graph delegated access
+                     ↕ 파일 스테이징/커밋 도구
+연결된 HareM365Agent 프로젝트 폴더(영속 저장소: 스냅샷, 빌드 마커, 로그인 캐시, 규칙, 결과)
 ```
+
+Cowork에는 실행 셸이 두 곳 있을 수 있습니다. 도메인 허용 목록은 세션 샌드박스 셸에 적용되고, 연결 폴더가 마운트된 디바이스 셸은 설정과 무관하게 모든 외부 도메인이 차단될 수 있습니다. 네트워크가 필요한 명령은 샌드박스 셸에서 실행하고, 연결 폴더는 영속 저장소로 사용합니다. 연결 폴더 마운트가 네트워크가 되는 셸에서 직접 보이는 환경이라면 그 마운트를 실행 위치로 함께 사용해도 됩니다.
 
 사람은 인증, 승인, 권한 판단, 되돌리기 어려운 작업에만 개입합니다. 조회, 요약, 진단, 재시도, smoke test는 CLI와 LLM이 처리합니다.
 
@@ -34,9 +38,9 @@ LLM -> local shell/Cowork sandbox -> git clone -> npm ci(--prefer-offline, no au
 - 문서화된 CLI만 사용
 - repo 접근 확인은 `git ls-remote` 또는 `git clone`으로 수행
 - GitHub API 또는 GitHub Release asset 다운로드를 기본 경로로 사용하지 않음
-- `npm ci --prefer-offline --no-audit --no-fund`, `npm run build`, `node dist/cli.js` 실행
+- `npm ci --prefer-offline --no-audit --no-fund`, `npm run build`, `node dist/cli.js` 실행 (샌드박스 셸에서)
 - `doctor`, `auth status` 진단
-- Cowork Documents 폴더를 연결하고 영구 `HARE_M365_DATA_DIR` 준비
+- 연결된 HareM365Agent 프로젝트 폴더와 HARE_ROOT 간 스냅샷·로그인 캐시·규칙·결과 동기화
 - `auth login-start`와 `auth login-complete`로 45초 제한 안에서 인증 완료 후 상태 재확인
 - 조회 limit을 작게 시작하고 필요한 만큼만 확장
 - 메일/채팅/파일/토큰/캐시 원문 덤프 지양

@@ -56,6 +56,16 @@ test("local setup clones once, reuses the app, and rebuilds only after HEAD chan
   assert.equal(readBuildCount(dataDir), 2, "changed HEAD must rebuild exactly once");
   assert.equal(fs.readFileSync(cacheFile, "utf8"), "fixture-cache-must-survive");
   assert.equal(git(source, "rev-parse", "HEAD"), git(path.join(dataDir, "app"), "rev-parse", "HEAD"));
+
+  const snapshotFile = path.join(dataDir, ".hare-app-snapshot.tar.gz");
+  assert.equal(fs.existsSync(snapshotFile), true, "rebuild must refresh the app snapshot");
+
+  fs.rmSync(path.join(dataDir, "app"), { recursive: true, force: true });
+  const fourth = runBash(command);
+  assert.equal(fourth.status, 0, fourth.stderr);
+  assert.equal(readBuildCount(dataDir), 2, "snapshot restore with matching HEAD must not clone or rebuild");
+  assert.equal(fs.existsSync(path.join(dataDir, "app", ".git")), true, "snapshot must restore the git checkout");
+  assert.equal(git(source, "rev-parse", "HEAD"), git(path.join(dataDir, "app"), "rev-parse", "HEAD"));
 });
 
 test("local setup command never uses a destructive temporary checkout", () => {
@@ -68,8 +78,33 @@ test("local setup command never uses a destructive temporary checkout", () => {
   assert.match(command, /HARE_APP="\$HARE_ROOT\/app"/);
   assert.match(command, /git -C "\$HARE_APP" pull --ff-only/);
   assert.match(command, /\.hare-app-build-head/);
+  assert.match(command, /HARE_SNAPSHOT="\$HARE_ROOT\/\.hare-app-snapshot\.tar\.gz"/);
+  assert.match(command, /HARE_SNAPSHOT_TMP="\$HARE_ROOT\/\.hare-app-snapshot\.tar\.gz\.tmp\.\$\$"/);
+  assert.match(command, /tar -tzf "\$HARE_SNAPSHOT" >\/dev\/null/);
+  assert.match(command, /tar -xzf "\$HARE_SNAPSHOT" -C "\$HARE_ROOT"/);
+  assert.match(command, /tar -czf "\$HARE_SNAPSHOT_TMP" -C "\$HARE_ROOT" app/);
+  assert.match(command, /mv -f "\$HARE_SNAPSHOT_TMP" "\$HARE_SNAPSHOT"/);
   assert.match(command, /--data-dir "\$HARE_ROOT"/);
   assert.doesNotMatch(command, /rm -rf|git reset|\/tmp\/|\/root\//);
+});
+
+test("local setup refuses a corrupt snapshot before extraction", {
+  skip: !commandWorks(bash, ["--version"])
+}, () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "hare-corrupt-snapshot-"));
+  const dataDir = path.join(fixture, "HareM365Agent");
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(path.join(dataDir, ".hare-app-snapshot.tar.gz"), "not-a-tarball", "utf8");
+
+  const command = buildLocalSetupCommand({
+    dataDir: toBashPath(dataDir),
+    repository: toBashPath(path.join(fixture, "unused-source")),
+    branch: "master"
+  });
+  const result = runBash(command);
+
+  assert.notEqual(result.status, 0);
+  assert.equal(fs.existsSync(path.join(dataDir, "app")), false);
 });
 
 function writeFixtureRepository(source) {

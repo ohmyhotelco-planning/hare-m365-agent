@@ -3,7 +3,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import test from "node:test";
+import test, { after } from "node:test";
+
+// os.tmpdir() resolves to /tmp on Linux, which Hare intentionally treats as a
+// hosted-session (non-persistent) path. Use a home-directory fixture root so
+// persistence-dependent assertions behave the same on every platform.
+const fixtureRoot = fs.mkdtempSync(path.join(os.homedir(), "hare-cli-contract-"));
+after(() => fs.rmSync(fixtureRoot, { recursive: true, force: true }));
+
+function makeDataDir(prefix) {
+  return fs.mkdtempSync(path.join(fixtureRoot, prefix));
+}
 
 const cli = path.resolve("dist/cli.js");
 const htmlGuide = path.resolve(
@@ -33,7 +43,7 @@ function runAsync(args, dataDir) {
 }
 
 test("startup never treats cache existence alone as a successful login", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-status-"));
+  const dataDir = makeDataDir("hare-status-");
   fs.mkdirSync(path.join(dataDir, ".cache"), { recursive: true });
   fs.writeFileSync(path.join(dataDir, ".cache", "msal-cache.json"), "{}", "utf8");
 
@@ -56,6 +66,11 @@ test("startup never treats cache existence alone as a successful login", () => {
   assert.equal(output.appDir, path.join(dataDir, "app"));
   assert.match(output.setupCommand, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(output.setupCommand, /refs\/heads\/master/);
+  assert.match(output.setupCommand, /\.hare-app-snapshot\.tar\.gz/);
+  assert.match(output.setupCommand, /tar -tzf "\$HARE_SNAPSHOT" >\/dev\/null/);
+  assert.match(output.setupCommand, /tar -xzf "\$HARE_SNAPSHOT" -C "\$HARE_ROOT"/);
+  assert.match(output.setupCommand, /tar -czf "\$HARE_SNAPSHOT_TMP" -C "\$HARE_ROOT" app/);
+  assert.match(output.setupCommand, /mv -f "\$HARE_SNAPSHOT_TMP" "\$HARE_SNAPSHOT"/);
   assert.match(output.setupCommand, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.match(output.setupCommand, /pull --ff-only/);
   assert.match(output.setupCommand, /--data-dir/);
@@ -71,7 +86,7 @@ test("startup never treats cache existence alone as a successful login", () => {
 });
 
 test("explicit data-dir survives as part of every follow-up command", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare explicit data "));
+  const dataDir = makeDataDir("hare explicit data ");
   const result = spawnSync(process.execPath, [cli, "--data-dir", dataDir], {
     cwd: process.cwd(),
     env: { ...process.env },
@@ -97,7 +112,7 @@ test("explicit data-dir survives as part of every follow-up command", () => {
 });
 
 test("startup writes persistent Claude rules with the exact Hare paths", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-rules-"));
+  const dataDir = makeDataDir("hare-rules-");
   const result = run([], dataDir);
   assert.equal(result.status, 0, result.stderr);
 
@@ -124,11 +139,14 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /default lookback.*90 days/i);
   assert.match(rules, /\/sessions\/<session>\/mnt\/HareM365Agent/);
   assert.match(rules, /NETWORK_PERMISSION_REQUIRED/);
-  assert.match(rules, /single network allowlist/);
+  assert.match(rules, /applies to the session sandbox shell/);
+  assert.match(rules, /Never run git, npm, login, or Graph commands in the device shell/);
+  assert.match(rules, /\.hare-app-snapshot\.tar\.gz/);
+  assert.doesNotMatch(rules, /single network allowlist/);
 });
 
 test("LLM guide follows the explicit setup state contract", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-guide-"));
+  const dataDir = makeDataDir("hare-guide-");
   const result = run(["llm-guide"], dataDir);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /아래 6개 도메인/);
@@ -150,6 +168,10 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(result.stdout, /X-Proxy-Error: blocked-by-allowlist/);
   assert.match(result.stdout, /새 Cowork 채팅/);
+  assert.match(result.stdout, /하이브리드/);
+  assert.match(result.stdout, /\.hare-app-snapshot\.tar\.gz/);
+  assert.match(result.stdout, /샌드박스 셸/);
+  assert.doesNotMatch(result.stdout, /유일한 네트워크 허용 목록/);
   assert.doesNotMatch(result.stdout, /%USERPROFILE%\\Documents/);
 });
 
@@ -204,7 +226,7 @@ test("--data-dir cannot falsely mark a hosted-session path as persistent", () =>
 });
 
 test("startup, doctor, and auth status expose the same setup state", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-consistent-state-"));
+  const dataDir = makeDataDir("hare-consistent-state-");
   const startup = run([], dataDir);
   const doctor = run(["doctor"], dataDir);
   const authStatus = run(["auth", "status"], dataDir);
@@ -224,7 +246,7 @@ test("startup, doctor, and auth status expose the same setup state", () => {
 });
 
 test("parallel status checks serialize cache access without leaving a lock", async () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-lock-"));
+  const dataDir = makeDataDir("hare-lock-");
   const cacheDir = path.join(dataDir, ".cache");
   fs.mkdirSync(cacheDir, { recursive: true });
   fs.writeFileSync(path.join(cacheDir, "msal-cache.json"), "{}", "utf8");
@@ -238,7 +260,7 @@ test("parallel status checks serialize cache access without leaving a lock", asy
 });
 
 test("list commands reject invalid limits before making Graph calls", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-limit-"));
+  const dataDir = makeDataDir("hare-limit-");
   const result = run(["files", "search", "--query", "test", "--limit", "0"], dataDir);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /limit must be a positive number/);
@@ -278,7 +300,10 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(html, /X-Proxy-Error: blocked-by-allowlist/);
   assert.match(html, /\/sessions\/&lt;session&gt;\/mnt\/HareM365Agent/);
-  assert.match(html, /도메인 허용 목록은 이 설정 한 곳뿐입니다/);
+  assert.match(html, /도메인 허용 목록은 세션 샌드박스 셸에 적용됩니다/);
+  assert.match(html, /\.hare-app-snapshot\.tar\.gz/);
+  assert.match(html, /HARE_ROOT 판별/);
+  assert.doesNotMatch(html, /유일한 네트워크 허용 목록/);
   assert.doesNotMatch(html, /로컬 실행 환경은 프록시 허용 목록/);
   assert.doesNotMatch(html, /클라우드 쪽 환경은/);
   assert.doesNotMatch(html, /%USERPROFILE%\\Documents/);
