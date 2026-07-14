@@ -66,6 +66,7 @@ test("startup migrates a legacy cache and requests one sign-in for the new appli
     "registry.npmjs.org",
     "graph.microsoft.com",
     "login.microsoftonline.com",
+    "outlook.office.com",
     "ohmylab-my.sharepoint.com",
     "ohmylab.sharepoint.com"
   ]);
@@ -147,6 +148,9 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /without requesting folder deletion permission/);
   assert.match(rules, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(rules, /session sandbox shell/);
+  assert.match(rules, /AWAITING_USER_APPROVAL/);
+  assert.match(rules, /explicit user approval/);
+  assert.match(rules, /Hare cannot send a draft/);
   assert.doesNotMatch(rules, /hybrid|\.hare-app-snapshot|\/home\/claude/i);
   assert.doesNotMatch(rules, /single network allowlist/);
 });
@@ -155,11 +159,15 @@ test("LLM guide follows the explicit setup state contract", () => {
   const dataDir = makeDataDir("hare-guide-");
   const result = run(["llm-guide"], dataDir);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /아래 6개 도메인/);
+  assert.match(result.stdout, /아래 7개 도메인/);
+  assert.match(result.stdout, /outlook\.office\.com/);
   assert.match(result.stdout, /registry\.npmjs\.org/);
   assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(result.stdout, /outlook recent --folder all/);
   assert.match(result.stdout, /outlook flagged --folder all/);
+  assert.match(result.stdout, /outlook draft new/);
+  assert.match(result.stdout, /approval-token/);
+  assert.match(result.stdout, /메일 발송은 지원하지 않는다/);
   assert.match(result.stdout, /outlook inbox는 사용자가 받은편지함을 명시한 경우에만/);
   assert.match(result.stdout, /pull --ff-only/);
   assert.doesNotMatch(result.stdout, /rm -rf "\$HARE_DATA_DIR"/);
@@ -286,12 +294,25 @@ test("Outlook exposes whole-mailbox recent and flagged commands", () => {
   assert.match(result.stdout, /inbox/);
 });
 
+test("Outlook exposes draft preview commands but no send command", () => {
+  const dataDir = makeDataDir("hare-outlook-draft-help-");
+  const result = run(["outlook", "draft", "--help"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /new/);
+  assert.match(result.stdout, /reply/);
+  assert.match(result.stdout, /forward/);
+  assert.doesNotMatch(result.stdout, /\bsend\b/i);
+});
+
 test("human guide verifies split-login features without a hardcoded version", () => {
   const html = fs.readFileSync(htmlGuide, "utf8");
   assert.match(html, /\.project-step > \.cowork-choice-figure \{ order: 2;/);
   assert.match(html, /\.project-step > \.action-steps-continuation \{ order: 3;/);
   assert.match(html, /class="cowork-choice-figure"/);
-  assert.equal((html.match(/class="domain-row"/g) ?? []).length, 6);
+  assert.equal((html.match(/class="domain-row"/g) ?? []).length, 7);
+  assert.match(html, /outlook\.office\.com/);
+  assert.match(html, /신규·답장·전체답장·전달 메일 초안/);
+  assert.match(html, /전체 미리보기를 보여주고 내 동의를 받은 뒤에만 생성/);
   assert.match(html, /auth login-start --help/);
   assert.match(html, /auth login-complete --help/);
   assert.match(html, /HARE_DATA_DIR/);

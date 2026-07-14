@@ -2,13 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import dotenv from "dotenv";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(moduleDir, "..");
-
-dotenv.config({ path: path.resolve(".env") });
-dotenv.config({ path: path.join(packageRoot, ".env") });
 
 type HareDefaultConfig = {
   clientId?: string;
@@ -19,6 +15,7 @@ type HareDefaultConfig = {
 export type Policy = {
   defaultMode: "readOnly" | "readWrite";
   allowWriteActions: boolean;
+  allowDraftActions: boolean;
   allowDownloads: boolean;
   storeRawMessages: boolean;
   defaultSearchLookbackDays: number;
@@ -27,6 +24,8 @@ export type Policy = {
   maxTeamsFetchLimit: number;
   maxFileSearchLimit: number;
   maxDownloadBytes: number;
+  maxDraftAttachmentBytes: number;
+  maxDraftTotalAttachmentBytes: number;
   retentionDays: number;
   requireConfirmationFor: string[];
 };
@@ -52,6 +51,7 @@ export type AppConfig = {
 const defaultPolicy: Policy = {
   defaultMode: "readOnly",
   allowWriteActions: false,
+  allowDraftActions: true,
   allowDownloads: true,
   storeRawMessages: false,
   defaultSearchLookbackDays: 90,
@@ -60,9 +60,12 @@ const defaultPolicy: Policy = {
   maxTeamsFetchLimit: 50,
   maxFileSearchLimit: 25,
   maxDownloadBytes: 104857600,
+  maxDraftAttachmentBytes: 157286400,
+  maxDraftTotalAttachmentBytes: 157286400,
   retentionDays: 7,
   requireConfirmationFor: [
     "send_mail",
+    "create_mail_draft",
     "post_teams_message",
     "create_calendar_event",
     "upload_file",

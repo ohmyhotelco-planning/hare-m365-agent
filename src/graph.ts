@@ -18,8 +18,22 @@ export async function graphGet<T>(config: AppConfig, pathOrUrl: string): Promise
 }
 
 export async function graphPost<T>(config: AppConfig, pathOrUrl: string, body: unknown): Promise<T> {
-  const response = await graphRequest(config, pathOrUrl, "POST", JSON.stringify(body));
-  return (await response.json()) as T;
+  const response = await graphRequest(
+    config,
+    pathOrUrl,
+    "POST",
+    body === undefined ? undefined : JSON.stringify(body)
+  );
+  return readJsonResponse<T>(response);
+}
+
+export async function graphPatch<T>(config: AppConfig, pathOrUrl: string, body: unknown): Promise<T> {
+  const response = await graphRequest(config, pathOrUrl, "PATCH", JSON.stringify(body));
+  return readJsonResponse<T>(response);
+}
+
+export async function graphDelete(config: AppConfig, pathOrUrl: string): Promise<void> {
+  await graphRequest(config, pathOrUrl, "DELETE");
 }
 
 export async function graphDownloadResponse(config: AppConfig, pathOrUrl: string) {
@@ -29,7 +43,7 @@ export async function graphDownloadResponse(config: AppConfig, pathOrUrl: string
 async function graphRequest(
   config: AppConfig,
   pathOrUrl: string,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   body?: string,
   acceptJson = true
 ) {
@@ -74,6 +88,12 @@ async function graphRequest(
   }
 
   throw lastError instanceof Error ? lastError : new Error("Graph request failed.");
+}
+
+async function readJsonResponse<T>(response: { text(): Promise<string> }): Promise<T> {
+  const text = await response.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export function retryDelayMs(retryAfter: string | null | undefined, attempt: number): number {
