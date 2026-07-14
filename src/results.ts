@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { AppConfig } from "./config.js";
+import { usesDeleteRestrictedStorage } from "./persistent-storage.js";
 
 export function resolveResultPath(config: AppConfig, outputPath: string): string {
   if (path.isAbsolute(outputPath)) return path.resolve(outputPath);
@@ -16,7 +17,12 @@ export function resolveResultPath(config: AppConfig, outputPath: string): string
 
 export function cleanupExpiredResults(config: AppConfig, now = Date.now()): number {
   const retentionDays = config.policy.retentionDays;
-  if (!Number.isFinite(retentionDays) || retentionDays <= 0 || !fs.existsSync(config.resultsDir)) {
+  if (
+    usesDeleteRestrictedStorage(config.resultsDir) ||
+    !Number.isFinite(retentionDays) ||
+    retentionDays <= 0 ||
+    !fs.existsSync(config.resultsDir)
+  ) {
     return 0;
   }
 

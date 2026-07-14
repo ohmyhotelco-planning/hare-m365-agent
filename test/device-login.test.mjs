@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  hasPendingDeviceLoginState,
   readDeviceLoginState,
   ResumeDeviceCodeNetworkClient,
   startDeviceLogin
@@ -97,6 +98,16 @@ test("login-start refuses an unmounted hosted-session data directory", async () 
     () => startDeviceLogin(config, ["User.Read"]),
     /FOLDER_REQUIRED/
   );
+});
+
+test("an empty retained state file is not treated as a pending login", () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-device-empty-state-"));
+  const config = configFor(dataDir);
+  fs.mkdirSync(config.cacheDir, { recursive: true });
+  fs.writeFileSync(path.join(config.cacheDir, "device-login-state.json"), "", "utf8");
+
+  assert.equal(hasPendingDeviceLoginState(config), false);
+  assert.throws(() => readDeviceLoginState(config), /LOGIN_START_REQUIRED/);
 });
 
 test("login-complete resumes the saved device flow and writes an MSAL cache quickly", async () => {

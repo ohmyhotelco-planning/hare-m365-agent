@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { completeLogin, getAuthStatus, getScopeList, startLogin, logout } from "./auth.js";
 import { ensureRuntimeDirs, loadConfig, requireConfigured } from "./config.js";
-import { deviceLoginStatePath } from "./device-login.js";
+import { hasPendingDeviceLoginState } from "./device-login.js";
 import {
   countMailboxMessages,
   listInbox,
@@ -17,7 +17,7 @@ import { listChatMessages, listChats, listJoinedTeams, searchChatMessages } from
 import { cleanupExpiredResults, resolveResultPath } from "./results.js";
 import { writeSessionRules } from "./session-rules.js";
 import { buildSetupContract } from "./setup-state.js";
-import { buildLocalSetupCommand, getLocalInstallPaths } from "./local-install.js";
+import { buildLocalSetupCommand } from "./local-install.js";
 
 const program = new Command();
 program.option("--data-dir <path>", "Use this exact Hare data directory for every command in the session");
@@ -34,7 +34,6 @@ const packageName = "@ohmyhotel/hare-m365-agent";
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageVersion = readPackageVersion();
 const repoUrl = "https://github.com/ohmyhotelco-planning/hare-m365-agent.git";
-const localInstallPaths = getLocalInstallPaths(config.dataDir);
 const localSetupCommand = buildLocalSetupCommand({
   dataDir: config.dataDir,
   repository: repoUrl,
@@ -58,7 +57,7 @@ const rulesFile = writeSessionRules(config, {
   commandPrefix: getExplicitSelfCommand(),
   repository: repoUrl,
   branch: "master",
-  workDir: localInstallPaths.appDir,
+  workDir: packageRoot,
   requiredDomains
 });
 
@@ -94,48 +93,39 @@ const llmGuide = `# Hare M365 Agent LLM Guide
 4. 도메인 허용 확인 전에는 git, npm, curl, 로그인, Outlook/Teams/Files 조회를 시작하지 않는다.
 5. GitHub API(api.github.com)나 GitHub Release asset으로 repo 접근을 판단하지 않는다. Cowork에서는 api.github.com이 막혀도 git clone은 성공할 수 있다.
 6. 실제 사용 경로인 git ls-remote 또는 git clone으로 repo 접근을 판단한다.
-7. Cowork에는 실행 셸이 두 곳 있을 수 있다. 세션 샌드박스 셸에는 Cowork 설정의 기능 > 도메인 허용 목록이 적용되고, 연결 폴더가 마운트된 디바이스 셸은 설정과 무관하게 모든 외부 도메인이 차단될 수 있다(전 도메인 403 blocked-by-allowlist). git, npm, 로그인, Graph 호출은 반드시 도메인 허용 목록이 실제로 적용되는 셸에서 실행한다.
-8. 영속 저장소는 폴더 이름으로 찾지 않고 현재 Cowork 작업에 선택된 프로젝트 루트로 확정한다. 이름이 무엇이든 현재 선택된 프로젝트 하나만 사용하며, 비슷한 이름의 다른 로컬 폴더로 전환하지 않는다.
-9. HARE_ROOT 판별: 네트워크가 되는 실행 셸에서 현재 선택된 프로젝트 마운트(/sessions/<session>/mnt/<selected-project> 형태)가 직접 보이고 쓰기 가능하면 그 마운트 루트를 HARE_ROOT로 사용한다(단일 환경). 보이지 않으면 하이브리드 모델을 사용한다: 샌드박스 고정 경로(예: /home/claude/hare)를 HARE_ROOT와 --data-dir로 쓰고, 현재 선택된 프로젝트 루트는 영속 저장소로 사용해 파일 스테이징/커밋 도구로 동기화한다.
+7. git, npm, 로그인, Graph 호출은 Cowork 도메인 허용 목록이 적용되는 세션 셸에서 실행한다.
+8. 현재 Cowork 작업에 선택된 프로젝트 마운트만 영구 dataDir로 사용한다. 폴더 이름으로 다른 경로를 찾지 않는다.
+9. 선택 프로젝트에는 인증 캐시, 규칙, 다운로드와 결과만 저장한다. git clone, npm ci와 build는 준비 명령이 지정한 세션 런타임에서 실행한다.
 10. 도메인 설정을 현재 Cowork 작업이 시작된 뒤 변경했다면 새 Cowork 채팅을 열어야 변경된 네트워크 정책이 적용된다.
 11. 사용자는 Cowork 작업을 만들 때 기존 Hare 프로젝트 폴더를 먼저 선택한다. 선택된 프로젝트가 없으면 FOLDER_REQUIRED로 멈추고 기존 Hare 프로젝트를 선택한 새 Cowork 작업에서 다시 시작하도록 안내한다.
-
-하이브리드 세션 시작(연결 폴더가 실행 셸에 보이지 않는 표준 Cowork):
-1. 연결 폴더에서 .hare-app-snapshot.tar.gz, .hare-app-build-head, .cache/msal-cache.json, claude/ 문서를 가져와 HARE_ROOT 아래 같은 상대 경로에 배치한다.
-2. 준비 명령을 실행한다. 스냅샷이 있으면 자동으로 풀려 clone을 건너뛰고, HEAD가 원격과 같으면 npm ci와 build도 건너뛴다.
-3. 재빌드가 일어났거나 로그인 캐시가 갱신되면 .hare-app-snapshot.tar.gz, .hare-app-build-head, .cache/msal-cache.json을 연결 폴더로 다시 커밋해 다음 채팅에서 재사용한다.
 
 준비 명령:
 \`\`\`bash
 ${setupCommandForGuide}
 \`\`\`
 
-HARE_ROOT 하나만 모든 명령의 --data-dir로 사용한다. 프로그램은 그 아래 app, 인증 캐시는 .cache, 규칙은 claude에 유지한다. 스냅샷과 app이 모두 없을 때만 clone하고, 이후에는 같은 app을 git pull --ff-only로 갱신한다. HEAD가 바뀌었거나 빌드가 없을 때만 npm ci와 build를 실행한다. 어느 단계든 실패하면 다른 복사본이나 임시 폴더로 대체하지 말고 실패 단계와 오류 한 줄만 보고한다. npm ci를 npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 않는다.
+준비 명령은 세션 런타임의 app을 최신 master로 맞추고 모든 Hare 명령에 선택 프로젝트의 정확한 --data-dir를 붙인다. 프로젝트 폴더에서 git/npm/build를 실행하거나 삭제 권한을 요청하지 않는다. /tmp, /dev/shm, /home/claude, /root/.local/share 또는 다른 추측 경로를 dataDir로 사용하지 않는다.
 
 로그인 하드게이트:
 - startup, doctor, auth status의 setup.state만 확인하고 해당 상태의 setup.nextAction 하나만 수행한다.
 - SETUP_REQUIRED: 설정 누락을 한 문장으로 보고하고 멈춘다.
 - FOLDER_REQUIRED: 현재 작업이 프로젝트 폴더 없이 시작된 상태다. 사용자가 기존 Hare 프로젝트 또는 폴더를 선택해 새 Cowork 작업을 열고 같은 프롬프트를 붙여넣도록 한 문장으로 안내한 뒤 멈춘다.
-- Cowork Linux의 /root/.local/share 또는 ~/.local/share OS 기본 경로는 login-start가 거부된다. 하이브리드 모델에서는 --data-dir로 명시한 샌드박스 HARE_ROOT(예: /home/claude/hare)에 로그인하고, 캐시를 현재 선택된 프로젝트 루트로 동기화해 영속성을 확보한다. /sessions/<session>/mnt/<selected-project> 형태는 현재 선택된 프로젝트의 정상 마운트 경로이므로 실행 셸에서 직접 보이는 환경이면 그대로 --data-dir로 사용한다.
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행하고 Microsoft 로그인 주소와 userCode를 보여준 뒤 멈춘다.
-- LOGIN_COMPLETE_REQUIRED: 사용자가 "로그인 완료"라고 말할 때까지 기다린다. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행한다. COMPLETE는 저장된 캐시 재검증까지 성공했다는 뜻이다. 하이브리드 모델에서는 갱신된 .cache/msal-cache.json을 즉시 연결 폴더로 커밋한다.
+- LOGIN_COMPLETE_REQUIRED: 사용자가 "로그인 완료"라고 말할 때까지 기다린다. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행한다. COMPLETE는 선택 프로젝트에 저장된 캐시 재검증까지 성공했다는 뜻이다.
 - READY: 사용 준비 완료를 보고하고 사용자의 업무 조회 요청을 기다린다.
-- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 먼저 실행 셸을 확인한다. 연결 폴더가 마운트된 디바이스 셸이었다면 실행 위치 문제이므로 같은 명령을 샌드박스 셸에서 한 번 실행한다. 샌드박스 셸이었다면 NETWORK_PERMISSION_REQUIRED로 보고한다. Cowork 설정의 도메인 허용 목록을 확인하고, 설정을 변경했다면 같은 HareM365Agent 프로젝트에서 새 Cowork 작업을 열어 실패한 명령만 한 번 재시도하도록 안내한 뒤 멈춘다.
+- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED로 보고하고 막힌 도메인만 알려준 뒤 멈춘다.
 - 그 밖의 명령 실패는 BLOCKED로 취급해 실패 단계와 오류 한 줄만 보고한다. 다른 경로를 추측하거나 반복 실행하지 않는다.
 
 저장 위치:
 - 로컬 Windows/Mac/Linux에서는 OS 기본 고정 dataDir를 사용한다.
-- Cowork/hosted sandbox에서는 샌드박스 고정 HARE_ROOT를 --data-dir로 명시해 실행하고, 영속 원본은 현재 Cowork 작업에 선택된 프로젝트 루트에 둔다. 폴더 이름을 기준으로 다른 경로를 찾지 않는다. 스냅샷, 빌드 마커, 로그인 캐시, 규칙, 보존할 결과를 같은 선택 프로젝트와 동기화한다.
-- 일반 /sessions 또는 /tmp 기본 경로에서는 login-start가 거부된다. /sessions/<session>/mnt/<selected-project>는 현재 선택된 프로젝트의 마운트일 때 연결된 호스트 폴더로 허용한다.
-- Cowork Linux OS 기본 dataDir(/root/.local/share 등)도 임시 컨테이너 경로로 취급하고 login-start를 거부한다.
+- Cowork에서는 /sessions/<session>/mnt/<selected-project> 형태의 현재 선택 프로젝트를 dataDir로 사용한다.
+- 앱 코드는 세션 런타임에 두고 로그인 캐시와 사용자 결과만 선택 프로젝트에 유지한다.
 - startup이 반환한 setup.nextCommand에는 동일한 --data-dir가 포함된다. 환경변수에 의존하거나 명령을 다시 조합하지 않고 그대로 실행한다.
 
 Cowork 네트워크 실패 때:
-- 먼저 실패한 명령을 어느 셸에서 실행했는지 확인한다. 연결 폴더가 마운트된 디바이스 셸은 설정과 무관하게 모든 도메인이 403 blocked-by-allowlist로 차단될 수 있다. 이 경우 설정 문제가 아니라 실행 위치 문제이므로 같은 명령을 샌드박스 셸에서 실행한다.
-- 샌드박스 셸에서 HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 나오면 현재 Cowork 작업의 네트워크 허용 정책 문제다. Cowork 설정의 기능 > 도메인 허용 목록을 확인한다.
+- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 나오면 Cowork 설정의 기능 > 도메인 허용 목록을 확인한다.
 - 설정을 변경한 뒤에는 새 Cowork 채팅을 열고 같은 HareM365Agent 폴더를 다시 연결해야 새 정책이 적용될 수 있다.
-- 이전 작업에서 반복 진단하지 말고, 새 작업에서 실패했던 명령만 한 번 재시도한다. clone/build/login 전체를 반복하지 않는다.
-- 일반적인 fetch failed 또는 network_error에는 실제 오류 한 줄만 보고하고, 도메인 반복 호출이나 임의 프록시 우회를 시작하지 않는다.
+- 새 작업에서 실패했던 명령만 한 번 재시도하고, 일반적인 fetch failed 또는 network_error에는 실제 오류 한 줄만 보고한다.
 
 읽기 명령:
 \`\`\`bash
@@ -162,7 +152,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - Teams 최신 채팅 판단은 lastMessageCreatedDateTime을 우선한다. lastUpdatedDateTime만으로 최신 메시지 방을 판단하지 않는다.
 `;
 
-const llmPrompt = `목적: Hare M365 Agent로 내 Microsoft 365 업무 요청을 처리해.
+const llmPrompt = `목적: Hare M365 Agent 연결 상태를 준비하고, 이후 내 Microsoft 365 업무 요청을 처리해.
 
 저장소:
 ${repoUrl}
@@ -178,36 +168,30 @@ ohmylab.sharepoint.com
 도메인 허용 확인은 가능하면 네가 가진 사용자 확인 요청, 선택형 질문, 승인 요청 UI로 처리해. 사용자가 직접 "도메인 허용 완료" 같은 문구를 타이핑하게 요구하지 마.
 그런 확인 요청 기능이 없는 환경에서만 짧게 yes/no로 물어봐.
 
-도메인 허용 확인 전에는 git, npm, curl, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
-Cowork에는 실행 셸이 두 곳 있을 수 있어. 세션 샌드박스 셸에는 설정의 기능 > 도메인 허용 목록이 적용되고, 연결 폴더가 마운트된 디바이스 셸은 설정과 무관하게 모든 도메인이 403 blocked-by-allowlist로 차단될 수 있어.
-git, npm, 로그인, Graph 호출은 반드시 도메인 허용 목록이 실제로 적용되는 셸(샌드박스)에서 실행해.
+도메인 허용 확인 전에는 git, npm, 로그인, Outlook/Teams/Files 조회를 시작하지 마.
+git, npm, 로그인, Graph 호출은 도메인 허용 목록이 적용되는 Cowork 세션 셸에서 실행해.
 도메인 설정을 이 Cowork 작업을 연 뒤 변경했다면 새 Cowork 채팅을 열어야 변경된 정책이 적용돼.
 GitHub API(api.github.com)나 GitHub Release asset 다운로드로 repo 접근을 판단하지 마.
 이 환경에서는 api.github.com이 403이어도 git clone은 성공할 수 있어.
 repo 접근은 git ls-remote 또는 git clone으로 판단해.
 
-이 Cowork 작업을 만들 때 사용자가 미리 선택한 프로젝트 루트를 확인해. 폴더 이름으로 HareM365Agent를 검색하거나 비슷한 이름의 다른 로컬 폴더를 고르지 마. 이름이 무엇이든 현재 선택된 프로젝트 루트 하나가 영속 저장소야.
+이 Cowork 작업을 만들 때 사용자가 미리 선택한 프로젝트 루트를 확인해. 이름이 무엇이든 현재 선택된 프로젝트 루트 하나가 Hare의 영구 dataDir야.
 선택된 프로젝트가 없으면 FOLDER_REQUIRED라고 말하고, 기존 Hare 프로젝트 또는 폴더를 선택해 새 Cowork 작업을 연 뒤 같은 프롬프트를 붙여넣으라고 한 문장으로 안내하고 멈춰.
-
-HARE_ROOT 판별: 네트워크가 되는 실행 셸에서 현재 선택된 프로젝트 마운트(/sessions/<session>/mnt/<selected-project> 형태)가 직접 보이고 쓰기 가능하면 그 마운트 루트를 HARE_ROOT와 --data-dir로 사용해.
-보이지 않으면 하이브리드 모델을 사용해: 샌드박스 고정 경로(예: /home/claude/hare)를 HARE_ROOT로 쓰고, 현재 선택된 프로젝트 루트는 영속 저장소로 사용해.
-하이브리드 모델에서는 준비 전에 현재 선택된 프로젝트의 .hare-app-snapshot.tar.gz, .hare-app-build-head, .cache/msal-cache.json, claude/ 문서를 가져와 HARE_ROOT 아래 같은 상대 경로에 배치하고, 재빌드나 로그인 캐시 갱신이 생기면 같은 파일들을 반드시 그 프로젝트 루트로 다시 커밋해.
 
 아래 순서로 준비해.
 
 ${setupCommandForGuide}
 
-HARE_ROOT 하나만 모든 명령의 --data-dir로 사용해. 프로그램은 그 아래 app, 인증 캐시는 .cache, 규칙은 claude에 유지해. 스냅샷이 있으면 자동으로 풀려 clone을 건너뛰고, 스냅샷과 app이 모두 없을 때만 clone해. 이후 채팅에서는 같은 app을 git pull --ff-only로 갱신해. HEAD가 바뀌었거나 빌드가 없을 때만 npm ci와 build를 실행해. 실패하면 다른 복사본이나 임시 폴더로 대체하지 말고 실패 단계와 오류 한 줄만 알려줘.
+준비 명령은 git/npm/build를 세션 런타임에서 수행하고 --data-dir에는 현재 선택 프로젝트만 사용해. 프로젝트 폴더 안에서 git clone, npm ci 또는 build를 실행하지 마. 프로젝트 폴더의 삭제 권한을 요청하지 마. /tmp, /dev/shm, /home/claude, /root/.local/share 또는 다른 경로를 dataDir로 시도하지 마.
 
 startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계만 수행해. setup.state와 다른 경로를 추측하지 마.
 
 - SETUP_REQUIRED: 설정 누락을 한 문장으로 알려주고 멈춰.
 - FOLDER_REQUIRED: 기존 Hare 프로젝트 또는 폴더를 선택해 새 Cowork 작업을 열고 같은 프롬프트를 붙여넣으라고 한 문장으로 안내한 뒤 멈춰.
-- Cowork Linux의 /root/.local/share 또는 ~/.local/share OS 기본 경로에는 로그인하지 마. 하이브리드 모델에서는 --data-dir로 명시한 샌드박스 HARE_ROOT에 로그인하고 캐시를 현재 선택된 프로젝트 루트로 동기화해. /sessions/<session>/mnt/<selected-project> 형태는 현재 선택된 프로젝트의 정상 마운트 경로야. 실행 셸에서 직접 보이는 환경이면 그대로 --data-dir로 사용해.
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행해. 반환된 Microsoft 로그인 주소와 userCode를 보여주고 "로그인 완료"라고 말해달라고 안내한 뒤 멈춰.
-- LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 저장된 캐시 재검증까지 성공한 상태야. 하이브리드 모델이면 갱신된 .cache/msal-cache.json을 즉시 연결 폴더로 커밋해.
+- LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 선택 프로젝트에 저장된 캐시 재검증까지 성공한 상태야.
 - READY: "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
-- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 먼저 실행 셸을 확인해. 디바이스 셸이었다면 같은 명령을 샌드박스 셸에서 한 번 실행해. 샌드박스 셸이었다면 NETWORK_PERMISSION_REQUIRED라고 알려주고, Cowork 설정의 도메인 허용 목록을 확인한 뒤 설정을 바꿨다면 같은 HareM365Agent 프로젝트에서 새 Cowork 작업을 열어 실패했던 명령만 한 번 재시도하라고 안내하고 멈춰.
+- HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED라고 알려주고 막힌 도메인만 말한 뒤 멈춰.
 - 그 밖의 명령 실패: BLOCKED로 취급해 실패 단계와 오류 한 줄만 알려주고 멈춰. 다른 경로를 시도하거나 같은 명령을 반복하지 마.
 
 clone/build 전체 반복, 도메인 반복 진단, 임의 프록시 우회는 시작하지 마.
@@ -273,7 +257,7 @@ async function getDoctorStatus() {
     cacheDir: config.cacheDir,
     cacheFile,
     cacheFileExists: fs.existsSync(cacheFile),
-    pendingLoginStateExists: fs.existsSync(deviceLoginStatePath(config)),
+    pendingLoginStateExists: hasPendingDeviceLoginState(config),
     downloadDir: config.downloadDir,
     logsDir: config.logsDir,
     resultsDir: config.resultsDir,
@@ -298,7 +282,7 @@ program
           version: packageVersion,
           mode: "startup",
           repository: repoUrl,
-          appDir: config.dataDirPersistent ? localInstallPaths.appDir : undefined,
+          appDir: config.dataDirPersistent ? packageRoot : undefined,
           setupCommand: config.dataDirPersistent ? localSetupCommand : undefined,
           cloneVerification: "LOCAL_HEAD must exactly equal REMOTE_HEAD from refs/heads/master before npm ci.",
           requiredDomains,
@@ -377,7 +361,7 @@ auth.command("status").description("Show current login and policy status").actio
   const authStatus = await getAuthStatus(config);
   const loggedIn = authStatus.loggedIn;
   const cacheFile = path.join(config.cacheDir, "msal-cache.json");
-  const pendingLoginStateExists = fs.existsSync(deviceLoginStatePath(config));
+  const pendingLoginStateExists = hasPendingDeviceLoginState(config);
   const setup = buildSetupContract(
     {
       configured: true,

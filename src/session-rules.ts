@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { AppConfig } from "./config.js";
+import { writeStoredText } from "./persistent-storage.js";
 
 export type SessionRulesOptions = {
   commandPrefix: string;
@@ -28,13 +29,7 @@ export function writeSessionRules(
     return rulesFile;
   }
 
-  const temporaryPath = `${rulesFile}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, contents, { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(temporaryPath, rulesFile);
-  } finally {
-    fs.rmSync(temporaryPath, { force: true });
-  }
+  writeStoredText(rulesFile, contents);
   return rulesFile;
 }
 
@@ -49,72 +44,55 @@ function buildSessionRules(
 
   return `# Hare M365 Agent Session Rules
 
-This file may be copied between the current Cowork project and a Linux session working directory. The project root selected for the current Cowork task is the persistent source of truth.
+The project folder selected when this Cowork task was opened is Hare's persistent data directory. Keep using that exact project root regardless of its folder name.
 
 ## Fixed locations
 
+- Persistent data directory: ${config.dataDir}
 - Rules file: ${rulesFile}
-- Data directory (run location): ${config.dataDir}
-- Persistent store: the project root selected for the current Cowork task (use the actual selected folder, regardless of its name)
 - Login cache: ${cacheFile}
 - Downloads: ${config.downloadDir}
 - Results: ${config.resultsDir}
 - Logs: ${config.logsDir}
-- Cowork project folder: the current selected project root
+- Current session app directory: ${options.workDir}
 
-Start every Cowork task with the user's existing Hare project folder selected. Do not search for a folder by the literal name HareM365Agent and do not switch to a similarly named sibling folder. The selected project root is the persistent store; the data directory above is where Hare actually runs.
-Cowork Linux defaults such as /root/.local/share are container-local and are never a persistent Hare data directory.
-Pick the run location by inspection, not by assumption: if the selected project mount (a path shaped like /sessions/<session>/mnt/<selected-project>) is directly visible and writable in the network-enabled shell, use that mount root as the data directory. If it is not visible there (standard Cowork), use the hybrid model: run Hare in a fixed sandbox path (for example /home/claude/hare) as the data directory, and sync persistent files with the selected project root using the file staging/commit tools.
+The selected project folder stores Hare data only. Do not clone the repository, run npm ci, or build inside it. Cowork mounts may allow create and overwrite while rejecting shell deletion, so Hare updates its own cache and rule files without requesting folder deletion permission.
 
-## Hybrid session start and sync
-
-1. Stage from the current selected project root into the data directory (same relative paths): .hare-app-snapshot.tar.gz, .hare-app-build-head, .cache/msal-cache.json, and the claude/ documents.
-2. Run the setup command. An existing snapshot is extracted automatically and skips git clone; when HEAD matches the remote, npm ci and the build are skipped too.
-3. After any rebuild, commit the refreshed .hare-app-snapshot.tar.gz and .hare-app-build-head back to that same selected project root. After any login or token-cache change, commit .cache/msal-cache.json back as well. Results the user wants to keep go back under results/.
+The application checkout belongs in the Cowork session runtime shown by the setup command. It can be recreated in a new Cowork task. Never replace the selected project data directory with a temporary or guessed path.
 
 ## Code and commands
 
 - Repository: ${options.repository}
 - Branch: ${options.branch}
-- Local app directory: ${options.workDir}
-- Verify latest code with refs/heads/${options.branch} before building.
-- Reuse this app directory in every chat. Run git fetch and git pull --ff-only; build only when HEAD changed or build files are missing.
-- Command prefix for this data directory:
+- Verify the latest code with refs/heads/${options.branch} before building.
+- Command prefix for this selected project:
 
-\`\`\`text
-${options.commandPrefix}
-\`\`\`
+    ${options.commandPrefix}
 
 - Startup command:
 
-\`\`\`text
-${startupCommand}
-\`\`\`
+    ${startupCommand}
 
 - Authentication status command:
 
-\`\`\`text
-${statusCommand}
-\`\`\`
+    ${statusCommand}
 
-Always keep the exact --data-dir argument shown above. Updating or rebuilding the local app does not require a new Microsoft login when this same data directory contains a usable cache.
+Every command must keep this exact --data-dir. A new Cowork task may recreate the session app, but a usable login in this selected project remains reusable.
 
 ## Startup state
 
-1. Run the startup command and follow only setup.state and setup.nextCommand.
-2. READY means loggedIn and tokenUsable are both true. Do not start a new login; wait for the user's Microsoft 365 request.
-3. LOGIN_START_REQUIRED means no usable login exists in this exact data directory. Run setup.nextCommand once and show the returned Microsoft URL and user code.
-4. LOGIN_COMPLETE_REQUIRED means wait until the user says the browser login is complete, then run setup.nextCommand once.
-5. FOLDER_REQUIRED means this task was opened without a project folder. Stop and tell the user to open a new Cowork task with their existing Hare project selected.
-6. Do not interpret a session-local /sessions or /tmp data directory as the user's persistent login state. Accept /sessions/<session>/mnt/<selected-project> as the connected host folder when it is the current selected project and is directly visible in the running shell.
+1. Run startup and follow only setup.state and setup.nextCommand. A usable login requires both loggedIn=true and tokenUsable=true.
+2. READY: Do not start a new login; wait for the user's Microsoft 365 request.
+3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code.
+4. LOGIN_COMPLETE_REQUIRED: wait until the user says the browser login is complete, then run setup.nextCommand once.
+5. FOLDER_REQUIRED: stop and tell the user to open a new Cowork task with the existing Hare project selected.
+6. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.
 
 ## Cowork network permission
 
-- Cowork Settings > Features > Domain allowlist applies to the session sandbox shell. The device shell that mounts the connected folder may have all outbound domains blocked regardless of that setting (every domain returns 403 blocked-by-allowlist there).
-- Never run git, npm, login, or Graph commands in the device shell. Run them in the sandbox shell where the domain allowlist actually applies.
-- If a command returns HTTP 403 with X-Proxy-Error: blocked-by-allowlist, first check which shell ran it. From the device shell, rerun the same command in the sandbox shell instead. From the sandbox shell, report NETWORK_PERMISSION_REQUIRED and ask the user to set the domain preset to None and add the required domains below.
-- If the allowlist was changed after the current Cowork task started, the user must open a new Cowork task so the new egress policy is applied. Reconnect the same HareM365Agent folder and retry only the failed command once.
-- Do not repeat domain probes, clone, build, or login while the current task still has the old egress policy.
+- Run git, npm, login, and Graph commands in the session sandbox shell where the Cowork domain allowlist applies.
+- If HTTP 403 includes X-Proxy-Error: blocked-by-allowlist, report NETWORK_PERMISSION_REQUIRED and stop after identifying the failed domain.
+- When the allowlist changes, open a new Cowork task with the same Hare project selected and retry only the failed step once.
 
 ## Microsoft 365 operation
 

@@ -7,6 +7,7 @@ import type {
 } from "@azure/msal-node";
 import type { AppConfig } from "./config.js";
 import { ProxyAwareNetworkClient } from "./msal-network.js";
+import { clearStoredFile, storedFileHasContent, writeStoredText } from "./persistent-storage.js";
 
 type ServerDeviceCodeResponse = {
   user_code: string;
@@ -38,6 +39,10 @@ export type DeviceLoginStartResult = {
 
 export function deviceLoginStatePath(config: AppConfig): string {
   return path.join(config.cacheDir, "device-login-state.json");
+}
+
+export function hasPendingDeviceLoginState(config: AppConfig): boolean {
+  return storedFileHasContent(deviceLoginStatePath(config));
 }
 
 export async function startDeviceLogin(
@@ -86,8 +91,8 @@ export async function startDeviceLogin(
 export function readDeviceLoginState(config: AppConfig): DeviceLoginState {
   requirePersistentDataDir(config);
   const statePath = deviceLoginStatePath(config);
-  if (!fs.existsSync(statePath)) {
-    throw new Error("No pending Hare login. Run auth login-start first.");
+  if (!hasPendingDeviceLoginState(config)) {
+    throw new Error("LOGIN_START_REQUIRED: No pending Hare login. Run auth login-start first.");
   }
 
   let state: DeviceLoginState;
@@ -114,7 +119,7 @@ export function readDeviceLoginState(config: AppConfig): DeviceLoginState {
 }
 
 export function clearDeviceLoginState(config: AppConfig): void {
-  fs.rmSync(deviceLoginStatePath(config), { force: true });
+  clearStoredFile(deviceLoginStatePath(config));
 }
 
 export class ResumeDeviceCodeNetworkClient implements INetworkModule {
@@ -171,14 +176,7 @@ function validateServerResponse(value: ServerDeviceCodeResponse): void {
 }
 
 function writeState(filePath: string, state: DeviceLoginState): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, JSON.stringify(state), { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(temporaryPath, filePath);
-  } finally {
-    fs.rmSync(temporaryPath, { force: true });
-  }
+  writeStoredText(filePath, JSON.stringify(state));
 }
 
 function errorMessage(error: unknown): string {

@@ -57,6 +57,10 @@ test("hosted temporary paths are rejected even when explicitly selected", () => 
     isPersistentDataDir("/tmp/HareM365Agent", "environment", "linux"),
     false
   );
+  assert.equal(
+    isPersistentDataDir("/dev/shm/HareM365Agent", "command-line", "linux"),
+    false
+  );
 });
 
 test("Windows and Mac OS-default data directories remain persistent", () => {

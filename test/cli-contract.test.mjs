@@ -16,9 +16,12 @@ function makeDataDir(prefix) {
 }
 
 const cli = path.resolve("dist/cli.js");
-const htmlGuide = path.resolve(
-  "release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드_fixed_final_real.html"
-);
+const htmlGuideDirectory = path.resolve("release-templates/cowork-git-clone");
+const htmlGuideFiles = fs
+  .readdirSync(htmlGuideDirectory)
+  .filter((name) => name.startsWith("Hare_M365_Claude_Cowork_") && name.endsWith(".html"));
+assert.equal(htmlGuideFiles.length, 1, "Exactly one distributable Cowork HTML guide must exist");
+const htmlGuide = path.join(htmlGuideDirectory, htmlGuideFiles[0]);
 
 function run(args, dataDir) {
   return spawnSync(process.execPath, [cli, ...args], {
@@ -63,19 +66,18 @@ test("startup never treats cache existence alone as a successful login", () => {
     "ohmylab-my.sharepoint.com",
     "ohmylab.sharepoint.com"
   ]);
-  assert.equal(output.appDir, path.join(dataDir, "app"));
+  assert.equal(output.appDir, path.resolve("."));
   assert.match(output.setupCommand, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(output.setupCommand, /refs\/heads\/master/);
-  assert.match(output.setupCommand, /\.hare-app-snapshot\.tar\.gz/);
-  assert.match(output.setupCommand, /tar -tzf "\$HARE_SNAPSHOT" >\/dev\/null/);
-  assert.match(output.setupCommand, /tar -xzf "\$HARE_SNAPSHOT" -C "\$HARE_ROOT"/);
-  assert.match(output.setupCommand, /tar -czf "\$HARE_SNAPSHOT_TMP" -C "\$HARE_ROOT" app/);
-  assert.match(output.setupCommand, /mv -f "\$HARE_SNAPSHOT_TMP" "\$HARE_SNAPSHOT"/);
+  assert.match(output.setupCommand, /HARE_RUNTIME_ROOT=/);
+  assert.match(output.setupCommand, /HARE_APP="\$HARE_RUNTIME_ROOT\/app"/);
+  assert.match(output.setupCommand, /HARE_DATA_DIR=/);
+  assert.doesNotMatch(output.setupCommand, /HARE_SNAPSHOT|\.hare-app-snapshot|tar -[ctx]zf/);
   assert.match(output.setupCommand, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.match(output.setupCommand, /pull --ff-only/);
   assert.match(output.setupCommand, /--data-dir/);
   assert.match(output.setupCommand, new RegExp(escapeRegExp(dataDir)));
-  assert.doesNotMatch(output.setupCommand, /\/tmp\/hare-m365-agent|rm -rf/);
+  assert.doesNotMatch(output.setupCommand, /rm -rf "\$HARE_DATA_DIR"|\/tmp\/hare-m365-agent|\/dev\/shm|\/home\/claude/);
   assert.doesNotMatch(JSON.stringify(output), /required only if npm ci/);
   assert.match(output.setup.nextCommand, /auth login-start/);
   assert.match(output.setup.nextCommand, /--data-dir/);
@@ -131,19 +133,18 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "downloads"))));
   assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "results"))));
   assert.match(rules, /--data-dir/);
-  assert.match(rules, new RegExp(escapeRegExp(path.join(dataDir, "app"))));
+  assert.match(rules, /Current session app directory/);
   assert.doesNotMatch(rules, /\/tmp\/hare-m365-agent/);
   assert.match(rules, /refs\/heads\/master/);
   assert.match(rules, /loggedIn.*tokenUsable/s);
   assert.match(rules, /Do not start a new login/);
   assert.match(rules, /default lookback.*90 days/i);
-  assert.match(rules, /\/sessions\/<session>\/mnt\/<selected-project>/);
-  assert.match(rules, /actual selected folder, regardless of its name/);
-  assert.match(rules, /Do not search for a folder by the literal name HareM365Agent/);
+  assert.match(rules, /selected when this Cowork task was opened/);
+  assert.match(rules, /Do not clone the repository, run npm ci, or build inside it/);
+  assert.match(rules, /without requesting folder deletion permission/);
   assert.match(rules, /NETWORK_PERMISSION_REQUIRED/);
-  assert.match(rules, /applies to the session sandbox shell/);
-  assert.match(rules, /Never run git, npm, login, or Graph commands in the device shell/);
-  assert.match(rules, /\.hare-app-snapshot\.tar\.gz/);
+  assert.match(rules, /session sandbox shell/);
+  assert.doesNotMatch(rules, /hybrid|\.hare-app-snapshot|\/home\/claude/i);
   assert.doesNotMatch(rules, /single network allowlist/);
 });
 
@@ -155,8 +156,7 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /registry\.npmjs\.org/);
   assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(result.stdout, /pull --ff-only/);
-  assert.doesNotMatch(result.stdout, /\/tmp\/hare-m365-agent|rm -rf/);
-  assert.match(result.stdout, /npm install로 바꾸거나 여러 셸 호출에 나눠 반복하지 않는다/);
+  assert.doesNotMatch(result.stdout, /rm -rf "\$HARE_DATA_DIR"/);
   assert.match(result.stdout, /dist\/msal-network\.js/);
   assert.match(result.stdout, /setup\.state/);
   assert.match(result.stdout, /FOLDER_REQUIRED/);
@@ -164,15 +164,15 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /LOGIN_COMPLETE_REQUIRED/);
   assert.match(result.stdout, /setup\.nextCommand를 수정하지 않고/);
   assert.match(result.stdout, /\/root\/\.local\/share/);
-  assert.match(result.stdout, /현재 Cowork 작업에 선택된 프로젝트 루트/);
+  assert.match(result.stdout, /현재 Cowork 작업에 선택된 프로젝트 마운트/);
   assert.doesNotMatch(result.stdout, /computer-use|folder-access tool|%USERPROFILE%|~\/HareM365Agent/);
   assert.match(result.stdout, /\/sessions\/<session>\/mnt\/<selected-project>/);
   assert.match(result.stdout, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(result.stdout, /X-Proxy-Error: blocked-by-allowlist/);
   assert.match(result.stdout, /새 Cowork 채팅/);
-  assert.match(result.stdout, /하이브리드/);
-  assert.match(result.stdout, /\.hare-app-snapshot\.tar\.gz/);
-  assert.match(result.stdout, /샌드박스 셸/);
+  assert.match(result.stdout, /세션 런타임/);
+  assert.match(result.stdout, /삭제 권한을 요청하지 않는다/);
+  assert.doesNotMatch(result.stdout, /하이브리드|\.hare-app-snapshot/i);
   assert.doesNotMatch(result.stdout, /유일한 네트워크 허용 목록/);
   assert.doesNotMatch(result.stdout, /%USERPROFILE%\\Documents/);
 });
@@ -270,12 +270,16 @@ test("list commands reject invalid limits before making Graph calls", () => {
 
 test("human guide verifies split-login features without a hardcoded version", () => {
   const html = fs.readFileSync(htmlGuide, "utf8");
+  assert.match(html, /\.project-step > \.cowork-choice-figure \{ order: 2;/);
+  assert.match(html, /\.project-step > \.action-steps-continuation \{ order: 3;/);
+  assert.match(html, /class="cowork-choice-figure"/);
   assert.equal((html.match(/class="domain-row"/g) ?? []).length, 6);
   assert.match(html, /auth login-start --help/);
   assert.match(html, /auth login-complete --help/);
-  assert.match(html, /HARE_ROOT/);
+  assert.match(html, /HARE_DATA_DIR/);
+  assert.match(html, /HARE_RUNTIME_ROOT/);
   assert.match(html, /pull --ff-only/);
-  assert.doesNotMatch(html, /\/tmp\/hare-m365-agent|rm -rf/);
+  assert.doesNotMatch(html, /rm -rf "\$HARE_DATA_DIR"/);
   assert.doesNotMatch(html, /test "\$VERSION" = "/);
   assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.match(html, /auth login-start/);
@@ -306,11 +310,11 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.doesNotMatch(html, /id="prompt" rows="64"/);
   assert.match(html, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(html, /X-Proxy-Error: blocked-by-allowlist/);
-  assert.match(html, /\/sessions\/&lt;session&gt;\/mnt\/&lt;selected-project&gt;/);
-  assert.match(html, /폴더 이름으로 HareM365Agent를 검색하거나 비슷한 이름의 다른 로컬 폴더를 고르지 마/);
+  assert.match(html, /현재 선택된 프로젝트 마운트 경로/);
+  assert.match(html, /현재 선택된 프로젝트 루트 하나가 Hare의 영구 dataDir/);
   assert.match(html, /설정을 바꿨다면 새 Cowork 채팅을 여세요/);
-  assert.match(html, /\.hare-app-snapshot\.tar\.gz/);
-  assert.match(html, /HARE_ROOT 판별/);
+  assert.match(html, /선택 프로젝트의 삭제 권한을 요청하지 마/);
+  assert.doesNotMatch(html, /하이브리드|\.hare-app-snapshot|HARE_ROOT 판별/i);
   assert.doesNotMatch(html, /유일한 네트워크 허용 목록/);
   assert.doesNotMatch(html, /로컬 실행 환경은 프록시 허용 목록/);
   assert.doesNotMatch(html, /클라우드 쪽 환경은/);

@@ -16,6 +16,12 @@ import {
   type DeviceLoginStartResult
 } from "./device-login.js";
 import { ProxyAwareNetworkClient } from "./msal-network.js";
+import {
+  clearStoredFile,
+  storedFileHasContent,
+  usesDeleteRestrictedStorage,
+  writeStoredText
+} from "./persistent-storage.js";
 
 const scopes = [
   "User.Read",
@@ -54,8 +60,10 @@ async function buildPca(
         beforeCacheAccess: async (cacheContext) => {
           const file = cachePath(config);
           fs.mkdirSync(config.cacheDir, { recursive: true });
-          releaseCacheLock = await acquireFileLock(`${file}.lock`);
-          if (fs.existsSync(file)) {
+          releaseCacheLock = usesDeleteRestrictedStorage(file)
+            ? undefined
+            : await acquireFileLock(`${file}.lock`);
+          if (storedFileHasContent(file)) {
             try {
               cacheContext.tokenCache.deserialize(fs.readFileSync(file, "utf8"));
             } catch (error) {
@@ -68,7 +76,7 @@ async function buildPca(
         afterCacheAccess: async (cacheContext) => {
           try {
             if (cacheContext.cacheHasChanged) {
-              writeFileAtomically(cachePath(config), cacheContext.tokenCache.serialize());
+              writeStoredText(cachePath(config), cacheContext.tokenCache.serialize());
             }
           } finally {
             releaseCacheLock?.();
@@ -140,16 +148,6 @@ function isProcessRunning(pid: number): boolean {
     return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
-
-function writeFileAtomically(filePath: string, contents: string): void {
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, contents, { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(temporaryPath, filePath);
-  } finally {
-    fs.rmSync(temporaryPath, { force: true });
   }
 }
 
@@ -273,7 +271,7 @@ export async function getAccessToken(config: AppConfig): Promise<string> {
 
 export function logout(config: AppConfig): void {
   const file = cachePath(config);
-  if (fs.existsSync(file)) fs.rmSync(file, { force: true });
+  clearStoredFile(file);
   clearDeviceLoginState(config);
 }
 

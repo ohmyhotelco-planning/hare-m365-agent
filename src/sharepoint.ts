@@ -3,6 +3,7 @@ import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { AppConfig } from "./config.js";
+import { clearStoredFile } from "./persistent-storage.js";
 import { encodeQuery, graphDownloadResponse, graphGet, type GraphPage } from "./graph.js";
 
 export type FileSummary = {
@@ -169,7 +170,7 @@ export async function downloadDriveItem(
       fs.createWriteStream(outputPath, { flags: "wx", mode: 0o600 })
     );
   } catch (error) {
-    fs.rmSync(outputPath, { force: true });
+    clearStoredFile(outputPath);
     throw error;
   }
   return outputPath;

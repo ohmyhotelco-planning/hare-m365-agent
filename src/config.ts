@@ -147,12 +147,13 @@ export function loadConfig(overrides: { dataDir?: string } = {}): AppConfig {
   };
 }
 
-function isCoworkHostMountPath(value: string): boolean {
+export function isCoworkHostMountPath(value: string): boolean {
   return /(^|[\\/])sessions[\\/][^\\/]+[\\/]mnt[\\/][^\\/]+([\\/]|$)/i.test(value);
 }
 
 function isHostedSessionPath(value: string): boolean {
   if (/(^|[\\/])tmp([\\/]|$)/i.test(value)) return true;
+  if (/(^|[\\/])dev[\\/]shm([\\/]|$)/i.test(value)) return true;
   return /(^|[\\/])sessions([\\/]|$)/i.test(value) && !isCoworkHostMountPath(value);
 }
 
