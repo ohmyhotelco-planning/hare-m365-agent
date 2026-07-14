@@ -8,7 +8,9 @@ import { ensureRuntimeDirs, loadConfig, requireConfigured } from "./config.js";
 import { hasPendingDeviceLoginState } from "./device-login.js";
 import {
   countMailboxMessages,
+  listFlaggedMessages,
   listInbox,
+  listRecentMailbox,
   searchMailbox,
   type MailFolderScope
 } from "./outlook.js";
@@ -129,7 +131,9 @@ Cowork 네트워크 실패 때:
 
 읽기 명령:
 \`\`\`bash
+node dist/cli.js outlook recent --folder all --limit 10
 node dist/cli.js outlook inbox --limit 10
+node dist/cli.js outlook flagged --folder all --limit 1000
 node dist/cli.js outlook search --query "keyword" --since 2026-04-01 --until 2026-07-10 --folder all
 node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
 node dist/cli.js teams teams
@@ -142,6 +146,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 \`\`\`
 
 주의:
+- 일반적인 메일 조회와 최근 메일 요청은 outlook recent --folder all을 사용해 삭제된 항목을 제외한 전체 메일함을 대상으로 한다. outlook inbox는 사용자가 받은편지함을 명시한 경우에만 사용한다.
+- 플래그된 메일 요청은 outlook flagged --folder all을 사용한다. 모든 메일 조회 결과의 flagStatus를 함께 확인한다.
 - 사용자가 기간을 지정한 조회는 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 search 명령의 --since/--until에 반영한다.
 - 사용자가 기간을 지정하지 않은 검색은 최근 90일을 조회한다. 결과 JSON의 search.range.notice를 사용자에게 알려 실제 조회 범위를 명확히 한다.
 - search.limitReached가 true이면 일부 결과만 반환된 것이므로 사용자에게 한도 도달 사실을 알린다.
@@ -196,6 +202,8 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 
 clone/build 전체 반복, 도메인 반복 진단, 임의 프록시 우회는 시작하지 마.
 
+일반적인 메일 조회 또는 최근 메일 요청은 outlook recent --folder all을 사용해. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상이야. 사용자가 받은편지함을 명시한 경우에만 outlook inbox를 사용해.
+플래그된 메일을 요청하면 outlook flagged --folder all을 사용하고, 일반 메일 결과에서도 flagStatus를 확인해.
 Outlook 또는 Teams에서 기간·키워드 조회를 요청받으면 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 outlook search 또는 teams search-messages를 사용해.
 메일이 몇 건인지 묻는 정확한 집계 요청은 outlook search 결과를 세지 말고 outlook count를 사용해.
 SharePoint 사이트 존재 여부는 sharepoint sites로 확인하고, 개인 OneDrive만 검색하는 files search 결과로 사이트 존재 여부나 권한을 추정하지 마.
@@ -440,6 +448,22 @@ program
 const outlook = program.command("outlook").description("Outlook read commands");
 
 outlook
+  .command("recent")
+  .description("List recent messages across the mailbox; deleted items are excluded for all scope")
+  .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
+  .option("--limit <number>", "maximum message count", "10")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
+  .action(async (options: { folder: string; limit: string; out?: string }) => {
+    requireConfigured(config);
+    const data = await listRecentMailbox(
+      config,
+      parseMailFolderScope(options.folder),
+      Number(options.limit)
+    );
+    emitJson(data, options.out);
+  });
+
+outlook
   .command("inbox")
   .description("List recent Inbox messages")
   .option("--limit <number>", "maximum message count", "10")
@@ -449,6 +473,34 @@ outlook
     const data = await listInbox(config, Number(options.limit));
     emitJson({ messages: data }, options.out);
   });
+
+outlook
+  .command("flagged")
+  .description("List flagged Outlook messages by date range")
+  .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
+  .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
+  .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
+  .option("--limit <number>", "maximum flagged message count", "1000")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
+  .action(
+    async (options: {
+      since?: string;
+      until?: string;
+      folder: string;
+      limit: string;
+      out?: string;
+    }) => {
+      requireConfigured(config);
+      const data = await listFlaggedMessages(
+        config,
+        options.since,
+        options.until,
+        parseMailFolderScope(options.folder),
+        Number(options.limit)
+      );
+      emitJson(data, options.out);
+    }
+  );
 
 outlook
   .command("search")

@@ -28,6 +28,8 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 
 ## 조회 기준
 
+- 일반·최근 메일은 `outlook recent --folder all`을 사용하고, `outlook inbox`는 받은편지함이 명시된 경우에만 사용합니다.
+- 플래그된 메일은 `outlook flagged --folder all`을 사용하며 모든 메일 결과의 `flagStatus`를 확인합니다.
 - 기간 미지정 검색은 `Asia/Seoul` 기준 최근 90일이며 실제 범위를 답변에 포함합니다.
 - 정확한 메일 건수는 `outlook count`를 사용합니다.
 - 최신 Teams 채팅은 실제 마지막 메시지 생성 시각으로 판단합니다.

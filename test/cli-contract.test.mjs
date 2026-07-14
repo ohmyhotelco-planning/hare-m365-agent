@@ -155,6 +155,9 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /아래 6개 도메인/);
   assert.match(result.stdout, /registry\.npmjs\.org/);
   assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
+  assert.match(result.stdout, /outlook recent --folder all/);
+  assert.match(result.stdout, /outlook flagged --folder all/);
+  assert.match(result.stdout, /outlook inbox는 사용자가 받은편지함을 명시한 경우에만/);
   assert.match(result.stdout, /pull --ff-only/);
   assert.doesNotMatch(result.stdout, /rm -rf "\$HARE_DATA_DIR"/);
   assert.match(result.stdout, /dist\/msal-network\.js/);
@@ -268,6 +271,15 @@ test("list commands reject invalid limits before making Graph calls", () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /limit must be a positive number/);
 });
 
+test("Outlook exposes whole-mailbox recent and flagged commands", () => {
+  const dataDir = makeDataDir("hare-outlook-help-");
+  const result = run(["outlook", "--help"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /recent/);
+  assert.match(result.stdout, /flagged/);
+  assert.match(result.stdout, /inbox/);
+});
+
 test("human guide verifies split-login features without a hardcoded version", () => {
   const html = fs.readFileSync(htmlGuide, "utf8");
   assert.match(html, /\.project-step > \.cowork-choice-figure \{ order: 2;/);
@@ -284,6 +296,8 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
   assert.match(html, /auth login-start/);
   assert.match(html, /auth login-complete/);
+  assert.match(html, /Outlook 전체 메일함에서 최근 메일이나 플래그된 메일/);
+  assert.match(html, /삭제된 항목을 제외한 Outlook 전체 메일함의 최신 메일 3건/);
   assert.match(html, /setup\.state만 확인하고/);
   assert.match(html, /FOLDER_REQUIRED/);
   assert.match(html, /LOGIN_START_REQUIRED/);

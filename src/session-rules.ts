@@ -98,6 +98,8 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 
 - Use Hare for requested Outlook, Teams, SharePoint, and OneDrive lookups.
 - Default to read-only operation. Sending, posting, uploading, deleting, sharing, and permission changes are unavailable.
+- Use outlook recent --folder all for general or recent-mail requests. Use outlook inbox only when the user explicitly asks for the Inbox.
+- Use outlook flagged --folder all for flagged-mail requests and inspect flagStatus in every mail result.
 - When the user omits a date range, the default lookback is ${config.policy.defaultSearchLookbackDays} days and the actual range must be reported.
 - Use outlook count for exact mail counts and sharepoint sites for SharePoint site existence checks.
 - Use lastMessageCreatedDateTime, not lastUpdatedDateTime alone, when deciding the latest Teams chat.

@@ -12,6 +12,7 @@ export type MailSummary = {
   isRead?: boolean;
   hasAttachments?: boolean;
   importance?: string;
+  flagStatus?: "notFlagged" | "complete" | "flagged";
   bodyPreview?: string;
   webLink?: string;
 };
@@ -26,6 +27,7 @@ type GraphMail = {
   isRead?: boolean;
   hasAttachments?: boolean;
   importance?: string;
+  flag?: { flagStatus?: "notFlagged" | "complete" | "flagged" };
   bodyPreview?: string;
   webLink?: string;
   parentFolderId?: string;
@@ -46,6 +48,43 @@ export type MailSearchResult = {
   };
   messages: MailSummary[];
 };
+
+export type MailListResult = {
+  list: {
+    folderScope: MailFolderScope;
+    returnedCount: number;
+    excludedDeletedItems: boolean;
+  };
+  messages: MailSummary[];
+};
+
+export type FlaggedMailResult = {
+  flagged: {
+    folderScope: MailFolderScope;
+    range: SearchRange;
+    returnedCount: number;
+    maxResults: number;
+    limitReached: boolean;
+    excludedDeletedItems: boolean;
+  };
+  messages: MailSummary[];
+};
+
+const mailSelect = [
+  "id",
+  "receivedDateTime",
+  "sentDateTime",
+  "from",
+  "toRecipients",
+  "subject",
+  "isRead",
+  "hasAttachments",
+  "importance",
+  "flag",
+  "bodyPreview",
+  "webLink",
+  "parentFolderId"
+].join(",");
 
 export type MailCountResult = {
   count: {
@@ -68,35 +107,72 @@ export type MailCountResult = {
 
 export async function listInbox(config: AppConfig, limit: number): Promise<MailSummary[]> {
   const top = normalizeSearchLimit(limit, config.policy.maxMailFetchLimit);
-  const select = [
-    "id",
-    "receivedDateTime",
-    "from",
-    "subject",
-    "isRead",
-    "hasAttachments",
-    "importance",
-    "bodyPreview",
-    "webLink"
-  ].join(",");
   const page = await graphGet<GraphPage<GraphMail>>(
     config,
-    `/me/mailFolders/Inbox/messages?$top=${top}&$orderby=receivedDateTime desc&$select=${select}`
+    buildRecentMessagesPath("inbox", top)
   );
 
-  return (page.value ?? []).map((mail) => ({
-    id: mail.id,
-    receivedDateTime: mail.receivedDateTime,
-    sentDateTime: mail.sentDateTime,
-    from: mail.from?.emailAddress?.address ?? mail.from?.emailAddress?.name,
-    to: formatRecipients(mail.toRecipients),
-    subject: mail.subject,
-    isRead: mail.isRead,
-    hasAttachments: mail.hasAttachments,
-    importance: mail.importance,
-    bodyPreview: mail.bodyPreview,
-    webLink: mail.webLink
-  }));
+  return (page.value ?? []).map(toMailSummary);
+}
+
+export async function listRecentMailbox(
+  config: AppConfig,
+  folderScope: MailFolderScope,
+  limit: number
+): Promise<MailListResult> {
+  const maxResults = normalizeSearchLimit(limit, config.policy.maxMailFetchLimit);
+  const deletedItemsFolderId = folderScope === "all" ? await getDeletedItemsFolderId(config) : undefined;
+  const collected = await collectMessages(
+    config,
+    buildRecentMessagesPath(folderScope, maxResults),
+    maxResults,
+    deletedItemsFolderId
+  );
+
+  return {
+    list: {
+      folderScope,
+      returnedCount: collected.messages.length,
+      excludedDeletedItems: folderScope === "all"
+    },
+    messages: collected.messages.map(toMailSummary)
+  };
+}
+
+export async function listFlaggedMessages(
+  config: AppConfig,
+  since: string | undefined,
+  until: string | undefined,
+  folderScope: MailFolderScope,
+  requestedLimit: number
+): Promise<FlaggedMailResult> {
+  const range = resolveSearchRange(
+    since,
+    until,
+    config.policy.defaultSearchLookbackDays,
+    new Date(),
+    config.timeZone
+  );
+  const maxResults = normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults);
+  const deletedItemsFolderId = folderScope === "all" ? await getDeletedItemsFolderId(config) : undefined;
+  const collected = await collectMessages(
+    config,
+    buildFlaggedMessagesPath(folderScope, range, maxResults),
+    maxResults,
+    deletedItemsFolderId
+  );
+
+  return {
+    flagged: {
+      folderScope,
+      range,
+      returnedCount: collected.messages.length,
+      maxResults,
+      limitReached: collected.hasMore,
+      excludedDeletedItems: folderScope === "all"
+    },
+    messages: collected.messages.map(toMailSummary)
+  };
 }
 
 export async function searchMailbox(
@@ -120,20 +196,6 @@ export async function searchMailbox(
     config.timeZone
   );
   const maxResults = normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults);
-  const select = [
-    "id",
-    "receivedDateTime",
-    "sentDateTime",
-    "from",
-    "toRecipients",
-    "subject",
-    "isRead",
-    "hasAttachments",
-    "importance",
-    "bodyPreview",
-    "webLink",
-    "parentFolderId"
-  ].join(",");
   const folderPath = getFolderPath(folderScope);
   const dateProperty = getDateProperty(folderScope);
   const kqlDateProperty = dateProperty === "sentDateTime" ? "sent" : "received";
@@ -142,7 +204,7 @@ export async function searchMailbox(
   const params = new URLSearchParams({
     "$top": String(Math.min(100, maxResults)),
     "$search": `"${escapeSearchValue(kql)}"`,
-    "$select": select
+    "$select": mailSelect
   });
 
   let nextUrl: string | undefined = `${folderPath}?${params.toString()}`;
@@ -260,7 +322,7 @@ export async function countMailboxMessages(
   };
 }
 
-function toMailSummary(mail: GraphMail): MailSummary {
+export function toMailSummary(mail: GraphMail): MailSummary {
   return {
     id: mail.id,
     receivedDateTime: mail.receivedDateTime,
@@ -271,9 +333,63 @@ function toMailSummary(mail: GraphMail): MailSummary {
     isRead: mail.isRead,
     hasAttachments: mail.hasAttachments,
     importance: mail.importance,
+    flagStatus: mail.flag?.flagStatus,
     bodyPreview: mail.bodyPreview,
     webLink: mail.webLink
   };
+}
+
+export function buildRecentMessagesPath(folderScope: MailFolderScope, limit: number): string {
+  const dateProperty = getDateProperty(folderScope);
+  const params = new URLSearchParams({
+    "$top": String(Math.min(100, limit)),
+    "$orderby": `${dateProperty} desc`,
+    "$select": mailSelect
+  });
+  return `${getFolderPath(folderScope)}?${params.toString()}`;
+}
+
+export function buildFlaggedMessagesPath(
+  folderScope: MailFolderScope,
+  range: SearchRange,
+  limit: number
+): string {
+  const dateProperty = getDateProperty(folderScope);
+  const params = new URLSearchParams({
+    "$top": String(Math.min(100, limit)),
+    "$filter": [
+      `${dateProperty} ge ${range.startDateTime}`,
+      `${dateProperty} lt ${range.endDateTimeExclusive}`,
+      "flag/flagStatus eq 'flagged'"
+    ].join(" and "),
+    "$orderby": `${dateProperty} desc`,
+    "$select": mailSelect
+  });
+  return `${getFolderPath(folderScope)}?${params.toString()}`;
+}
+
+async function collectMessages(
+  config: AppConfig,
+  initialUrl: string,
+  maxResults: number,
+  deletedItemsFolderId?: string
+): Promise<{ messages: GraphMail[]; hasMore: boolean }> {
+  let nextUrl: string | undefined = initialUrl;
+  let hasMore = false;
+  const messages: GraphMail[] = [];
+
+  while (nextUrl && messages.length < maxResults) {
+    const page: GraphPage<GraphMail> = await graphGet<GraphPage<GraphMail>>(config, nextUrl);
+    const eligible = (page.value ?? []).filter(
+      (mail) => !deletedItemsFolderId || mail.parentFolderId !== deletedItemsFolderId
+    );
+    const remaining = maxResults - messages.length;
+    messages.push(...eligible.slice(0, remaining));
+    nextUrl = page["@odata.nextLink"];
+    hasMore = Boolean(nextUrl) || eligible.length > remaining;
+  }
+
+  return { messages, hasMore };
 }
 
 function formatRecipients(recipients: GraphMail["toRecipients"]): string[] | undefined {

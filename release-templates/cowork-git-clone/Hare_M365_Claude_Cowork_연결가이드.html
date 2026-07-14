@@ -101,7 +101,7 @@
     <section class="step">
       <div class="capability-title"><span class="check-mark">✓</span>연결 후 할 수 있는 일</div>
       <ul class="capability-list">
-        <li>Outlook 받은편지함에서 최근 메일을 찾고 요약할 수 있습니다.</li>
+        <li>Outlook 전체 메일함에서 최근 메일이나 플래그된 메일을 찾고 요약할 수 있습니다.</li>
         <li>Teams 팀, 채팅방, 채팅 메시지를 조회하고 필요한 내용을 정리할 수 있습니다.</li>
         <li>SharePoint/OneDrive에서 파일을 검색하고, 필요한 파일을 내려받아 내용을 요약할 수 있습니다.</li>
         <li>메일 발송, Teams 게시, 파일 업로드/삭제/공유 같은 변경 작업은 보안 상의 이유로 아직 서비스하지 않습니다. 추후 기능 필요성과 보안성 고려가 완료되면 순차적으로 오픈할 예정입니다.</li>
@@ -340,7 +340,7 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
       </div>
       <button type="button" onclick="copyText('testPrompt')">테스트 프롬프트 복사</button>
       <div class="copy-fallback">복사 버튼이 반응하지 않으면 아래 영역을 클릭한 뒤 Ctrl+A → Ctrl+C를 누르세요.</div>
-      <textarea class="prompt-box" id="testPrompt" rows="3" readonly>Hare M365 Agent로 Outlook 받은편지함의 최신 메일 3건을 조회해서 보낸 사람, 받은 시각, 제목만 알려줘.</textarea>
+      <textarea class="prompt-box" id="testPrompt" rows="3" readonly>Hare M365 Agent로 삭제된 항목을 제외한 Outlook 전체 메일함의 최신 메일 3건을 조회해서 보낸 사람, 받은 시각, 제목, 플래그 상태만 알려줘.</textarea>
     </section>
 
   </main>
