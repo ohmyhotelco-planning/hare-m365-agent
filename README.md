@@ -107,6 +107,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 
 SharePoint 사이트의 존재 여부는 `sharepoint sites`로 확인합니다. `files search`는 현재 개인 OneDrive 범위이므로, 해당 결과만으로 SharePoint 사이트 존재 여부나 접근 권한을 판단하지 않습니다.
 
+Teams `chat-messages`는 `body`에 전체 일반 텍스트, `bodyHtml`에 Graph 원본 HTML을 반환합니다. `search-messages`도 검색 결과마다 채팅 또는 채널 메시지 상세를 추가 조회해 같은 전체 본문 필드를 반환합니다. 일부 상세 조회가 불가능하면 `fullBodyUnavailableCount`와 항목별 `bodyUnavailableReason`으로 명시하며 검색 스니펫을 전체 본문으로 취급하지 않습니다.
+
 ## Outlook 초안
 
 신규·답장·전체답장·전달 초안과 첨부파일을 지원합니다. 초안 명령을 승인 토큰 없이 먼저 실행하면 `AWAITING_USER_APPROVAL` 미리보기가 반환됩니다. LLM은 수신자, 제목, 본문, 첨부파일을 사용자에게 모두 보여주고 명시적 동의를 받은 뒤, 동일한 명령에 반환된 `--approval-token`을 추가해 실행합니다. 내용이나 첨부파일이 바뀌면 승인 토큰이 무효화됩니다.

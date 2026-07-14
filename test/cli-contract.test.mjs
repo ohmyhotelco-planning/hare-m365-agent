@@ -151,6 +151,8 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /AWAITING_USER_APPROVAL/);
   assert.match(rules, /explicit user approval/);
   assert.match(rules, /Hare cannot send a draft/);
+  assert.match(rules, /complete untruncated message/);
+  assert.match(rules, /fullBodyUnavailableCount/);
   assert.doesNotMatch(rules, /hybrid|\.hare-app-snapshot|\/home\/claude/i);
   assert.doesNotMatch(rules, /single network allowlist/);
 });
@@ -168,6 +170,9 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /outlook draft new/);
   assert.match(result.stdout, /approval-token/);
   assert.match(result.stdout, /메일 발송은 지원하지 않는다/);
+  assert.match(result.stdout, /chat-messages의 body와 bodyHtml은 잘리지 않은 전체 본문/);
+  assert.match(result.stdout, /fullBodyUnavailableCount/);
+  assert.match(result.stdout, /searchSummary를 전체 본문으로 간주하지 않는다/);
   assert.match(result.stdout, /outlook inbox는 사용자가 받은편지함을 명시한 경우에만/);
   assert.match(result.stdout, /pull --ff-only/);
   assert.doesNotMatch(result.stdout, /rm -rf "\$HARE_DATA_DIR"/);

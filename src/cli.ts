@@ -171,6 +171,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - 메일 발송은 지원하지 않는다. Teams 게시, 일정 생성, 파일 업로드/삭제/공유, 권한 변경도 수행하지 않는다.
 - login-start의 userCode와 verificationUri는 현재 사용자에게 한 번 보여준다. 내부 device_code, 토큰 캐시, 쿠키, credential 값은 출력하거나 반복하지 않는다.
 - Teams 최신 채팅 판단은 lastMessageCreatedDateTime을 우선한다. lastUpdatedDateTime만으로 최신 메시지 방을 판단하지 않는다.
+- teams chat-messages의 body와 bodyHtml은 잘리지 않은 전체 본문이다. bodyPreview는 호환용 전체 텍스트 별칭이며 요약 필드로 취급하지 않는다.
+- teams search-messages는 검색 스니펫과 별도로 메시지 상세를 조회해 body와 bodyHtml에 전체 본문을 반환한다. fullBodyUnavailableCount가 0이 아니면 누락된 전체 본문이 있다고 사용자에게 알리고, searchSummary를 전체 본문으로 간주하지 않는다.
 `;
 
 const llmPrompt = `목적: Hare M365 Agent 연결 상태를 준비하고, 이후 내 Microsoft 365 업무 요청을 처리해.
