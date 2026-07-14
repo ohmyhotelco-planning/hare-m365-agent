@@ -39,6 +39,8 @@ Cowork의 도메인 허용 기준은 `설정 > 기능 > 도메인 허용 목록`
 
 기본 Azure Application 설정은 `hare.config.json`에 포함됩니다. 일반 사용자는 `.env`를 만들거나 수정하지 않습니다.
 
+Azure Application 또는 요청 권한이 변경되면 Hare는 기존 앱의 인증 캐시와 진행 중인 로그인 상태만 자동 초기화합니다. 다운로드, 조회 결과, 로그와 Claude 운영 규칙은 유지됩니다. startup의 `authReason`이 `AUTH_APP_CHANGED`이면 새 앱으로 Microsoft 로그인을 한 번 완료한 뒤 기존과 같이 사용합니다.
+
 `.env`는 개발자용 로컬 override가 필요할 때만 사용합니다.
 
 ## 로그인과 저장 위치

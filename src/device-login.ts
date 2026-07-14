@@ -6,6 +6,7 @@ import type {
   NetworkResponse
 } from "@azure/msal-node";
 import type { AppConfig } from "./config.js";
+import { prepareAuthProfile } from "./auth-profile.js";
 import { ProxyAwareNetworkClient } from "./msal-network.js";
 import { clearStoredFile, storedFileHasContent, writeStoredText } from "./persistent-storage.js";
 
@@ -51,6 +52,7 @@ export async function startDeviceLogin(
   networkClient: INetworkModule = new ProxyAwareNetworkClient()
 ): Promise<DeviceLoginStartResult> {
   requirePersistentDataDir(config);
+  prepareAuthProfile(config, scopes);
   const endpoint = `${config.authority}/oauth2/v2.0/devicecode`;
   const body = new URLSearchParams({
     client_id: config.clientId,

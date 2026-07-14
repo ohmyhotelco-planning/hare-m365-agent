@@ -83,7 +83,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 
 1. Run startup and follow only setup.state and setup.nextCommand. A usable login requires both loggedIn=true and tokenUsable=true.
 2. READY: Do not start a new login; wait for the user's Microsoft 365 request.
-3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code.
+3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code. If authReason is AUTH_APP_CHANGED, explain only that Hare was updated to a new Microsoft application and one Microsoft sign-in is required.
 4. LOGIN_COMPLETE_REQUIRED: wait until the user says the browser login is complete, then run setup.nextCommand once.
 5. FOLDER_REQUIRED: stop and tell the user to open a new Cowork task with the existing Hare project selected.
 6. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.

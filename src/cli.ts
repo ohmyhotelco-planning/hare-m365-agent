@@ -249,7 +249,13 @@ function emitJson(payload: unknown, out?: string): void {
 async function getDoctorStatus() {
   const authStatus = config.clientId && config.tenantId
     ? await getAuthStatus(config)
-    : { account: null, loggedIn: false, tokenUsable: false, reason: "NOT_CONFIGURED" };
+    : {
+        account: null,
+        loggedIn: false,
+        tokenUsable: false,
+        migrationRequired: false,
+        reason: "NOT_CONFIGURED"
+      };
   const cacheFile = path.join(config.cacheDir, "msal-cache.json");
   return {
     configured: Boolean(config.clientId && config.tenantId),
@@ -257,6 +263,7 @@ async function getDoctorStatus() {
     tenantIdPresent: Boolean(config.tenantId),
     loggedIn: authStatus.loggedIn,
     tokenUsable: authStatus.tokenUsable,
+    authMigrationRequired: authStatus.migrationRequired,
     authReason: authStatus.reason,
     dataDir: config.dataDir,
     dataDirSource: config.dataDirSource,
@@ -375,6 +382,7 @@ auth.command("status").description("Show current login and policy status").actio
       configured: true,
       loggedIn,
       tokenUsable: authStatus.tokenUsable,
+      authMigrationRequired: authStatus.migrationRequired,
       dataDirPersistent: config.dataDirPersistent,
       pendingLoginStateExists
     },
@@ -385,6 +393,7 @@ auth.command("status").description("Show current login and policy status").actio
       {
         loggedIn,
         tokenUsable: authStatus.tokenUsable,
+        authMigrationRequired: authStatus.migrationRequired,
         authReason: authStatus.reason,
         account: authStatus.account?.username,
         policy: config.policy,

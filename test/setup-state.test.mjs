@@ -11,6 +11,7 @@ const readySnapshot = {
   dataDirPersistent: true,
   loggedIn: true,
   tokenUsable: true,
+  authMigrationRequired: false,
   pendingLoginStateExists: false
 };
 
@@ -88,6 +89,23 @@ test("pending login contract keeps the same device code flow", () => {
   assert.equal(contract.nextCommand, "node dist/cli.js auth login-complete");
   assert.equal(contract.stopAfterAction, true);
   assert.doesNotMatch(JSON.stringify(contract), /login-start/);
+});
+
+test("application migration explains the one-time sign-in without changing the flow", () => {
+  const contract = buildSetupContract(
+    {
+      ...readySnapshot,
+      loggedIn: false,
+      tokenUsable: false,
+      authMigrationRequired: true
+    },
+    "node dist/cli.js"
+  );
+
+  assert.equal(contract.state, "LOGIN_START_REQUIRED");
+  assert.equal(contract.nextCommand, "node dist/cli.js auth login-start");
+  assert.match(contract.instruction, /updated to a new Microsoft application/);
+  assert.match(contract.instruction, /one Microsoft sign-in/);
 });
 
 test("blocked setup contract reports one blocker and stops", () => {

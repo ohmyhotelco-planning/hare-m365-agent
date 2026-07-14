@@ -45,7 +45,7 @@ function runAsync(args, dataDir) {
   });
 }
 
-test("startup never treats cache existence alone as a successful login", () => {
+test("startup migrates a legacy cache and requests one sign-in for the new application", () => {
   const dataDir = makeDataDir("hare-status-");
   fs.mkdirSync(path.join(dataDir, ".cache"), { recursive: true });
   fs.writeFileSync(path.join(dataDir, ".cache", "msal-cache.json"), "{}", "utf8");
@@ -53,11 +53,14 @@ test("startup never treats cache existence alone as a successful login", () => {
   const result = run([], dataDir);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status.cacheFileExists, true);
+  assert.equal(output.status.cacheFileExists, false);
   assert.equal(output.status.loggedIn, false);
   assert.equal(output.status.tokenUsable, false);
+  assert.equal(output.status.authMigrationRequired, true);
+  assert.equal(output.status.authReason, "AUTH_APP_CHANGED");
   assert.equal(output.setup.state, "LOGIN_START_REQUIRED");
   assert.equal(output.setup.nextAction, "RUN_LOGIN_START");
+  assert.match(output.setup.instruction, /updated to a new Microsoft application/);
   assert.deepEqual(output.requiredDomains, [
     "github.com",
     "registry.npmjs.org",
@@ -259,7 +262,10 @@ test("parallel status checks serialize cache access without leaving a lock", asy
   const results = await Promise.all(Array.from({ length: 6 }, () => runAsync(["auth", "status"], dataDir)));
   for (const result of results) {
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(result.stdout).loggedIn, false);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.loggedIn, false);
+    assert.equal(output.authReason, "AUTH_APP_CHANGED");
+    assert.equal(output.authMigrationRequired, true);
   }
   assert.equal(fs.existsSync(path.join(cacheDir, "msal-cache.json.lock")), false);
 });

@@ -1,6 +1,6 @@
 {
   "name": "@ohmyhotel/hare-m365-agent",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": false,
   "description": "Hare CLI for LLM-driven Microsoft 365 Graph access using delegated permissions.",
   "type": "module",

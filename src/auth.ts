@@ -9,6 +9,11 @@ import {
 } from "@azure/msal-node";
 import type { AppConfig } from "./config.js";
 import {
+  markAuthProfileReady,
+  prepareAuthProfile,
+  resetAuthProfileAfterLogout
+} from "./auth-profile.js";
+import {
   clearDeviceLoginState,
   readDeviceLoginState,
   ResumeDeviceCodeNetworkClient,
@@ -25,7 +30,7 @@ import {
 
 const scopes = [
   "User.Read",
-  "Mail.Read",
+  "Mail.ReadWrite",
   "Chat.Read",
   "Team.ReadBasic.All",
   "Channel.ReadBasic.All",
@@ -163,6 +168,7 @@ export async function completeLogin(
   config: AppConfig,
   networkClient: INetworkModule = new ProxyAwareNetworkClient()
 ): Promise<AuthenticationResult> {
+  prepareAuthProfile(config, scopes);
   const state = readDeviceLoginState(config);
   if ([...state.scopes].sort().join(" ") !== [...scopes].sort().join(" ")) {
     clearDeviceLoginState(config);
@@ -199,6 +205,7 @@ export async function completeLogin(
     );
   }
 
+  markAuthProfileReady(config, scopes);
   const verifiedStatus = await getAuthStatus(config);
   if (!verifiedStatus.loggedIn || !verifiedStatus.tokenUsable) {
     clearDeviceLoginState(config);
@@ -211,6 +218,7 @@ export async function completeLogin(
 }
 
 export async function getAccount(config: AppConfig): Promise<AccountInfo | null> {
+  if (prepareAuthProfile(config, scopes).migrationRequired) return null;
   const pca = await buildPca(config);
   const accounts = await pca.getTokenCache().getAllAccounts();
   return accounts[0] ?? null;
@@ -220,15 +228,33 @@ export type AuthStatus = {
   account: AccountInfo | null;
   loggedIn: boolean;
   tokenUsable: boolean;
+  migrationRequired: boolean;
   reason?: string;
 };
 
 export async function getAuthStatus(config: AppConfig): Promise<AuthStatus> {
+  const profile = prepareAuthProfile(config, scopes);
+  if (profile.migrationRequired) {
+    return {
+      account: null,
+      loggedIn: false,
+      tokenUsable: false,
+      migrationRequired: true,
+      reason: "AUTH_APP_CHANGED"
+    };
+  }
+
   const pca = await buildPca(config);
   const accounts = await pca.getTokenCache().getAllAccounts();
   const account = accounts[0] ?? null;
   if (!account) {
-    return { account: null, loggedIn: false, tokenUsable: false, reason: "NO_ACCOUNT_IN_CACHE" };
+    return {
+      account: null,
+      loggedIn: false,
+      tokenUsable: false,
+      migrationRequired: false,
+      reason: "NO_ACCOUNT_IN_CACHE"
+    };
   }
 
   try {
@@ -238,6 +264,7 @@ export async function getAuthStatus(config: AppConfig): Promise<AuthStatus> {
       account,
       loggedIn: tokenUsable,
       tokenUsable,
+      migrationRequired: false,
       reason: tokenUsable ? undefined : "NO_ACCESS_TOKEN"
     };
   } catch (error) {
@@ -245,12 +272,18 @@ export async function getAuthStatus(config: AppConfig): Promise<AuthStatus> {
       account,
       loggedIn: false,
       tokenUsable: false,
+      migrationRequired: false,
       reason: `TOKEN_ACQUISITION_FAILED: ${errorMessage(error)}`
     };
   }
 }
 
 export async function getAccessToken(config: AppConfig): Promise<string> {
+  if (prepareAuthProfile(config, scopes).migrationRequired) {
+    throw new Error(
+      "Hare M365 Agent was updated to a new Microsoft application. Complete Microsoft sign-in once, then retry."
+    );
+  }
   const pca = await buildPca(config);
   const accounts = await pca.getTokenCache().getAllAccounts();
   const account = accounts[0] ?? null;
@@ -273,6 +306,7 @@ export function logout(config: AppConfig): void {
   const file = cachePath(config);
   clearStoredFile(file);
   clearDeviceLoginState(config);
+  resetAuthProfileAfterLogout(config, scopes);
 }
 
 export function getScopeList(): string[] {

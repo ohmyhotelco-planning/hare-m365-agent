@@ -54,6 +54,8 @@ test("login-start returns user instructions immediately and stores resumable sta
   assert.ok(requestedScopes.includes("openid"), "device-code request must ask for an ID token");
   assert.ok(requestedScopes.includes("profile"), "device-code request must ask for profile claims");
   assert.ok(requestedScopes.includes("offline_access"), "device-code request must ask for refresh access");
+  assert.ok(requestedScopes.includes("Mail.ReadWrite"), "the new Hare app must request draft-capable mail permission");
+  assert.equal(requestedScopes.includes("Mail.Read"), false);
 });
 
 test("resume network client reuses the saved code once, then delegates token polling", async () => {
