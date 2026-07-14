@@ -97,7 +97,10 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 ## Microsoft 365 operation
 
 - Use Hare for requested Outlook, Teams, SharePoint, and OneDrive lookups.
-- Default to read-only operation. Sending, posting, uploading, deleting, sharing, and permission changes are unavailable.
+- Default to read-only operation. The only enabled write action is creating an Outlook draft after exact user approval. Sending mail, Teams posting, calendar creation, file upload/delete/share, and permission changes are unavailable.
+- Drafts support new messages, replies, reply-all, forwards, and file attachments. Run the draft command without an approval token first.
+- Show the complete AWAITING_USER_APPROVAL preview, including recipients, subject, body, and attachments, then stop. Only after explicit user approval, rerun the exact same command once with the returned --approval-token.
+- Never reuse an approval token after changing content, recipients, or attachments. Hare cannot send a draft.
 - Use outlook recent --folder all for general or recent-mail requests. Use outlook inbox only when the user explicitly asks for the Inbox.
 - Use outlook flagged --folder all for flagged-mail requests and inspect flagStatus in every mail result.
 - When the user omits a date range, the default lookback is ${config.policy.defaultSearchLookbackDays} days and the actual range must be reported.

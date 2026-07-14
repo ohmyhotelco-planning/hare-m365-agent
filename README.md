@@ -1,6 +1,6 @@
 # Hare M365 Agent
 
-Hare M365 Agent는 LLM이 Microsoft Graph delegated 권한으로 Outlook, Teams, OneDrive, SharePoint를 조회할 수 있도록 만든 Node/TypeScript CLI입니다.
+Hare M365 Agent는 LLM이 Microsoft Graph delegated 권한으로 Outlook, Teams, OneDrive, SharePoint를 조회하고, 사용자 승인 후 Outlook 초안을 작성할 수 있도록 만든 Node/TypeScript CLI입니다.
 
 Cowork에서는 작업을 열 때 선택한 프로젝트 폴더를 Hare의 영구 `dataDir`로 사용합니다. 앱 코드는 Cowork 세션 런타임에서 clone·build하고, 선택 프로젝트에는 인증 캐시와 사용자 결과만 저장합니다. GitHub API나 GitHub Release asset은 사용하지 않습니다.
 
@@ -37,11 +37,11 @@ Cowork의 도메인 허용 기준은 `설정 > 기능 > 도메인 허용 목록`
 
 ## 설정
 
-기본 Azure Application 설정은 `hare.config.json`에 포함됩니다. 일반 사용자는 `.env`를 만들거나 수정하지 않습니다.
+기본 Azure Application 설정은 `hare.config.json`에 포함됩니다. 일반 사용자는 `.env`를 만들거나 수정하지 않습니다. 과거 POC에서 만든 `.env`가 남아 있어도 앱 설정에는 사용되지 않습니다.
 
 Azure Application 또는 요청 권한이 변경되면 Hare는 기존 앱의 인증 캐시와 진행 중인 로그인 상태만 자동 초기화합니다. 다운로드, 조회 결과, 로그와 Claude 운영 규칙은 유지됩니다. startup의 `authReason`이 `AUTH_APP_CHANGED`이면 새 앱으로 Microsoft 로그인을 한 번 완료한 뒤 기존과 같이 사용합니다.
 
-`.env`는 개발자용 로컬 override가 필요할 때만 사용합니다.
+개발자용 로컬 override가 필요하면 실행 프로세스의 `OMH_M365_CLIENT_ID`, `OMH_M365_TENANT_ID` 환경 변수를 명시적으로 설정합니다.
 
 ## 로그인과 저장 위치
 
@@ -84,6 +84,10 @@ node dist/cli.js outlook inbox --limit 10
 node dist/cli.js outlook flagged --folder all --limit 1000
 node dist/cli.js outlook search --query "나이스페이 OR nicepay" --since 2026-06-26 --until 2026-07-10 --folder all
 node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
+node dist/cli.js outlook draft new --to "user@example.com" --subject "제목" --body "본문"
+node dist/cli.js outlook draft reply --message-id "<message-id>" --body "답장 본문"
+node dist/cli.js outlook draft reply --message-id "<message-id>" --reply-all --body "전체답장 본문"
+node dist/cli.js outlook draft forward --message-id "<message-id>" --to "user@example.com" --body "전달 메모" --attachment "<file-path>"
 node dist/cli.js teams teams
 node dist/cli.js teams chats --limit 20
 node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20
@@ -102,6 +106,14 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 정확한 메일 건수 집계는 검색 인덱스를 사용하는 `outlook search` 대신 `outlook count`를 사용합니다. `outlook count`는 지정 기간의 모든 메일 페이지를 순회하고 `--subject-contains`와 `--from` 조건을 직접 대조합니다. `--folder all`은 삭제된 메일을 제외하며, 보낸편지함은 `sentDateTime`, 나머지는 `receivedDateTime`을 기준으로 집계합니다.
 
 SharePoint 사이트의 존재 여부는 `sharepoint sites`로 확인합니다. `files search`는 현재 개인 OneDrive 범위이므로, 해당 결과만으로 SharePoint 사이트 존재 여부나 접근 권한을 판단하지 않습니다.
+
+## Outlook 초안
+
+신규·답장·전체답장·전달 초안과 첨부파일을 지원합니다. 초안 명령을 승인 토큰 없이 먼저 실행하면 `AWAITING_USER_APPROVAL` 미리보기가 반환됩니다. LLM은 수신자, 제목, 본문, 첨부파일을 사용자에게 모두 보여주고 명시적 동의를 받은 뒤, 동일한 명령에 반환된 `--approval-token`을 추가해 실행합니다. 내용이나 첨부파일이 바뀌면 승인 토큰이 무효화됩니다.
+
+3MB 미만 파일은 Graph에 직접 첨부하고 3~150MB 파일은 Outlook 업로드 세션을 사용합니다. 조직의 Exchange 메시지 크기 제한이 더 작으면 Microsoft 365 정책에 따라 거부될 수 있습니다. 첨부 중 실패하면 Hare가 불완전한 초안을 자동 삭제합니다.
+
+Hare에는 메일 발송 명령이 없으며 새 Azure Application에도 `Mail.Send` 권한이 없습니다. 생성된 초안은 사용자가 Outlook에서 다시 확인하고 직접 발송합니다.
 
 ## 개발 검증
 

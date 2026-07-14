@@ -14,6 +14,13 @@ import {
   searchMailbox,
   type MailFolderScope
 } from "./outlook.js";
+import {
+  createApprovedDraft,
+  prepareDraft,
+  type DraftContentType,
+  type DraftInput,
+  type DraftKind
+} from "./outlook-drafts.js";
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
 import { listChatMessages, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
 import { cleanupExpiredResults, resolveResultPath } from "./results.js";
@@ -51,6 +58,7 @@ const requiredDomains = [
   "registry.npmjs.org",
   "graph.microsoft.com",
   "login.microsoftonline.com",
+  "outlook.office.com",
   "ohmylab-my.sharepoint.com",
   "ohmylab.sharepoint.com"
 ];
@@ -83,11 +91,12 @@ const llmGuide = `# Hare M365 Agent LLM Guide
 목적: 사용자의 자연어 요청을 Microsoft Graph delegated 권한으로 조회한다. 기본 정책은 read-only다.
 
 시작 순서:
-1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 6개 도메인 허용 여부를 사용자에게 확인한다.
+1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 7개 도메인 허용 여부를 사용자에게 확인한다.
    - github.com
    - registry.npmjs.org
    - graph.microsoft.com
    - login.microsoftonline.com
+   - outlook.office.com
    - ohmylab-my.sharepoint.com
    - ohmylab.sharepoint.com
 2. 도메인 확인은 가능하면 LLM 도구의 사용자 확인 요청, 선택형 질문, 승인 요청 UI로 처리한다. 사용자가 직접 "도메인 허용 완료" 같은 문구를 타이핑하게 만들지 않는다.
@@ -136,6 +145,10 @@ node dist/cli.js outlook inbox --limit 10
 node dist/cli.js outlook flagged --folder all --limit 1000
 node dist/cli.js outlook search --query "keyword" --since 2026-04-01 --until 2026-07-10 --folder all
 node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
+node dist/cli.js outlook draft new --to "user@example.com" --subject "Subject" --body "Body"
+node dist/cli.js outlook draft reply --message-id "<message-id>" --body "Reply body"
+node dist/cli.js outlook draft reply --message-id "<message-id>" --reply-all --body "Reply-all body"
+node dist/cli.js outlook draft forward --message-id "<message-id>" --to "user@example.com" --body "Forward note" --attachment "<file-path>"
 node dist/cli.js teams teams
 node dist/cli.js teams chats --limit 20
 node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20
@@ -153,7 +166,9 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - search.limitReached가 true이면 일부 결과만 반환된 것이므로 사용자에게 한도 도달 사실을 알린다.
 - 메일 건수 질문은 검색 인덱스 결과를 세지 말고 outlook count로 전체 페이지를 검사한다.
 - SharePoint 사이트 존재 여부는 sharepoint sites로 확인한다. 개인 OneDrive만 검색하는 files search 결과로 사이트 존재나 접근 권한을 판단하지 않는다.
-- 메일 발송, Teams 게시, 일정 생성, 파일 업로드/삭제/공유, 권한 변경은 수행하지 않는다.
+- Outlook 초안은 신규, 답장, 전체답장, 전달과 첨부파일을 지원한다. 먼저 approval-token 없이 명령을 실행해 AWAITING_USER_APPROVAL 미리보기를 만들고 수신자, 제목, 본문, 첨부파일 전체를 사용자에게 보여준 뒤 멈춘다.
+- 사용자가 명시적으로 동의한 경우에만 동일한 명령에 반환된 --approval-token을 추가해 한 번 실행한다. 내용이나 첨부가 바뀌면 기존 토큰을 재사용하지 말고 새 미리보기와 동의를 받는다.
+- 메일 발송은 지원하지 않는다. Teams 게시, 일정 생성, 파일 업로드/삭제/공유, 권한 변경도 수행하지 않는다.
 - login-start의 userCode와 verificationUri는 현재 사용자에게 한 번 보여준다. 내부 device_code, 토큰 캐시, 쿠키, credential 값은 출력하거나 반복하지 않는다.
 - Teams 최신 채팅 판단은 lastMessageCreatedDateTime을 우선한다. lastUpdatedDateTime만으로 최신 메시지 방을 판단하지 않는다.
 `;
@@ -163,11 +178,12 @@ const llmPrompt = `목적: Hare M365 Agent 연결 상태를 준비하고, 이후
 저장소:
 ${repoUrl}
 
-Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 6개 도메인이 허용되어 있는지 확인해.
+Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 7개 도메인이 허용되어 있는지 확인해.
 github.com
 registry.npmjs.org
 graph.microsoft.com
 login.microsoftonline.com
+outlook.office.com
 ohmylab-my.sharepoint.com
 ohmylab.sharepoint.com
 
@@ -573,6 +589,55 @@ outlook
     }
   );
 
+type DraftCliOptions = {
+  messageId?: string;
+  replyAll?: boolean;
+  to?: string;
+  cc?: string;
+  bcc?: string;
+  subject?: string;
+  body?: string;
+  bodyFile?: string;
+  format: string;
+  attachment: string[];
+  approvalToken?: string;
+};
+
+const outlookDraft = outlook
+  .command("draft")
+  .description("Preview and create Outlook drafts; sending is not available");
+
+addDraftCommonOptions(
+  outlookDraft
+    .command("new")
+    .description("Preview or create a new Outlook draft")
+    .requiredOption("--to <addresses>", "comma-separated To recipients")
+    .requiredOption("--subject <text>", "draft subject")
+).action(async (options: DraftCliOptions) => {
+  await runDraftCommand("new", options);
+});
+
+addDraftCommonOptions(
+  outlookDraft
+    .command("reply")
+    .description("Preview or create a reply or reply-all draft")
+    .requiredOption("--message-id <id>", "source message ID returned by an Outlook read command")
+    .option("--reply-all", "reply to the sender and all original recipients")
+    .option("--to <addresses>", "comma-separated additional To recipients")
+).action(async (options: DraftCliOptions) => {
+  await runDraftCommand(options.replyAll ? "replyAll" : "reply", options);
+});
+
+addDraftCommonOptions(
+  outlookDraft
+    .command("forward")
+    .description("Preview or create a forward draft")
+    .requiredOption("--message-id <id>", "source message ID returned by an Outlook read command")
+    .requiredOption("--to <addresses>", "comma-separated To recipients")
+).action(async (options: DraftCliOptions) => {
+  await runDraftCommand("forward", options);
+});
+
 const teams = program.command("teams").description("Teams read commands");
 
 teams
@@ -679,4 +744,76 @@ program.parseAsync(process.argv).catch((error: unknown) => {
 function parseMailFolderScope(value: string): MailFolderScope {
   if (value === "all" || value === "inbox" || value === "sent") return value;
   throw new Error("folder must be one of: all, inbox, sent.");
+}
+
+function addDraftCommonOptions(command: Command): Command {
+  return command
+    .option("--cc <addresses>", "comma-separated Cc recipients")
+    .option("--bcc <addresses>", "comma-separated Bcc recipients")
+    .option("--body <text>", "draft body text or HTML")
+    .option("--body-file <path>", "read the draft body from a UTF-8 file")
+    .option("--format <type>", "body format: text or html", "text")
+    .option(
+      "--attachment <path>",
+      "file to attach; repeat this option for multiple files",
+      collectOption,
+      []
+    )
+    .option(
+      "--approval-token <token>",
+      "token returned by the preview after the user explicitly approves the exact draft"
+    );
+}
+
+function collectOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+async function runDraftCommand(kind: DraftKind, options: DraftCliOptions): Promise<void> {
+  requireConfigured(config);
+  const input: DraftInput = {
+    kind,
+    sourceMessageId: options.messageId,
+    to: options.to ? [options.to] : [],
+    cc: options.cc ? [options.cc] : [],
+    bcc: options.bcc ? [options.bcc] : [],
+    subject: options.subject,
+    body: readDraftBody(options),
+    contentType: parseDraftContentType(options.format),
+    attachmentPaths: options.attachment
+  };
+
+  if (!options.approvalToken) {
+    const prepared = await prepareDraft(config, input);
+    emitJson({
+      ok: true,
+      stage: "AWAITING_USER_APPROVAL",
+      preview: prepared.preview,
+      approval: {
+        token: prepared.approvalToken,
+        instruction:
+          "Show the complete preview to the user and stop. Only after explicit approval, rerun the exact same command with --approval-token set to this token."
+      }
+    });
+    return;
+  }
+
+  emitJson(await createApprovedDraft(config, input, options.approvalToken));
+}
+
+function readDraftBody(options: DraftCliOptions): string {
+  if (options.body !== undefined && options.bodyFile !== undefined) {
+    throw new Error("Use either --body or --body-file, not both.");
+  }
+  if (options.bodyFile !== undefined) {
+    return fs.readFileSync(path.resolve(options.bodyFile), "utf8");
+  }
+  if (options.body !== undefined) return options.body;
+  throw new Error("Draft body is required. Use --body or --body-file.");
+}
+
+function parseDraftContentType(value: string): DraftContentType {
+  const normalized = value.toLowerCase();
+  if (normalized === "text" || normalized === "html") return normalized;
+  throw new Error("format must be text or html.");
 }

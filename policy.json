@@ -1,6 +1,7 @@
 {
   "defaultMode": "readOnly",
   "allowWriteActions": false,
+  "allowDraftActions": true,
   "allowDownloads": true,
   "storeRawMessages": false,
   "defaultSearchLookbackDays": 90,
@@ -9,9 +10,12 @@
   "maxTeamsFetchLimit": 50,
   "maxFileSearchLimit": 25,
   "maxDownloadBytes": 104857600,
+  "maxDraftAttachmentBytes": 157286400,
+  "maxDraftTotalAttachmentBytes": 157286400,
   "retentionDays": 7,
   "requireConfirmationFor": [
     "send_mail",
+    "create_mail_draft",
     "post_teams_message",
     "create_calendar_event",
     "upload_file",
