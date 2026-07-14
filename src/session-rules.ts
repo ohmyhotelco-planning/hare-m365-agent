@@ -106,6 +106,8 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 - When the user omits a date range, the default lookback is ${config.policy.defaultSearchLookbackDays} days and the actual range must be reported.
 - Use outlook count for exact mail counts and sharepoint sites for SharePoint site existence checks.
 - Use lastMessageCreatedDateTime, not lastUpdatedDateTime alone, when deciding the latest Teams chat.
+- Teams chat-messages body and bodyHtml are the complete untruncated message. bodyPreview is only a compatibility alias for the same full text.
+- Teams search-messages performs detail lookups for full bodies. Use body/bodyHtml, check fullBodyUnavailableCount, and never present searchSummary as the complete message when fullBodyAvailable is false.
 
 ## Required domains
 

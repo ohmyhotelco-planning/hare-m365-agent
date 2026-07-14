@@ -23,6 +23,10 @@ export type ChatMessageSummary = {
   from?: string;
   importance?: string;
   subject?: string | null;
+  body?: string;
+  bodyHtml?: string;
+  bodyContentType?: string;
+  /** @deprecated Use body. Kept as a full-text compatibility alias. */
   bodyPreview?: string;
 };
 
@@ -33,6 +37,17 @@ export type ChatMessageSearchSummary = {
   fromAddress?: string;
   chatId?: string;
   chatTopic?: string;
+  channelIdentity?: { teamId?: string; channelId?: string };
+  searchSummary?: string;
+  body?: string;
+  bodyHtml?: string;
+  bodyContentType?: string;
+  fullBodyAvailable: boolean;
+  bodyUnavailableReason?:
+    | "missing-message-location"
+    | "detail-request-failed"
+    | "message-body-missing";
+  /** @deprecated Use body. Full text when available; search summary otherwise. */
   bodyPreview?: string;
   webLink?: string;
 };
@@ -43,6 +58,8 @@ export type ChatMessageSearchResult = {
     range: SearchRange;
     totalMatchesReported: number;
     returnedCount: number;
+    fullBodyReturnedCount: number;
+    fullBodyUnavailableCount: number;
     maxResults: number;
     limitReached: boolean;
   };
@@ -72,7 +89,7 @@ type GraphChatMessage = {
   from?: { user?: { displayName?: string; userIdentityType?: string } };
   importance?: string;
   subject?: string | null;
-  body?: { content?: string };
+  body?: { contentType?: string; content?: string };
 };
 
 type GraphChatMessageSearchHit = {
@@ -82,6 +99,7 @@ type GraphChatMessageSearchHit = {
     createdDateTime?: string;
     from?: { emailAddress?: { name?: string; address?: string } };
     chatId?: string;
+    channelIdentity?: { teamId?: string; channelId?: string };
     webLink?: string;
   };
 };
@@ -96,8 +114,18 @@ type GraphSearchResponse = {
   }>;
 };
 
-export async function listJoinedTeams(config: AppConfig): Promise<TeamSummary[]> {
-  const teams = await collectPages<GraphTeam>(config, "/me/joinedTeams");
+export type TeamsGraphClient = {
+  get<T>(pathOrUrl: string): Promise<T>;
+  post<T>(pathOrUrl: string, body?: unknown): Promise<T>;
+};
+
+const fullBodyConcurrency = 5;
+
+export async function listJoinedTeams(
+  config: AppConfig,
+  client: TeamsGraphClient = defaultTeamsClient(config)
+): Promise<TeamSummary[]> {
+  const teams = await collectPages<GraphTeam>(client, "/me/joinedTeams");
   return teams.map((team) => ({
     id: team.id,
     displayName: team.displayName,
@@ -105,9 +133,13 @@ export async function listJoinedTeams(config: AppConfig): Promise<TeamSummary[]>
   }));
 }
 
-export async function listChats(config: AppConfig, limit: number): Promise<ChatSummary[]> {
+export async function listChats(
+  config: AppConfig,
+  limit: number,
+  client: TeamsGraphClient = defaultTeamsClient(config)
+): Promise<ChatSummary[]> {
   const top = normalizeSearchLimit(limit, config.policy.maxTeamsFetchLimit);
-  const chats = await fetchAllChats(config);
+  const chats = await fetchAllChats(config, client);
   return chats
     .sort((a, b) => (b.lastMessagePreview?.createdDateTime ?? "").localeCompare(a.lastMessagePreview?.createdDateTime ?? ""))
     .slice(0, top)
@@ -126,23 +158,17 @@ export async function listChats(config: AppConfig, limit: number): Promise<ChatS
 export async function listChatMessages(
   config: AppConfig,
   chatId: string,
-  limit: number
+  limit: number,
+  client: TeamsGraphClient = defaultTeamsClient(config)
 ): Promise<ChatMessageSummary[]> {
   if (!chatId.trim()) throw new Error("chat-id must not be empty.");
   const top = normalizeSearchLimit(limit, config.policy.maxTeamsFetchLimit);
   const messages = await collectPages<GraphChatMessage>(
-    config,
+    client,
     `/chats/${encodeURIComponent(chatId)}/messages?$top=${Math.min(top, 50)}&$orderby=createdDateTime%20desc`,
     top
   );
-  return messages.map((message) => ({
-    id: message.id,
-    createdDateTime: message.createdDateTime,
-    from: message.from?.user?.displayName ?? message.from?.user?.userIdentityType,
-    importance: message.importance,
-    subject: message.subject,
-    bodyPreview: stripHtml(message.body?.content ?? "").slice(0, 500)
-  }));
+  return messages.map(toChatMessageSummary);
 }
 
 export async function searchChatMessages(
@@ -150,7 +176,8 @@ export async function searchChatMessages(
   query: string,
   since: string | undefined,
   until: string | undefined,
-  requestedLimit: number
+  requestedLimit: number,
+  client: TeamsGraphClient = defaultTeamsClient(config)
 ): Promise<ChatMessageSearchResult> {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
@@ -173,7 +200,7 @@ export async function searchChatMessages(
 
   while (moreResultsAvailable && hits.length < maxResults) {
     const size = Math.min(25, maxResults - hits.length);
-    const response = await graphPost<GraphSearchResponse>(config, "/search/query", {
+    const response = await client.post<GraphSearchResponse>("/search/query", {
       requests: [
         {
           entityTypes: ["chatMessage"],
@@ -191,10 +218,28 @@ export async function searchChatMessages(
     moreResultsAvailable = Boolean(container?.moreResultsAvailable) && pageHits.length > 0;
   }
 
-  const chats = (await fetchAllChats(config)).map((chat) => ({ id: chat.id, topic: chat.topic }));
+  const chats = (await fetchAllChats(config, client)).map((chat) => ({ id: chat.id, topic: chat.topic }));
   const topicByChatId = new Map(chats.map((chat) => [chat.id, chat.topic]));
-  const messages = hits.map((hit) => {
+  const messages = await mapWithConcurrency(hits, fullBodyConcurrency, async (hit) => {
     const resource = hit.resource;
+    const detailPath = messageDetailPath(resource);
+    let detail: GraphChatMessage | undefined;
+    let bodyUnavailableReason: ChatMessageSearchSummary["bodyUnavailableReason"];
+    if (!detailPath) {
+      bodyUnavailableReason = "missing-message-location";
+    } else {
+      try {
+        detail = await client.get<GraphChatMessage>(detailPath);
+        if (detail.body?.content === undefined) {
+          bodyUnavailableReason = "message-body-missing";
+        }
+      } catch {
+        bodyUnavailableReason = "detail-request-failed";
+      }
+    }
+    const bodyHtml = detail?.body?.content;
+    const body = bodyHtml === undefined ? undefined : stripHtml(bodyHtml);
+    const searchSummary = stripHtml(hit.summary ?? "");
     return {
       id: resource?.id ?? "",
       createdDateTime: resource?.createdDateTime,
@@ -202,10 +247,19 @@ export async function searchChatMessages(
       fromAddress: resource?.from?.emailAddress?.address,
       chatId: resource?.chatId,
       chatTopic: resource?.chatId ? topicByChatId.get(resource.chatId) : undefined,
-      bodyPreview: hit.summary,
+      channelIdentity: resource?.channelIdentity,
+      searchSummary,
+      body,
+      bodyHtml,
+      bodyContentType: detail?.body?.contentType,
+      fullBodyAvailable: bodyHtml !== undefined,
+      bodyUnavailableReason,
+      bodyPreview: body ?? searchSummary,
       webLink: resource?.webLink
     };
   });
+
+  const fullBodyReturnedCount = messages.filter((message) => message.fullBodyAvailable).length;
 
   return {
     search: {
@@ -213,6 +267,8 @@ export async function searchChatMessages(
       range,
       totalMatchesReported,
       returnedCount: messages.length,
+      fullBodyReturnedCount,
+      fullBodyUnavailableCount: messages.length - fullBodyReturnedCount,
       maxResults,
       limitReached: moreResultsAvailable || totalMatchesReported > messages.length
     },
@@ -220,12 +276,15 @@ export async function searchChatMessages(
   };
 }
 
-async function fetchAllChats(config: AppConfig): Promise<GraphChat[]> {
-  return collectPages<GraphChat>(config, "/me/chats?$top=50&$expand=lastMessagePreview");
+async function fetchAllChats(
+  config: AppConfig,
+  client: TeamsGraphClient = defaultTeamsClient(config)
+): Promise<GraphChat[]> {
+  return collectPages<GraphChat>(client, "/me/chats?$top=50&$expand=lastMessagePreview");
 }
 
 async function collectPages<T>(
-  config: AppConfig,
+  client: TeamsGraphClient,
   initialUrl: string,
   maximum = Number.POSITIVE_INFINITY
 ): Promise<T[]> {
@@ -233,13 +292,73 @@ async function collectPages<T>(
   let nextUrl: string | undefined = initialUrl;
 
   while (nextUrl && values.length < maximum) {
-    const page: GraphPage<T> = await graphGet<GraphPage<T>>(config, nextUrl);
+    const page: GraphPage<T> = await client.get<GraphPage<T>>(nextUrl);
     const remaining = maximum - values.length;
     values.push(...(page.value ?? []).slice(0, remaining));
     nextUrl = page["@odata.nextLink"];
   }
 
   return values;
+}
+
+function defaultTeamsClient(config: AppConfig): TeamsGraphClient {
+  return {
+    get: <T>(pathOrUrl: string) => graphGet<T>(config, pathOrUrl),
+    post: <T>(pathOrUrl: string, body?: unknown) => graphPost<T>(config, pathOrUrl, body)
+  };
+}
+
+function toChatMessageSummary(message: GraphChatMessage): ChatMessageSummary {
+  const bodyHtml = message.body?.content ?? "";
+  const body = stripHtml(bodyHtml);
+  return {
+    id: message.id,
+    createdDateTime: message.createdDateTime,
+    from: message.from?.user?.displayName ?? message.from?.user?.userIdentityType,
+    importance: message.importance,
+    subject: message.subject,
+    body,
+    bodyHtml,
+    bodyContentType: message.body?.contentType,
+    bodyPreview: body
+  };
+}
+
+function messageDetailPath(
+  resource: GraphChatMessageSearchHit["resource"]
+): string | undefined {
+  if (!resource?.id) return undefined;
+  if (resource.chatId) {
+    return `/chats/${encodeURIComponent(resource.chatId)}/messages/${encodeURIComponent(resource.id)}`;
+  }
+  const teamId = resource.channelIdentity?.teamId;
+  const channelId = resource.channelIdentity?.channelId;
+  if (teamId && channelId) {
+    return `/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(resource.id)}`;
+  }
+  return undefined;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= values.length) return;
+      results[index] = await mapper(values[index], index);
+    }
+  }
+
+  const workerCount = Math.min(Math.max(1, concurrency), values.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 function stripHtml(value: string): string {
