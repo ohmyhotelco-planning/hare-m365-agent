@@ -106,6 +106,23 @@ test("application migration explains the one-time sign-in without changing the f
   assert.equal(contract.nextCommand, "node dist/cli.js auth login-start");
   assert.match(contract.instruction, /updated to a new Microsoft application/);
   assert.match(contract.instruction, /one Microsoft sign-in/);
+  assert.match(contract.instruction, /their own company Microsoft account/);
+  assert.match(contract.instruction, /Never name, recommend, or preselect a specific email address/);
+});
+
+test("login start never recommends a specific account", () => {
+  const contract = buildSetupContract(
+    {
+      ...readySnapshot,
+      loggedIn: false,
+      tokenUsable: false
+    },
+    "node dist/cli.js"
+  );
+
+  assert.equal(contract.state, "LOGIN_START_REQUIRED");
+  assert.match(contract.instruction, /their own company Microsoft account/);
+  assert.match(contract.instruction, /Never name, recommend, or preselect a specific email address/);
 });
 
 test("blocked setup contract reports one blocker and stops", () => {

@@ -20,8 +20,14 @@ const htmlGuideDirectory = path.resolve("release-templates/cowork-git-clone");
 const htmlGuideFiles = fs
   .readdirSync(htmlGuideDirectory)
   .filter((name) => name.startsWith("Hare_M365_Claude_Cowork_") && name.endsWith(".html"));
-assert.equal(htmlGuideFiles.length, 1, "Exactly one distributable Cowork HTML guide must exist");
-const htmlGuide = path.join(htmlGuideDirectory, htmlGuideFiles[0]);
+assert.deepEqual(htmlGuideFiles.sort(), [
+  "Hare_M365_Claude_Cowork_Connection_Guide_EN.html",
+  "Hare_M365_Claude_Cowork_接続ガイド_JA.html",
+  "Hare_M365_Claude_Cowork_연결가이드.html"
+].sort(), "Exactly the Korean, English, and Japanese Cowork HTML guides must exist");
+const htmlGuide = path.join(htmlGuideDirectory, "Hare_M365_Claude_Cowork_연결가이드.html");
+const englishHtmlGuide = path.join(htmlGuideDirectory, "Hare_M365_Claude_Cowork_Connection_Guide_EN.html");
+const japaneseHtmlGuide = path.join(htmlGuideDirectory, "Hare_M365_Claude_Cowork_接続ガイド_JA.html");
 
 function run(args, dataDir) {
   return spawnSync(process.execPath, [cli, ...args], {
@@ -151,8 +157,13 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /AWAITING_USER_APPROVAL/);
   assert.match(rules, /explicit user approval/);
   assert.match(rules, /Hare cannot send a draft/);
+  assert.match(rules, /Always use the Hare CLI for Outlook draft requests/);
+  assert.match(rules, /Never use Computer Use, Outlook desktop\/web UI, browser automation, or a Microsoft 365 connector/);
+  assert.match(rules, /Do not fall back to GUI automation or another connector/);
   assert.match(rules, /complete untruncated message/);
   assert.match(rules, /fullBodyUnavailableCount/);
+  assert.match(rules, /their own company Microsoft account/);
+  assert.match(rules, /Never name, recommend, or preselect a specific email address/);
   assert.doesNotMatch(rules, /hybrid|\.hare-app-snapshot|\/home\/claude/i);
   assert.doesNotMatch(rules, /single network allowlist/);
 });
@@ -169,10 +180,15 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /outlook flagged --folder all/);
   assert.match(result.stdout, /outlook draft new/);
   assert.match(result.stdout, /approval-token/);
+  assert.match(result.stdout, /Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다/);
+  assert.match(result.stdout, /Computer Use, Outlook 데스크톱\/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 않는다/);
+  assert.match(result.stdout, /GUI 자동화나 다른 커넥터로 우회하지 않는다/);
   assert.match(result.stdout, /메일 발송은 지원하지 않는다/);
   assert.match(result.stdout, /chat-messages의 body와 bodyHtml은 잘리지 않은 전체 본문/);
   assert.match(result.stdout, /fullBodyUnavailableCount/);
   assert.match(result.stdout, /searchSummary를 전체 본문으로 간주하지 않는다/);
+  assert.match(result.stdout, /사용자 본인의 회사 Microsoft 계정/);
+  assert.match(result.stdout, /특정 이메일 주소를 로그인 대상으로 표시하거나 추천하지 않는다/);
   assert.match(result.stdout, /outlook inbox는 사용자가 받은편지함을 명시한 경우에만/);
   assert.match(result.stdout, /pull --ff-only/);
   assert.doesNotMatch(result.stdout, /rm -rf "\$HARE_DATA_DIR"/);
@@ -184,7 +200,7 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /setup\.nextCommand를 수정하지 않고/);
   assert.match(result.stdout, /\/root\/\.local\/share/);
   assert.match(result.stdout, /현재 Cowork 작업에 선택된 프로젝트 마운트/);
-  assert.doesNotMatch(result.stdout, /computer-use|folder-access tool|%USERPROFILE%|~\/HareM365Agent/);
+  assert.doesNotMatch(result.stdout, /folder-access tool|%USERPROFILE%|~\/HareM365Agent/);
   assert.match(result.stdout, /\/sessions\/<session>\/mnt\/<selected-project>/);
   assert.match(result.stdout, /NETWORK_PERMISSION_REQUIRED/);
   assert.match(result.stdout, /X-Proxy-Error: blocked-by-allowlist/);
@@ -314,10 +330,20 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /\.project-step > \.cowork-choice-figure \{ order: 2;/);
   assert.match(html, /\.project-step > \.action-steps-continuation \{ order: 3;/);
   assert.match(html, /class="cowork-choice-figure"/);
+  assert.match(html, /Personal이 보이는 경우만 확인하세요/);
+  assert.match(html, /Personal 항목 자체가 없으면 그대로 진행하세요/);
+  assert.match(html, /alt="Claude 계정 메뉴에서 Personal을 선택하는 화면"/);
+  assert.match(html, /<details class="optional-details account-mode-details">\s*<summary>Personal 전환 화면 보기<\/summary>/);
+  assert.doesNotMatch(html, /account-mode-details" open/);
+  assert.ok(html.indexOf("STEP 2") < html.indexOf("계정 메뉴에 Personal이 보이는 경우만 확인하세요"));
+  assert.ok(html.indexOf("계정 메뉴에 Personal이 보이는 경우만 확인하세요") < html.indexOf("2-2"));
   assert.equal((html.match(/class="domain-row"/g) ?? []).length, 7);
   assert.match(html, /outlook\.office\.com/);
   assert.match(html, /신규·답장·전체답장·전달 메일 초안/);
   assert.match(html, /전체 미리보기를 보여주고 내 동의를 받은 뒤에만 생성/);
+  assert.match(html, /Outlook 초안은 반드시 Hare CLI로 처리/);
+  assert.match(html, /Computer Use, Outlook 데스크톱\/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 마/);
+  assert.match(html, /다른 방식으로 우회하지 말고 실패 단계만 알려줘/);
   assert.match(html, /auth login-start --help/);
   assert.match(html, /auth login-complete --help/);
   assert.match(html, /HARE_DATA_DIR/);
@@ -335,6 +361,7 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /LOGIN_START_REQUIRED/);
   assert.match(html, /LOGIN_COMPLETE_REQUIRED/);
   assert.match(html, /setup\.nextCommand를 수정하지 않고/);
+  assert.match(html, /Hare에서 사용할 본인의 회사 Microsoft 계정/);
   assert.match(html, /\/root\/\.local\/share/);
   assert.match(html, /프로젝트 또는 폴더/);
   assert.match(html, /HareM365Agent.*프로젝트/s);
@@ -368,6 +395,49 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.doesNotMatch(html, /문서\(Documents\) 폴더 접근을 요청해/);
   assert.doesNotMatch(html, /마운트된 Documents/);
   assert.doesNotMatch(html, /셸 호출을 닫거나 반환하지 말고 Microsoft 로그인 완료 후/);
+});
+
+test("Japanese human guide preserves the setup contract and embedded images", () => {
+  const html = fs.readFileSync(japaneseHtmlGuide, "utf8");
+  assert.match(html, /<html lang="ja">/);
+  assert.match(html, /Hare M365 Agent スタートガイド/);
+  assert.equal((html.match(/class="domain-row"/g) ?? []).length, 7);
+  assert.equal((html.match(/data:image\//g) ?? []).length, 10);
+  assert.match(html, /初回接続用プロンプト/);
+  assert.match(html, /Personalの項目自体がない場合は、そのまま進んでください/);
+  assert.match(html, /alt="ClaudeのアカウントメニューでPersonalを選択する画面"/);
+  assert.match(html, /<summary>Personalへの切り替え画面を表示<\/summary>/);
+  assert.ok(html.indexOf("STEP 2") < html.indexOf("アカウントメニューにPersonalが表示される場合のみ確認してください"));
+  assert.match(html, /自分自身の会社Microsoftアカウント/);
+  assert.match(html, /Outlookの下書きには必ずHare CLIを使用/);
+  assert.match(html, /Computer Use、Outlookのデスクトップ／Web UI、ブラウザー自動化、Microsoft 365コネクターを使用しない/);
+  assert.match(html, /auth login-start --help/);
+  assert.match(html, /auth login-complete --help/);
+  assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
+  assert.match(html, /setup\.stateだけを確認/);
+  assert.match(html, /削除済みアイテムを除くOutlookのすべてのメールフォルダー/);
+  assert.doesNotMatch(html, /test "\$VERSION" = "/);
+  assert.doesNotMatch(html, /src=["'](?:file:|[A-Za-z]:\\)/);
+});
+
+test("English human guide preserves the setup contract and embedded images", () => {
+  const html = fs.readFileSync(englishHtmlGuide, "utf8");
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /Hare M365 Agent Setup Guide/);
+  assert.equal((html.match(/class="domain-row"/g) ?? []).length, 7);
+  assert.equal((html.match(/data:image\//g) ?? []).length, 10);
+  assert.match(html, /Initial connection prompt/);
+  assert.match(html, /my own company Microsoft account that I will use with Hare/);
+  assert.match(html, /Always use the Hare CLI for Outlook drafts/);
+  assert.match(html, /Never use Computer Use, Outlook desktop\/web UI, browser automation, or a Microsoft 365 connector/);
+  assert.match(html, /auth login-start --help/);
+  assert.match(html, /auth login-complete --help/);
+  assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
+  assert.match(html, /Check only setup\.state/);
+  assert.match(html, /excluding Deleted Items/);
+  assert.match(html, /Show the Personal switching example/);
+  assert.doesNotMatch(html, /test "\$VERSION" = "/);
+  assert.doesNotMatch(html, /src=["'](?:file:|[A-Za-z]:\\)/);
 });
 
 function escapeRegExp(value) {

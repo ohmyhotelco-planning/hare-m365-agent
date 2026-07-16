@@ -68,8 +68,8 @@ export function buildSetupContract(
         nextCommand: `${selfCommand} auth login-start`,
         stopAfterAction: true,
         instruction: snapshot.authMigrationRequired
-          ? "Hare M365 Agent was updated to a new Microsoft application. Tell the user that one Microsoft sign-in is required, then run nextCommand unchanged once in the foreground, show the returned Microsoft URL and user code, and stop until the user finishes sign-in. Never start a background or detached poller."
-          : "Run nextCommand unchanged once in the foreground, show the returned Microsoft URL and user code, then stop and wait for the user to finish sign-in. Never start a background or detached poller."
+          ? "Hare M365 Agent was updated to a new Microsoft application. Tell the user that one Microsoft sign-in is required, then run nextCommand unchanged once in the foreground, show the returned Microsoft URL and user code, and stop until the user finishes sign-in. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address. Never start a background or detached poller."
+          : "Run nextCommand unchanged once in the foreground, show the returned Microsoft URL and user code, then stop and wait for the user to finish sign-in. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address. Never start a background or detached poller."
       };
     case "LOGIN_COMPLETE_REQUIRED":
       return {

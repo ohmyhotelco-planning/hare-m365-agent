@@ -83,7 +83,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 
 1. Run startup and follow only setup.state and setup.nextCommand. A usable login requires both loggedIn=true and tokenUsable=true.
 2. READY: Do not start a new login; wait for the user's Microsoft 365 request.
-3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code. If authReason is AUTH_APP_CHANGED, explain only that Hare was updated to a new Microsoft application and one Microsoft sign-in is required.
+3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address from a cache, example, or prior conversation. If authReason is AUTH_APP_CHANGED, explain only that Hare was updated to a new Microsoft application and one Microsoft sign-in is required.
 4. LOGIN_COMPLETE_REQUIRED: wait until the user says the browser login is complete, then run setup.nextCommand once.
 5. FOLDER_REQUIRED: stop and tell the user to open a new Cowork task with the existing Hare project selected.
 6. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.
@@ -98,6 +98,8 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 
 - Use Hare for requested Outlook, Teams, SharePoint, and OneDrive lookups.
 - Default to read-only operation. The only enabled write action is creating an Outlook draft after exact user approval. Sending mail, Teams posting, calendar creation, file upload/delete/share, and permission changes are unavailable.
+- Always use the Hare CLI for Outlook draft requests. Never use Computer Use, Outlook desktop/web UI, browser automation, or a Microsoft 365 connector to create a draft or paste its content.
+- If a Hare draft command fails, report the failed Hare step and stop. Do not fall back to GUI automation or another connector.
 - Drafts support new messages, replies, reply-all, forwards, and file attachments. Run the draft command without an approval token first.
 - Show the complete AWAITING_USER_APPROVAL preview, including recipients, subject, body, and attachments, then stop. Only after explicit user approval, rerun the exact same command once with the returned --approval-token.
 - Never reuse an approval token after changing content, recipients, or attachments. Hare cannot send a draft.

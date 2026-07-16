@@ -1,0 +1,60 @@
+[한국어]
+
+안녕하세요.
+
+Claude/Cowork에서 Microsoft 365 업무 데이터를 활용할 수 있는 Hare M365 Agent와 시작 가이드를 배포합니다.
+
+Hare M365 Agent를 이용하면 Claude/Cowork에서 본인의 회사 Microsoft 계정으로 Outlook, Teams, SharePoint/OneDrive 데이터를 조회하고 필요한 내용을 정리할 수 있습니다. 사용자 동의 후 Outlook 메일 초안 작성도 지원하지만, 메일 발송은 사용자가 Outlook에서 직접 진행합니다.
+
+Session 4의 Microsoft 365 MCP 실습을 진행하려는 경우에는 MCP 대신 Hare M365 Agent를 사용해 주세요.
+
+처음 사용하는 경우 아래 절차로 진행해 주세요.
+
+1. 첨부된 한국어 시작 가이드 HTML 파일을 PC에 다운로드합니다.
+2. 다운로드한 파일을 Edge 또는 Chrome으로 엽니다. Teams나 OneDrive 미리보기에서는 복사 버튼이 작동하지 않습니다.
+3. 가이드에 따라 프로젝트 폴더 선택, 도메인 허용, 초기 연결과 Microsoft 로그인을 완료합니다.
+4. 연결이 완료되면 같은 Cowork 채팅에서 자연어로 Outlook, Teams 또는 SharePoint/OneDrive 조회를 요청합니다.
+
+Microsoft 로그인 시 예시 화면의 계정이 아니라 본인이 Hare에서 사용할 회사 Microsoft 계정으로 로그인해 주세요.
+
+--------------------------------------------------
+
+[English]
+
+Hello,
+
+We are distributing Hare M365 Agent and its setup guide so you can use Microsoft 365 business data through Claude/Cowork.
+
+Hare M365 Agent lets you use Claude/Cowork with your own company Microsoft account to access and organize information from Outlook, Teams, and SharePoint/OneDrive. It can also create Outlook email drafts after your approval, but you must send the message yourself in Outlook.
+
+For the Microsoft 365 MCP exercise in Session 4, please use Hare M365 Agent instead of the MCP.
+
+For a first-time setup, follow these steps:
+
+1. Download the attached English setup guide HTML file to your PC.
+2. Open the downloaded file in Edge or Chrome. Copy buttons do not work in the Teams or OneDrive preview.
+3. Follow the guide to select a project folder, allow the required domains, complete the initial connection, and sign in to Microsoft.
+4. After the connection is ready, ask for Outlook, Teams, or SharePoint/OneDrive information in natural language within the same Cowork chat.
+
+When signing in to Microsoft, use your own company Microsoft account that you will use with Hare, not an account shown in an example screenshot.
+
+--------------------------------------------------
+
+[日本語]
+
+こんにちは。
+
+Claude/CoworkからMicrosoft 365の業務データを活用できるHare M365 Agentとスタートガイドを配布します。
+
+Hare M365 Agentを使用すると、ご自身の会社MicrosoftアカウントでClaude/CoworkからOutlook、Teams、SharePoint/OneDriveの情報を参照し、必要な内容を整理できます。ユーザーの承認後にOutlookメールの下書きを作成することもできますが、送信はOutlookからご自身で行ってください。
+
+Session 4のMicrosoft 365 MCP演習を行う場合は、MCPの代わりにHare M365 Agentを使用してください。
+
+初めて使用する場合は、以下の手順で進めてください。
+
+1. 添付された日本語版スタートガイドのHTMLファイルをPCにダウンロードします。
+2. ダウンロードしたファイルをEdgeまたはChromeで開きます。TeamsまたはOneDriveのプレビューではコピーボタンが動作しません。
+3. ガイドに従って、プロジェクトフォルダーの選択、必要なドメインの許可、初回接続、Microsoftへのサインインを完了します。
+4. 接続完了後、同じCoworkチャットでOutlook、Teams、SharePoint/OneDriveの情報を自然な言葉で依頼します。
+
+Microsoftへのサインインには、サンプル画面に表示されているアカウントではなく、Hareで使用するご自身の会社Microsoftアカウントを使用してください。
