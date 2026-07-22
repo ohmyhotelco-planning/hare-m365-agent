@@ -103,13 +103,15 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 
 일반적인 메일 조회와 최근 메일 조회는 `outlook recent --folder all`을 사용합니다. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상입니다. `outlook inbox`는 받은편지함이 명시된 요청에만 사용합니다. 플래그된 메일은 `outlook flagged --folder all`로 조회하며 모든 메일 결과에는 `flagStatus`가 포함됩니다.
 
-기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회합니다. 두 검색 모두 기본 100건씩 반환합니다. Outlook은 `search.nextCursor`를 `--cursor`로, Teams는 `search.nextOffset`을 `--offset`으로 전달해 이어서 조회합니다. Outlook 검색 결과의 `body`와 `bodyHtml`은 전체 본문이며 `fullBodyUnavailableCount`로 누락 여부를 확인합니다. `search.partialResult`가 `true`이면 35초 시간 예산 안에 처리한 부분 결과입니다. 결과 JSON의 `search.range.notice`에는 실제 조회 기간이 표시됩니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
+기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회합니다. 두 검색 모두 기본 100건씩 반환합니다. Outlook은 `search.nextCursor`를 `--cursor`로, Teams는 `search.nextOffset`을 `--offset`으로 전달해 이어서 조회합니다. Teams는 명령당 최대 100개의 고유 메시지만 전체 본문으로 조회하고, Microsoft Search의 최대 1,000건 검색 창 안에서만 이어봅니다. `duplicateHitCount`, `noProgressDetected`, `searchWindowExhausted`가 중복 및 중단 사유를 보여줍니다. Outlook 검색 결과의 `body`와 `bodyHtml`은 전체 본문이며 `fullBodyUnavailableCount`로 누락 여부를 확인합니다. `search.partialResult`가 `true`이면 35초 시간 예산 안에 처리한 부분 결과입니다. 결과 JSON의 `search.range.notice`에는 실제 조회 기간이 표시됩니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
 
 정확한 메일 건수 집계는 검색 인덱스를 사용하는 `outlook search` 대신 `outlook count`를 사용합니다. `outlook count`는 지정 기간의 모든 메일 페이지를 순회하고 `--subject-contains`와 `--from` 조건을 직접 대조합니다. 35초 안에 끝나지 않으면 누적 상태가 포함된 `nextCursor`를 반환합니다. 다음 실행에서 `--cursor`로 이어가며, `complete:true`인 마지막 `matchedCount`가 정확한 전체 건수입니다. `--folder all`은 삭제된 메일을 제외하며, 보낸편지함은 `sentDateTime`, 나머지는 `receivedDateTime`을 기준으로 집계합니다.
 
 `files search`는 Microsoft Search API를 통해 사용자가 접근할 수 있는 SharePoint, Teams, OneDrive 파일 전체를 검색합니다. 결과의 `nextOffset`을 `--offset`으로 전달해 다음 페이지를 조회할 수 있습니다. SharePoint 사이트 자체의 존재 여부는 `sharepoint sites`로 확인합니다.
 
 Teams `chat-messages`는 `body`에 전체 일반 텍스트, `bodyHtml`에 Graph 원본 HTML을 반환합니다. `search-messages`도 검색 결과마다 채팅 또는 채널 메시지 상세를 추가 조회해 같은 전체 본문 필드를 반환합니다. 일부 상세 조회가 불가능하면 `fullBodyUnavailableCount`와 항목별 `bodyUnavailableReason`으로 명시하며 검색 스니펫을 전체 본문으로 취급하지 않습니다.
+
+Teams의 `totalMatchesReported`는 Microsoft Search가 발신자, 본문, 첨부파일을 대상으로 찾은 메시지 수입니다. 따라서 “검색어가 포함된 메시지가 몇 개인가”에는 참고할 수 있지만 “메시지 본문에 단어가 총 몇 번 등장했는가”와는 다릅니다. 정확한 본문 등장 횟수는 첫 페이지에서 전체 후보 수를 확인합니다. 후보가 `searchWindowLimit`인 1,000건을 초과하면 더 조회하지 않고 기간이나 검색어를 좁혀야 합니다. 그 이하일 때만 고유 메시지 본문을 이어서 확인하며, 중복 페이지나 무진행 상태가 감지되면 반복을 중단하고 한계를 보고합니다.
 
 ## Outlook 초안
 

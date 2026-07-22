@@ -162,8 +162,12 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /Do not fall back to GUI automation or another connector/);
   assert.match(rules, /complete untruncated message/);
   assert.match(rules, /fullBodyUnavailableCount/);
-  assert.match(rules, /100 matches per page/);
+  assert.match(rules, /at most 100 unique messages/);
   assert.match(rules, /continuationAvailable/);
+  assert.match(rules, /1,000-result window/);
+  assert.match(rules, /noProgressDetected/);
+  assert.match(rules, /not an exact count of text occurrences/);
+  assert.match(rules, /ask for a narrower date range or query/);
   assert.match(rules, /partialResult/);
   assert.match(rules, /their own company Microsoft account/);
   assert.match(rules, /Never name, recommend, or preselect a specific email address/);
@@ -319,6 +323,7 @@ test("Teams search defaults to a bounded result page and supports continuation",
   const result = run(["teams", "search-messages", "--help"], dataDir);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--limit <number>.*default: "100"/s);
+  assert.match(result.stdout, /hard\s+maximum: 100/);
   assert.match(result.stdout, /--offset <number>.*default: "0"/s);
 });
 

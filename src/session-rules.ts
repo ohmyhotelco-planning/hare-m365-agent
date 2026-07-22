@@ -113,7 +113,9 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 - Use lastMessageCreatedDateTime, not lastUpdatedDateTime alone, when deciding the latest Teams chat.
 - Teams chat-messages body and bodyHtml are the complete untruncated message. bodyPreview is only a compatibility alias for the same full text.
 - Teams search-messages performs detail lookups for full bodies. Use body/bodyHtml, check fullBodyUnavailableCount, and never present searchSummary as the complete message when fullBodyAvailable is false.
-- Teams search-messages searches the full requested date range but returns 100 matches per page by default. When continuationAvailable is true, pass nextOffset back through --offset for the next page.
+- Teams search-messages hydrates at most 100 unique messages per command and Microsoft Search exposes at most a 1,000-result window. Never raise the limit above 100 or continue after searchWindowExhausted or noProgressDetected.
+- totalMatchesReported counts messages matched by Microsoft Search across sender, body, and attachments. It is not an exact count of text occurrences in message bodies. Do not exhaustively paginate only to revalidate totalMatchesReported.
+- For an exact body-occurrence request, explain the distinction and inspect the first page. If totalMatchesReported exceeds searchWindowLimit, do not paginate; ask for a narrower date range or query because an exact count cannot be guaranteed. Otherwise inspect pages only within the 1,000-result window and stop on duplicate/no-progress metadata.
 - When partialResult is true, report partialReason and fullBodyUnavailableCount. Do not present a time-budget-limited result as complete.
 
 ## Required domains
