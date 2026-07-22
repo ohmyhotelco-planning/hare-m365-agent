@@ -164,6 +164,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - 사용자가 기간을 지정한 조회는 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 search 명령의 --since/--until에 반영한다.
 - 사용자가 기간을 지정하지 않은 검색은 최근 90일을 조회한다. 결과 JSON의 search.range.notice를 사용자에게 알려 실제 조회 범위를 명확히 한다.
 - search.limitReached가 true이면 일부 결과만 반환된 것이므로 사용자에게 한도 도달 사실을 알린다.
+- teams search-messages는 전체 검색 범위를 유지하면서 기본 100건씩 반환한다. search.continuationAvailable이 true이면 search.nextOffset을 --offset에 전달해 다음 결과를 이어서 조회한다.
+- teams search-messages의 search.partialResult가 true이면 시간 예산 안에 처리한 부분 결과다. partialReason과 fullBodyUnavailableCount를 알리고, 필요한 경우 같은 범위를 더 작은 limit으로 다시 조회한다.
 - 메일 건수 질문은 검색 인덱스 결과를 세지 말고 outlook count로 전체 페이지를 검사한다.
 - SharePoint 사이트 존재 여부는 sharepoint sites로 확인한다. 개인 OneDrive만 검색하는 files search 결과로 사이트 존재나 접근 권한을 판단하지 않는다.
 - Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다. 초안을 만들거나 본문을 붙여넣기 위해 Computer Use, Outlook 데스크톱/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 않는다.
@@ -232,7 +234,9 @@ SharePoint 사이트 존재 여부는 sharepoint sites로 확인하고, 개인 O
 Outlook 초안 작성 요청은 반드시 Hare CLI로 처리해. 초안을 만들거나 본문을 붙여넣기 위해 Computer Use, Outlook 데스크톱/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 마. Hare 초안 명령이 실패하면 실패 단계와 오류만 알려주고 멈춰. 다른 방식으로 우회하지 마.
 사용자가 기간을 말하면 --since/--until에 그대로 반영해.
 기간을 말하지 않으면 기본 최근 90일이 적용되며, 결과의 search.range.notice를 답변에 포함해 실제 조회 범위를 알려줘.
-search.limitReached가 true이면 검색 결과 한도에 도달했다고 알려줘.`;
+search.limitReached가 true이면 검색 결과 한도에 도달했다고 알려줘.
+Teams 검색의 search.continuationAvailable이 true이면 search.nextOffset을 --offset에 전달해 다음 100건을 이어서 조회해.
+search.partialResult가 true이면 시간 예산 안에 처리한 부분 결과임을 알리고 partialReason과 fullBodyUnavailableCount를 함께 설명해.`;
 function getSelfCommand(): string {
   const command = process.env.HARE_M365_COMMAND ?? defaultCliCommand;
   if (config.dataDirSource === "os-default") return command;
@@ -686,17 +690,26 @@ teams
   .requiredOption("--query <text>", "search query or Teams KQL")
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
-  .option("--limit <number>", "maximum matching message count", "1000")
+  .option("--limit <number>", "maximum matching message count", "100")
+  .option("--offset <number>", "result offset for the next page", "0")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(
-    async (options: { query: string; since?: string; until?: string; limit: string; out?: string }) => {
+    async (options: {
+      query: string;
+      since?: string;
+      until?: string;
+      limit: string;
+      offset: string;
+      out?: string;
+    }) => {
       requireConfigured(config);
       const data = await searchChatMessages(
         config,
         options.query,
         options.since,
         options.until,
-        Number(options.limit)
+        Number(options.limit),
+        { offset: Number(options.offset) }
       );
       emitJson(data, options.out);
     }

@@ -1,5 +1,10 @@
 import type { AppConfig } from "./config.js";
-import { graphGet, graphPost, type GraphPage } from "./graph.js";
+import {
+  graphGet,
+  graphPost,
+  type GraphPage,
+  type GraphRequestOptions
+} from "./graph.js";
 import { resolveSearchRange, type SearchRange } from "./search-range.js";
 
 export type TeamSummary = {
@@ -46,7 +51,8 @@ export type ChatMessageSearchSummary = {
   bodyUnavailableReason?:
     | "missing-message-location"
     | "detail-request-failed"
-    | "message-body-missing";
+    | "message-body-missing"
+    | "time-budget-exceeded";
   /** @deprecated Use body. Full text when available; search summary otherwise. */
   bodyPreview?: string;
   webLink?: string;
@@ -62,8 +68,20 @@ export type ChatMessageSearchResult = {
     fullBodyUnavailableCount: number;
     maxResults: number;
     limitReached: boolean;
+    offset: number;
+    nextOffset?: number;
+    continuationAvailable: boolean;
+    partialResult: boolean;
+    partialReason?: "time-budget-exceeded";
+    timeBudgetMs: number;
   };
   messages: ChatMessageSearchSummary[];
+};
+
+export type ChatMessageSearchOptions = {
+  offset?: number;
+  timeBudgetMs?: number;
+  now?: () => number;
 };
 
 type GraphTeam = {
@@ -115,11 +133,12 @@ type GraphSearchResponse = {
 };
 
 export type TeamsGraphClient = {
-  get<T>(pathOrUrl: string): Promise<T>;
-  post<T>(pathOrUrl: string, body?: unknown): Promise<T>;
+  get<T>(pathOrUrl: string, options?: GraphRequestOptions): Promise<T>;
+  post<T>(pathOrUrl: string, body?: unknown, options?: GraphRequestOptions): Promise<T>;
 };
 
 const fullBodyConcurrency = 5;
+const defaultSearchTimeBudgetMs = 35_000;
 
 export async function listJoinedTeams(
   config: AppConfig,
@@ -177,6 +196,7 @@ export async function searchChatMessages(
   since: string | undefined,
   until: string | undefined,
   requestedLimit: number,
+  options: ChatMessageSearchOptions = {},
   client: TeamsGraphClient = defaultTeamsClient(config)
 ): Promise<ChatMessageSearchResult> {
   const trimmedQuery = query.trim();
@@ -192,24 +212,56 @@ export async function searchChatMessages(
     config.timeZone
   );
   const maxResults = normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults);
+  const initialOffset = normalizeSearchOffset(options.offset ?? 0);
+  const timeBudgetMs = normalizeTimeBudget(options.timeBudgetMs ?? defaultSearchTimeBudgetMs);
+  const now = options.now ?? Date.now;
+  const deadline = now() + timeBudgetMs;
   const graphQuery = `${trimmedQuery} AND sent>=${range.since} AND sent<=${range.until}`;
   const hits: GraphChatMessageSearchHit[] = [];
   let totalMatchesReported = 0;
   let moreResultsAvailable = true;
-  let offset = 0;
+  let offset = initialOffset;
+  let partialResult = false;
+  let partialReason: ChatMessageSearchResult["search"]["partialReason"];
+
+  const hasTimeRemaining = () => now() < deadline;
+  const markTimeBudgetExceeded = () => {
+    partialResult = true;
+    partialReason = "time-budget-exceeded";
+  };
+  const graphRequestOptions = (): GraphRequestOptions => ({
+    totalTimeoutMs: Math.max(1, deadline - now())
+  });
 
   while (moreResultsAvailable && hits.length < maxResults) {
+    if (!hasTimeRemaining()) {
+      markTimeBudgetExceeded();
+      break;
+    }
     const size = Math.min(25, maxResults - hits.length);
-    const response = await client.post<GraphSearchResponse>("/search/query", {
-      requests: [
+    let response: GraphSearchResponse;
+    try {
+      response = await client.post<GraphSearchResponse>(
+        "/search/query",
         {
-          entityTypes: ["chatMessage"],
-          query: { queryString: graphQuery },
-          from: offset,
-          size
-        }
-      ]
-    });
+          requests: [
+            {
+              entityTypes: ["chatMessage"],
+              query: { queryString: graphQuery },
+              from: offset,
+              size
+            }
+          ]
+        },
+        graphRequestOptions()
+      );
+    } catch (error) {
+      if (!hasTimeRemaining() || isGraphTimeBudgetError(error)) {
+        markTimeBudgetExceeded();
+        break;
+      }
+      throw error;
+    }
     const container = response.value?.[0]?.hitsContainers?.[0];
     const pageHits = container?.hits ?? [];
     totalMatchesReported = container?.total ?? totalMatchesReported;
@@ -218,25 +270,58 @@ export async function searchChatMessages(
     moreResultsAvailable = Boolean(container?.moreResultsAvailable) && pageHits.length > 0;
   }
 
-  const chats = (await fetchAllChats(config, client)).map((chat) => ({ id: chat.id, topic: chat.topic }));
-  const topicByChatId = new Map(chats.map((chat) => [chat.id, chat.topic]));
-  const messages = await mapWithConcurrency(hits, fullBodyConcurrency, async (hit) => {
+  const details = await mapWithConcurrency(hits, fullBodyConcurrency, async (hit) => {
     const resource = hit.resource;
     const detailPath = messageDetailPath(resource);
     let detail: GraphChatMessage | undefined;
     let bodyUnavailableReason: ChatMessageSearchSummary["bodyUnavailableReason"];
-    if (!detailPath) {
+    if (!hasTimeRemaining()) {
+      markTimeBudgetExceeded();
+      bodyUnavailableReason = "time-budget-exceeded";
+    } else if (!detailPath) {
       bodyUnavailableReason = "missing-message-location";
     } else {
       try {
-        detail = await client.get<GraphChatMessage>(detailPath);
+        detail = await client.get<GraphChatMessage>(detailPath, graphRequestOptions());
         if (detail.body?.content === undefined) {
           bodyUnavailableReason = "message-body-missing";
         }
-      } catch {
-        bodyUnavailableReason = "detail-request-failed";
+      } catch (error) {
+        if (!hasTimeRemaining() || isGraphTimeBudgetError(error)) {
+          markTimeBudgetExceeded();
+          bodyUnavailableReason = "time-budget-exceeded";
+        } else {
+          bodyUnavailableReason = "detail-request-failed";
+        }
       }
     }
+    return { detail, bodyUnavailableReason };
+  });
+
+  const uniqueChatIds = Array.from(new Set(
+    hits.map((hit) => hit.resource?.chatId).filter((chatId): chatId is string => Boolean(chatId))
+  ));
+  const topicEntries = await mapWithConcurrency(uniqueChatIds, fullBodyConcurrency, async (chatId) => {
+    if (!hasTimeRemaining()) {
+      markTimeBudgetExceeded();
+      return [chatId, undefined] as const;
+    }
+    try {
+      const chat = await client.get<GraphChat>(
+        `/chats/${encodeURIComponent(chatId)}?$select=id,topic`,
+        graphRequestOptions()
+      );
+      return [chatId, chat.topic] as const;
+    } catch (error) {
+      if (!hasTimeRemaining() || isGraphTimeBudgetError(error)) markTimeBudgetExceeded();
+      return [chatId, undefined] as const;
+    }
+  });
+  const topicByChatId = new Map<string, string | undefined>(topicEntries);
+
+  const messages = hits.map((hit, index) => {
+    const resource = hit.resource;
+    const { detail, bodyUnavailableReason } = details[index];
     const bodyHtml = detail?.body?.content;
     const body = bodyHtml === undefined ? undefined : stripHtml(bodyHtml);
     const searchSummary = stripHtml(hit.summary ?? "");
@@ -260,6 +345,8 @@ export async function searchChatMessages(
   });
 
   const fullBodyReturnedCount = messages.filter((message) => message.fullBodyAvailable).length;
+  const continuationAvailable =
+    moreResultsAvailable || totalMatchesReported > initialOffset + hits.length;
 
   return {
     search: {
@@ -270,7 +357,13 @@ export async function searchChatMessages(
       fullBodyReturnedCount,
       fullBodyUnavailableCount: messages.length - fullBodyReturnedCount,
       maxResults,
-      limitReached: moreResultsAvailable || totalMatchesReported > messages.length
+      limitReached: continuationAvailable,
+      offset: initialOffset,
+      nextOffset: continuationAvailable ? initialOffset + hits.length : undefined,
+      continuationAvailable,
+      partialResult,
+      partialReason,
+      timeBudgetMs
     },
     messages
   };
@@ -303,8 +396,10 @@ async function collectPages<T>(
 
 function defaultTeamsClient(config: AppConfig): TeamsGraphClient {
   return {
-    get: <T>(pathOrUrl: string) => graphGet<T>(config, pathOrUrl),
-    post: <T>(pathOrUrl: string, body?: unknown) => graphPost<T>(config, pathOrUrl, body)
+    get: <T>(pathOrUrl: string, options?: GraphRequestOptions) =>
+      graphGet<T>(config, pathOrUrl, options),
+    post: <T>(pathOrUrl: string, body?: unknown, options?: GraphRequestOptions) =>
+      graphPost<T>(config, pathOrUrl, body, options)
   };
 }
 
@@ -370,4 +465,23 @@ function normalizeSearchLimit(requested: number, policyMaximum: number): number 
     throw new Error("limit must be a positive number.");
   }
   return Math.min(Math.floor(requested), policyMaximum, 1000);
+}
+
+function normalizeSearchOffset(requested: number): number {
+  if (!Number.isFinite(requested) || requested < 0) {
+    throw new Error("offset must be a non-negative number.");
+  }
+  return Math.floor(requested);
+}
+
+function normalizeTimeBudget(requested: number): number {
+  if (!Number.isFinite(requested) || requested < 1) {
+    throw new Error("time budget must be a positive number.");
+  }
+  return Math.floor(requested);
+}
+
+function isGraphTimeBudgetError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === "GraphTimeoutError" || /time budget|timed out/i.test(error.message);
 }

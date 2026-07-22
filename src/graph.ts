@@ -7,22 +7,37 @@ const retryableStatuses = new Set([429, 500, 502, 503, 504]);
 const maxAttempts = 4;
 const requestTimeoutMs = 30_000;
 
+export type GraphRequestOptions = {
+  totalTimeoutMs?: number;
+};
+
 export type GraphPage<T> = {
   value?: T[];
   "@odata.nextLink"?: string;
 };
 
-export async function graphGet<T>(config: AppConfig, pathOrUrl: string): Promise<T> {
-  const response = await graphRequest(config, pathOrUrl, "GET");
+export async function graphGet<T>(
+  config: AppConfig,
+  pathOrUrl: string,
+  options: GraphRequestOptions = {}
+): Promise<T> {
+  const response = await graphRequest(config, pathOrUrl, "GET", undefined, true, options);
   return (await response.json()) as T;
 }
 
-export async function graphPost<T>(config: AppConfig, pathOrUrl: string, body: unknown): Promise<T> {
+export async function graphPost<T>(
+  config: AppConfig,
+  pathOrUrl: string,
+  body: unknown,
+  options: GraphRequestOptions = {}
+): Promise<T> {
   const response = await graphRequest(
     config,
     pathOrUrl,
     "POST",
-    body === undefined ? undefined : JSON.stringify(body)
+    body === undefined ? undefined : JSON.stringify(body),
+    true,
+    options
   );
   return readJsonResponse<T>(response);
 }
@@ -45,15 +60,20 @@ async function graphRequest(
   pathOrUrl: string,
   method: "GET" | "POST" | "PATCH" | "DELETE",
   body?: string,
-  acceptJson = true
+  acceptJson = true,
+  options: GraphRequestOptions = {}
 ) {
   const token = await getAccessToken(config);
   const url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${graphRoot}${pathOrUrl}`;
+  const totalTimeoutMs = normalizeTotalTimeout(options.totalTimeoutMs);
+  const deadline = Date.now() + totalTimeoutMs;
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) throw graphTimeoutError(totalTimeoutMs);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+    const timer = setTimeout(() => controller.abort(), Math.min(requestTimeoutMs, remainingMs));
     try {
       const response = await fetchWithProxy(url, {
         method,
@@ -70,7 +90,7 @@ async function graphRequest(
 
       if (retryableStatuses.has(response.status) && attempt < maxAttempts) {
         await response.body?.cancel();
-        await sleep(retryDelayMs(response.headers.get("retry-after"), attempt));
+        await sleepWithinDeadline(retryDelayMs(response.headers.get("retry-after"), attempt), deadline);
         continue;
       }
 
@@ -80,14 +100,33 @@ async function graphRequest(
       );
     } catch (error) {
       lastError = error;
+      if (Date.now() >= deadline) throw graphTimeoutError(totalTimeoutMs);
       if (!isTransientNetworkError(error) || attempt >= maxAttempts) throw error;
-      await sleep(retryDelayMs(undefined, attempt));
+      await sleepWithinDeadline(retryDelayMs(undefined, attempt), deadline);
     } finally {
       clearTimeout(timer);
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error("Graph request failed.");
+}
+
+function normalizeTotalTimeout(value: number | undefined): number {
+  if (value === undefined) return Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return Math.max(1, Math.floor(value));
+}
+
+function graphTimeoutError(totalTimeoutMs: number): Error {
+  const error = new Error(`Graph request exceeded the ${totalTimeoutMs}ms time budget.`);
+  error.name = "GraphTimeoutError";
+  return error;
+}
+
+async function sleepWithinDeadline(milliseconds: number, deadline: number): Promise<void> {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) return;
+  await sleep(Math.min(milliseconds, remainingMs));
 }
 
 async function readJsonResponse<T>(response: { text(): Promise<string> }): Promise<T> {

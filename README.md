@@ -103,7 +103,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 
 일반적인 메일 조회와 최근 메일 조회는 `outlook recent --folder all`을 사용합니다. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상입니다. `outlook inbox`는 받은편지함이 명시된 요청에만 사용합니다. 플래그된 메일은 `outlook flagged --folder all`로 조회하며 모든 메일 결과에는 `flagStatus`가 포함됩니다.
 
-기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회하며 최대 1,000건을 반환합니다. 결과 JSON의 `search.range.notice`에 실제 조회 기간이 표시되고, `search.limitReached`로 결과 한도 도달 여부를 확인할 수 있습니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
+기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회합니다. `outlook search`는 최대 1,000건을 반환하고, `teams search-messages`는 전체 검색 범위를 유지하면서 기본 100건씩 반환합니다. Teams 결과의 `search.continuationAvailable`이 `true`이면 `search.nextOffset`을 다음 명령의 `--offset`으로 전달해 이어서 조회합니다. `search.partialResult`가 `true`이면 35초 시간 예산 안에 처리한 부분 결과이므로 `partialReason`과 `fullBodyUnavailableCount`를 함께 확인합니다. 결과 JSON의 `search.range.notice`에는 실제 조회 기간이 표시됩니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
 
 정확한 메일 건수 집계는 검색 인덱스를 사용하는 `outlook search` 대신 `outlook count`를 사용합니다. `outlook count`는 지정 기간의 모든 메일 페이지를 순회하고 `--subject-contains`와 `--from` 조건을 직접 대조합니다. `--folder all`은 삭제된 메일을 제외하며, 보낸편지함은 `sentDateTime`, 나머지는 `receivedDateTime`을 기준으로 집계합니다.
 

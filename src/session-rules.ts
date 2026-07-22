@@ -110,6 +110,8 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 - Use lastMessageCreatedDateTime, not lastUpdatedDateTime alone, when deciding the latest Teams chat.
 - Teams chat-messages body and bodyHtml are the complete untruncated message. bodyPreview is only a compatibility alias for the same full text.
 - Teams search-messages performs detail lookups for full bodies. Use body/bodyHtml, check fullBodyUnavailableCount, and never present searchSummary as the complete message when fullBodyAvailable is false.
+- Teams search-messages searches the full requested date range but returns 100 matches per page by default. When continuationAvailable is true, pass nextOffset back through --offset for the next page.
+- When partialResult is true, report partialReason and fullBodyUnavailableCount. Do not present a time-budget-limited result as complete.
 
 ## Required domains
 

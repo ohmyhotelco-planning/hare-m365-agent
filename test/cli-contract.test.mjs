@@ -162,6 +162,9 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /Do not fall back to GUI automation or another connector/);
   assert.match(rules, /complete untruncated message/);
   assert.match(rules, /fullBodyUnavailableCount/);
+  assert.match(rules, /100 matches per page/);
+  assert.match(rules, /continuationAvailable/);
+  assert.match(rules, /partialResult/);
   assert.match(rules, /their own company Microsoft account/);
   assert.match(rules, /Never name, recommend, or preselect a specific email address/);
   assert.doesNotMatch(rules, /hybrid|\.hare-app-snapshot|\/home\/claude/i);
@@ -186,6 +189,8 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /메일 발송은 지원하지 않는다/);
   assert.match(result.stdout, /chat-messages의 body와 bodyHtml은 잘리지 않은 전체 본문/);
   assert.match(result.stdout, /fullBodyUnavailableCount/);
+  assert.match(result.stdout, /search\.nextOffset/);
+  assert.match(result.stdout, /search\.partialResult/);
   assert.match(result.stdout, /searchSummary를 전체 본문으로 간주하지 않는다/);
   assert.match(result.stdout, /사용자 본인의 회사 Microsoft 계정/);
   assert.match(result.stdout, /특정 이메일 주소를 로그인 대상으로 표시하거나 추천하지 않는다/);
@@ -304,6 +309,14 @@ test("list commands reject invalid limits before making Graph calls", () => {
   const result = run(["files", "search", "--query", "test", "--limit", "0"], dataDir);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /limit must be a positive number/);
+});
+
+test("Teams search defaults to a bounded result page and supports continuation", () => {
+  const dataDir = makeDataDir("hare-teams-search-help-");
+  const result = run(["teams", "search-messages", "--help"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--limit <number>.*default: "100"/s);
+  assert.match(result.stdout, /--offset <number>.*default: "0"/s);
 });
 
 test("Outlook exposes whole-mailbox recent and flagged commands", () => {
