@@ -4,7 +4,13 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { AppConfig } from "./config.js";
 import { clearStoredFile } from "./persistent-storage.js";
-import { encodeQuery, graphDownloadResponse, graphGet, type GraphPage } from "./graph.js";
+import {
+  graphDownloadResponse,
+  graphGet,
+  graphPost,
+  type GraphPage,
+  type GraphRequestOptions
+} from "./graph.js";
 
 export type FileSummary = {
   id: string;
@@ -12,11 +18,41 @@ export type FileSummary = {
   webUrl?: string;
   size?: number;
   lastModifiedDateTime?: string;
+  mimeType?: string;
   parentReference?: {
     driveId?: string;
     siteId?: string;
     path?: string;
   };
+};
+
+export type FileSearchResult = {
+  search: {
+    query: string;
+    scope: "sharePointAndOneDrive";
+    source: "microsoftSearch";
+    returnedCount: number;
+    totalMatchesReported: number;
+    maxResults: number;
+    limitReached: boolean;
+    offset: number;
+    nextOffset?: number;
+    continuationAvailable: boolean;
+    partialResult: boolean;
+    partialReason?: "time-budget-exceeded";
+    timeBudgetMs: number;
+  };
+  files: FileSummary[];
+};
+
+export type FileSearchOptions = {
+  offset?: number;
+  timeBudgetMs?: number;
+  now?: () => number;
+};
+
+export type SharePointGraphClient = {
+  post<T>(pathOrUrl: string, body: unknown, options?: GraphRequestOptions): Promise<T>;
 };
 
 export type SiteSummary = {
@@ -42,11 +78,24 @@ export type SiteSearchResult = {
 };
 
 type GraphDriveItem = FileSummary & {
-  file?: unknown;
+  file?: { mimeType?: string };
   folder?: unknown;
 };
 
 type GraphSite = SiteSummary;
+
+type GraphDriveItemSearchHit = { resource?: GraphDriveItem };
+type GraphDriveItemSearchResponse = {
+  value?: Array<{
+    hitsContainers?: Array<{
+      total?: number;
+      moreResultsAvailable?: boolean;
+      hits?: GraphDriveItemSearchHit[];
+    }>;
+  }>;
+};
+
+const defaultSearchTimeBudgetMs = 35_000;
 
 export async function searchSites(
   config: AppConfig,
@@ -96,32 +145,101 @@ export async function searchSites(
   };
 }
 
-export async function searchFiles(config: AppConfig, query: string, limit: number): Promise<FileSummary[]> {
+export async function searchFiles(
+  config: AppConfig,
+  query: string,
+  limit: number,
+  options: FileSearchOptions = {},
+  client: SharePointGraphClient = defaultSharePointClient(config)
+): Promise<FileSearchResult> {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) throw new Error("query must not be empty.");
   if (!Number.isFinite(limit) || limit < 1) throw new Error("limit must be a positive number.");
 
-  const top = Math.min(Math.floor(limit), config.policy.maxFileSearchLimit);
-  let nextUrl: string | undefined =
-    `/me/drive/root/search(q='${encodeQuery(trimmedQuery)}')?$top=${top}&$select=id,name,webUrl,size,lastModifiedDateTime,parentReference,file,folder`;
-  const files: GraphDriveItem[] = [];
+  const maxResults = Math.min(Math.floor(limit), config.policy.maxFileSearchLimit);
+  const offset = normalizeOffset(options.offset ?? 0);
+  const timeBudgetMs = normalizeTimeBudget(options.timeBudgetMs ?? defaultSearchTimeBudgetMs);
+  const now = options.now ?? Date.now;
+  const deadline = now() + timeBudgetMs;
+  let totalMatchesReported = 0;
+  let moreResultsAvailable = false;
+  let partialResult = false;
+  let partialReason: FileSearchResult["search"]["partialReason"];
+  let hits: GraphDriveItemSearchHit[] = [];
 
-  while (nextUrl && files.length < top) {
-    const page: GraphPage<GraphDriveItem> = await graphGet<GraphPage<GraphDriveItem>>(config, nextUrl);
-    const eligible = (page.value ?? []).filter((item) => item.file);
-    files.push(...eligible.slice(0, top - files.length));
-    nextUrl = page["@odata.nextLink"];
+  try {
+    const response = await client.post<GraphDriveItemSearchResponse>(
+      "/search/query",
+      {
+        requests: [
+          {
+            entityTypes: ["driveItem"],
+            query: {
+              queryString: trimmedQuery,
+              queryTemplate: "({searchTerms}) IsDocument:True"
+            },
+            fields: [
+              "id",
+              "name",
+              "webUrl",
+              "size",
+              "lastModifiedDateTime",
+              "parentReference",
+              "file",
+              "folder"
+            ],
+            from: offset,
+            size: maxResults
+          }
+        ]
+      },
+      { totalTimeoutMs: Math.max(1, deadline - now()) }
+    );
+    const container = response.value?.[0]?.hitsContainers?.[0];
+    totalMatchesReported = container?.total ?? 0;
+    moreResultsAvailable = Boolean(container?.moreResultsAvailable);
+    hits = container?.hits ?? [];
+  } catch (error) {
+    if (now() >= deadline || isGraphTimeBudgetError(error)) {
+      partialResult = true;
+      partialReason = "time-budget-exceeded";
+    } else {
+      throw error;
+    }
   }
 
-  return files
+  const files = hits
+    .map((hit) => hit.resource)
+    .filter((item): item is GraphDriveItem => Boolean(item?.file))
     .map((item) => ({
       id: item.id,
       name: item.name,
       webUrl: item.webUrl,
       size: item.size,
       lastModifiedDateTime: item.lastModifiedDateTime,
+      mimeType: item.file?.mimeType,
       parentReference: item.parentReference
     }));
+  const continuationAvailable = partialResult || moreResultsAvailable;
+
+  return {
+    search: {
+      query: trimmedQuery,
+      scope: "sharePointAndOneDrive",
+      source: "microsoftSearch",
+      returnedCount: files.length,
+      totalMatchesReported,
+      maxResults,
+      limitReached: continuationAvailable,
+      offset,
+      nextOffset: continuationAvailable ? offset + hits.length : undefined,
+      continuationAvailable,
+      partialResult,
+      partialReason,
+      timeBudgetMs
+    },
+    files
+  };
 }
 
 export async function downloadDriveItem(
@@ -195,4 +313,30 @@ function uniqueOutputPath(directory: string, filename: string): string {
     if (!fs.existsSync(candidate)) return candidate;
   }
   throw new Error("Could not allocate a unique download filename.");
+}
+
+function defaultSharePointClient(config: AppConfig): SharePointGraphClient {
+  return {
+    post: <T>(pathOrUrl: string, body: unknown, options?: GraphRequestOptions) =>
+      graphPost<T>(config, pathOrUrl, body, options)
+  };
+}
+
+function normalizeOffset(value: number): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("offset must be a non-negative number.");
+  }
+  return Math.floor(value);
+}
+
+function normalizeTimeBudget(value: number): number {
+  if (!Number.isFinite(value) || value < 1) {
+    throw new Error("time budget must be a positive number.");
+  }
+  return Math.floor(value);
+}
+
+function isGraphTimeBudgetError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === "GraphTimeoutError" || /time budget|timed out/i.test(error.message);
 }

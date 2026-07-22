@@ -190,6 +190,9 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /chat-messages의 body와 bodyHtml은 잘리지 않은 전체 본문/);
   assert.match(result.stdout, /fullBodyUnavailableCount/);
   assert.match(result.stdout, /search\.nextOffset/);
+  assert.match(result.stdout, /search\.nextCursor/);
+  assert.match(result.stdout, /count\.complete/);
+  assert.match(result.stdout, /SharePoint, Teams, OneDrive/);
   assert.match(result.stdout, /search\.partialResult/);
   assert.match(result.stdout, /searchSummary를 전체 본문으로 간주하지 않는다/);
   assert.match(result.stdout, /사용자 본인의 회사 Microsoft 계정/);
@@ -317,6 +320,20 @@ test("Teams search defaults to a bounded result page and supports continuation",
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--limit <number>.*default: "100"/s);
   assert.match(result.stdout, /--offset <number>.*default: "0"/s);
+});
+
+test("Outlook and file search expose bounded continuation controls", () => {
+  const dataDir = makeDataDir("hare-search-continuation-help-");
+  const outlook = run(["outlook", "search", "--help"], dataDir);
+  const count = run(["outlook", "count", "--help"], dataDir);
+  const files = run(["files", "search", "--help"], dataDir);
+  assert.equal(outlook.status, 0, outlook.stderr);
+  assert.equal(count.status, 0, count.stderr);
+  assert.equal(files.status, 0, files.stderr);
+  assert.match(outlook.stdout, /--limit <number>.*default:\s*"100"/s);
+  assert.match(outlook.stdout, /--cursor <cursor>/);
+  assert.match(count.stdout, /--cursor <cursor>/);
+  assert.match(files.stdout, /--offset <number>.*default: "0"/s);
 });
 
 test("Outlook exposes whole-mailbox recent and flagged commands", () => {
