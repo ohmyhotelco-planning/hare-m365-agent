@@ -66,11 +66,16 @@ export type ChatMessageSearchResult = {
     returnedCount: number;
     fullBodyReturnedCount: number;
     fullBodyUnavailableCount: number;
+    rawHitCount: number;
+    duplicateHitCount: number;
     maxResults: number;
     limitReached: boolean;
     offset: number;
     nextOffset?: number;
     continuationAvailable: boolean;
+    noProgressDetected: boolean;
+    searchWindowLimit: number;
+    searchWindowExhausted: boolean;
     partialResult: boolean;
     partialReason?: "time-budget-exceeded";
     timeBudgetMs: number;
@@ -111,6 +116,7 @@ type GraphChatMessage = {
 };
 
 type GraphChatMessageSearchHit = {
+  hitId?: string;
   summary?: string;
   resource?: {
     id?: string;
@@ -139,6 +145,8 @@ export type TeamsGraphClient = {
 
 const fullBodyConcurrency = 5;
 const defaultSearchTimeBudgetMs = 35_000;
+const maxHydratedSearchResults = 100;
+const maxSearchWindow = 1_000;
 
 export async function listJoinedTeams(
   config: AppConfig,
@@ -211,13 +219,24 @@ export async function searchChatMessages(
     new Date(),
     config.timeZone
   );
-  const maxResults = normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults);
   const initialOffset = normalizeSearchOffset(options.offset ?? 0);
+  if (initialOffset >= maxSearchWindow) {
+    throw new Error(`offset must be less than the Teams search window limit of ${maxSearchWindow}.`);
+  }
+  const maxResults = Math.min(
+    normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults),
+    maxHydratedSearchResults,
+    maxSearchWindow - initialOffset
+  );
   const timeBudgetMs = normalizeTimeBudget(options.timeBudgetMs ?? defaultSearchTimeBudgetMs);
   const now = options.now ?? Date.now;
   const deadline = now() + timeBudgetMs;
   const graphQuery = `${trimmedQuery} AND sent>=${range.since} AND sent<=${range.until}`;
   const hits: GraphChatMessageSearchHit[] = [];
+  const hitKeys = new Set<string>();
+  let rawHitCount = 0;
+  let duplicateHitCount = 0;
+  let noProgressDetected = false;
   let totalMatchesReported = 0;
   let moreResultsAvailable = true;
   let offset = initialOffset;
@@ -238,7 +257,7 @@ export async function searchChatMessages(
       markTimeBudgetExceeded();
       break;
     }
-    const size = Math.min(25, maxResults - hits.length);
+    const size = Math.min(25, maxResults - hits.length, maxSearchWindow - offset);
     let response: GraphSearchResponse;
     try {
       response = await client.post<GraphSearchResponse>(
@@ -265,9 +284,26 @@ export async function searchChatMessages(
     const container = response.value?.[0]?.hitsContainers?.[0];
     const pageHits = container?.hits ?? [];
     totalMatchesReported = container?.total ?? totalMatchesReported;
-    hits.push(...pageHits);
+    const uniqueCountBeforePage = hits.length;
+    for (const hit of pageHits) {
+      const key = messageSearchHitKey(hit);
+      if (key && hitKeys.has(key)) {
+        duplicateHitCount += 1;
+        continue;
+      }
+      if (key) hitKeys.add(key);
+      hits.push(hit);
+    }
+    rawHitCount += pageHits.length;
     offset += pageHits.length;
-    moreResultsAvailable = Boolean(container?.moreResultsAvailable) && pageHits.length > 0;
+    const pageMadeProgress = hits.length > uniqueCountBeforePage;
+    const serviceClaimsMore = Boolean(container?.moreResultsAvailable) || totalMatchesReported > offset;
+    if (!pageMadeProgress && (pageHits.length > 0 || serviceClaimsMore)) {
+      noProgressDetected = true;
+      moreResultsAvailable = false;
+      break;
+    }
+    moreResultsAvailable = serviceClaimsMore && pageHits.length > 0 && offset < maxSearchWindow;
   }
 
   const details = await mapWithConcurrency(hits, fullBodyConcurrency, async (hit) => {
@@ -345,8 +381,9 @@ export async function searchChatMessages(
   });
 
   const fullBodyReturnedCount = messages.filter((message) => message.fullBodyAvailable).length;
-  const continuationAvailable =
-    moreResultsAvailable || totalMatchesReported > initialOffset + hits.length;
+  const serviceHasMore = moreResultsAvailable || totalMatchesReported > offset;
+  const searchWindowExhausted = offset >= maxSearchWindow && serviceHasMore;
+  const continuationAvailable = !noProgressDetected && !searchWindowExhausted && serviceHasMore;
 
   return {
     search: {
@@ -356,17 +393,33 @@ export async function searchChatMessages(
       returnedCount: messages.length,
       fullBodyReturnedCount,
       fullBodyUnavailableCount: messages.length - fullBodyReturnedCount,
+      rawHitCount,
+      duplicateHitCount,
       maxResults,
-      limitReached: continuationAvailable,
+      limitReached: continuationAvailable || searchWindowExhausted || noProgressDetected,
       offset: initialOffset,
-      nextOffset: continuationAvailable ? initialOffset + hits.length : undefined,
+      nextOffset: continuationAvailable ? offset : undefined,
       continuationAvailable,
+      noProgressDetected,
+      searchWindowLimit: maxSearchWindow,
+      searchWindowExhausted,
       partialResult,
       partialReason,
       timeBudgetMs
     },
     messages
   };
+}
+
+function messageSearchHitKey(hit: GraphChatMessageSearchHit): string | undefined {
+  if (hit.hitId) return `hit:${hit.hitId}`;
+  const resource = hit.resource;
+  if (!resource?.id) return resource?.webLink ? `web:${resource.webLink}` : undefined;
+  if (resource.chatId) return `chat:${resource.chatId}:${resource.id}`;
+  if (resource.channelIdentity?.teamId && resource.channelIdentity.channelId) {
+    return `channel:${resource.channelIdentity.teamId}:${resource.channelIdentity.channelId}:${resource.id}`;
+  }
+  return resource.webLink ? `web:${resource.webLink}` : `message:${resource.id}`;
 }
 
 async function fetchAllChats(

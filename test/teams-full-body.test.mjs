@@ -245,3 +245,133 @@ test("search-messages applies an offset and reports the next page", async () => 
   assert.equal(result.search.continuationAvailable, true);
   assert.equal(result.messages[0].chatTopic, "Topic");
 });
+
+test("search-messages caps full-body hydration at 100 messages per command", async () => {
+  let postCount = 0;
+  const client = {
+    async post(_url, body) {
+      const from = body.requests[0].from;
+      assert.equal(body.requests[0].size, 25);
+      postCount += 1;
+      return {
+        value: [{ hitsContainers: [{
+          total: 1_000,
+          moreResultsAvailable: true,
+          hits: Array.from({ length: 25 }, (_, index) => ({
+            hitId: `hit-${from + index}`,
+            resource: { id: `m${from + index}`, chatId: "c1" }
+          }))
+        }] }]
+      };
+    },
+    async get(url) {
+      if (url === "/chats/c1?$select=id,topic") return { id: "c1", topic: "Topic" };
+      const id = url.split("/").at(-1);
+      return { id, body: { contentType: "html", content: id } };
+    }
+  };
+
+  const result = await searchChatMessages(
+    configFor(),
+    "keyword",
+    "2026-07-01",
+    "2026-07-14",
+    500,
+    {},
+    client
+  );
+
+  assert.equal(postCount, 4);
+  assert.equal(result.search.maxResults, 100);
+  assert.equal(result.search.returnedCount, 100);
+  assert.equal(result.search.nextOffset, 100);
+});
+
+test("search-messages deduplicates hits and stops when a page makes no progress", async () => {
+  let postCount = 0;
+  let detailCount = 0;
+  const duplicateHit = {
+    hitId: "same-hit",
+    summary: "same",
+    resource: { id: "m1", chatId: "c1" }
+  };
+  const client = {
+    async post(_url, body) {
+      assert.equal(body.requests[0].from, postCount * 2);
+      postCount += 1;
+      return {
+        value: [{ hitsContainers: [{
+          total: 500,
+          moreResultsAvailable: true,
+          hits: [duplicateHit, duplicateHit]
+        }] }]
+      };
+    },
+    async get(url) {
+      if (url === "/chats/c1?$select=id,topic") return { id: "c1", topic: "Topic" };
+      detailCount += 1;
+      return { id: "m1", body: { contentType: "html", content: "full" } };
+    }
+  };
+
+  const result = await searchChatMessages(
+    configFor(),
+    "keyword",
+    "2026-07-01",
+    "2026-07-14",
+    100,
+    {},
+    client
+  );
+
+  assert.equal(postCount, 2);
+  assert.equal(detailCount, 1);
+  assert.equal(result.search.rawHitCount, 4);
+  assert.equal(result.search.duplicateHitCount, 3);
+  assert.equal(result.search.returnedCount, 1);
+  assert.equal(result.search.noProgressDetected, true);
+  assert.equal(result.search.limitReached, true);
+  assert.equal(result.search.continuationAvailable, false);
+  assert.equal(result.search.nextOffset, undefined);
+});
+
+test("search-messages stops at the 1000-result Microsoft Search window", async () => {
+  const client = {
+    async post(_url, body) {
+      const from = body.requests[0].from;
+      assert.ok(from === 950 || from === 975);
+      return {
+        value: [{ hitsContainers: [{
+          total: 2_000,
+          moreResultsAvailable: true,
+          hits: Array.from({ length: 25 }, (_, index) => ({
+            hitId: `hit-${from + index}`,
+            resource: { id: `m${from + index}`, chatId: "c1" }
+          }))
+        }] }]
+      };
+    },
+    async get(url) {
+      if (url === "/chats/c1?$select=id,topic") return { id: "c1", topic: "Topic" };
+      const id = url.split("/").at(-1);
+      return { id, body: { contentType: "html", content: id } };
+    }
+  };
+
+  const result = await searchChatMessages(
+    configFor(),
+    "keyword",
+    "2026-07-01",
+    "2026-07-14",
+    100,
+    { offset: 950 },
+    client
+  );
+
+  assert.equal(result.search.maxResults, 50);
+  assert.equal(result.search.returnedCount, 50);
+  assert.equal(result.search.searchWindowExhausted, true);
+  assert.equal(result.search.limitReached, true);
+  assert.equal(result.search.continuationAvailable, false);
+  assert.equal(result.search.nextOffset, undefined);
+});
