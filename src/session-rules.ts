@@ -107,6 +107,9 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 - Use outlook flagged --folder all for flagged-mail requests and inspect flagStatus in every mail result.
 - When the user omits a date range, the default lookback is ${config.policy.defaultSearchLookbackDays} days and the actual range must be reported.
 - Use outlook count for exact mail counts and sharepoint sites for SharePoint site existence checks.
+- Outlook search returns 100 messages per page by default. Use body/bodyHtml as the complete content, check fullBodyUnavailableCount, and pass nextCursor through --cursor while continuationAvailable is true.
+- If outlook count returns complete=false, continue with nextCursor. The cursor preserves cumulative state, so only the final matchedCount returned with complete=true is the exact total.
+- File search covers accessible SharePoint, Teams, and OneDrive files. Pass nextOffset through --offset while continuationAvailable is true. Use sharepoint sites to check whether a site itself exists.
 - Use lastMessageCreatedDateTime, not lastUpdatedDateTime alone, when deciding the latest Teams chat.
 - Teams chat-messages body and bodyHtml are the complete untruncated message. bodyPreview is only a compatibility alias for the same full text.
 - Teams search-messages performs detail lookups for full bodies. Use body/bodyHtml, check fullBodyUnavailableCount, and never present searchSummary as the complete message when fullBodyAvailable is false.
