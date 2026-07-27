@@ -101,6 +101,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 
 일반 조회 결과는 화면 출력을 바로 사용합니다. 별도 파일이 필요한 경우에만 `--out <path>`를 사용하며, 상대 경로는 Hare 고정 `resultsDir` 아래에 저장되고 7일 후 자동 정리됩니다.
 
+Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용합니다. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI, 브라우저 자동화를 검색하거나 대체 수단으로 사용하지 않습니다. Hare가 지원하지 않거나 명령이 실패하면 다른 도구로 우회하지 않고 실패한 Hare 단계와 오류를 보고합니다. 선택 프로젝트 루트의 `CLAUDE.md`에는 이 규칙을 자동으로 읽을 수 있는 Hare 관리 구역이 생성되며, 기존 사용자 작성 내용은 유지됩니다.
+
 일반적인 메일 조회와 최근 메일 조회는 `outlook recent --folder all`을 사용합니다. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상입니다. `outlook inbox`는 받은편지함이 명시된 요청에만 사용합니다. 플래그된 메일은 `outlook flagged --folder all`로 조회하며 모든 메일 결과에는 `flagStatus`가 포함됩니다.
 
 기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회합니다. 두 검색 모두 기본 100건씩 반환합니다. Outlook은 `search.nextCursor`를 `--cursor`로, Teams는 `search.nextOffset`을 `--offset`으로 전달해 이어서 조회합니다. Teams는 명령당 최대 100개의 고유 메시지만 전체 본문으로 조회하고, Microsoft Search의 최대 1,000건 검색 창 안에서만 이어봅니다. `duplicateHitCount`, `noProgressDetected`, `searchWindowExhausted`가 중복 및 중단 사유를 보여줍니다. Outlook 검색 결과의 `body`와 `bodyHtml`은 전체 본문이며 `fullBodyUnavailableCount`로 누락 여부를 확인합니다. `search.partialResult`가 `true`이면 35초 시간 예산 안에 처리한 부분 결과입니다. 결과 JSON의 `search.range.notice`에는 실제 조회 기간이 표시됩니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.

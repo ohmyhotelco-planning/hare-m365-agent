@@ -136,6 +136,8 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.equal(output.sessionRules.exists, true);
   assert.match(output.sessionRules.instruction, /Read this file before login or Microsoft 365 lookup/);
   assert.equal(fs.existsSync(rulesFile), true);
+  const claudeFile = path.join(dataDir, "CLAUDE.md");
+  assert.equal(fs.existsSync(claudeFile), true);
 
   const rules = fs.readFileSync(rulesFile, "utf8");
   assert.match(rules, new RegExp(escapeRegExp(dataDir)));
@@ -157,6 +159,9 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /AWAITING_USER_APPROVAL/);
   assert.match(rules, /explicit user approval/);
   assert.match(rules, /Hare cannot send a draft/);
+  assert.match(rules, /Hare CLI is the exclusive tool/);
+  assert.match(rules, /Do not search for, invoke, or fall back to a Microsoft 365 connector/);
+  assert.match(rules, /Do not substitute another tool or data source/);
   assert.match(rules, /Always use the Hare CLI for Outlook draft requests/);
   assert.match(rules, /Never use Computer Use, Outlook desktop\/web UI, browser automation, or a Microsoft 365 connector/);
   assert.match(rules, /Do not fall back to GUI automation or another connector/);
@@ -173,6 +178,30 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /Never name, recommend, or preselect a specific email address/);
   assert.doesNotMatch(rules, /hybrid|\.hare-app-snapshot|\/home\/claude/i);
   assert.doesNotMatch(rules, /single network allowlist/);
+
+  const claudeRules = fs.readFileSync(claudeFile, "utf8");
+  assert.match(claudeRules, /HARE_M365_AGENT_RULES_START/);
+  assert.match(claudeRules, /Hare CLI is the exclusive tool/);
+  assert.match(claudeRules, /Do not search for, invoke, or fall back to a Microsoft 365 connector/);
+  assert.match(claudeRules, /claude\/hare-m365-agent-rules\.md/);
+});
+
+test("startup preserves existing CLAUDE.md content and upserts one managed Hare block", () => {
+  const dataDir = makeDataDir("hare-claude-rules-");
+  const claudeFile = path.join(dataDir, "CLAUDE.md");
+  fs.writeFileSync(claudeFile, "# Existing project instructions\n\nKeep this text.\n", "utf8");
+
+  const first = run([], dataDir);
+  assert.equal(first.status, 0, first.stderr);
+  const second = run([], dataDir);
+  assert.equal(second.status, 0, second.stderr);
+
+  const contents = fs.readFileSync(claudeFile, "utf8");
+  assert.match(contents, /# Existing project instructions/);
+  assert.match(contents, /Keep this text\./);
+  assert.equal((contents.match(/HARE_M365_AGENT_RULES_START/g) ?? []).length, 1);
+  assert.equal((contents.match(/HARE_M365_AGENT_RULES_END/g) ?? []).length, 1);
+  assert.match(contents, /If Hare is unavailable, unsupported, or fails/);
 });
 
 test("LLM guide follows the explicit setup state contract", () => {
@@ -188,6 +217,9 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /outlook draft new/);
   assert.match(result.stdout, /approval-token/);
   assert.match(result.stdout, /Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다/);
+  assert.match(result.stdout, /Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용한다/);
+  assert.match(result.stdout, /Microsoft 365 커넥터, 다른 커넥터, Computer Use/);
+  assert.match(result.stdout, /다른 도구나 데이터 소스로 우회하지 않는다/);
   assert.match(result.stdout, /Computer Use, Outlook 데스크톱\/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 않는다/);
   assert.match(result.stdout, /GUI 자동화나 다른 커넥터로 우회하지 않는다/);
   assert.match(result.stdout, /메일 발송은 지원하지 않는다/);
@@ -222,6 +254,19 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.doesNotMatch(result.stdout, /하이브리드|\.hare-app-snapshot/i);
   assert.doesNotMatch(result.stdout, /유일한 네트워크 허용 목록/);
   assert.doesNotMatch(result.stdout, /%USERPROFILE%\\Documents/);
+});
+
+test("LLM connection prompt stops workspace startup failures with a local Desktop retry", () => {
+  const dataDir = makeDataDir("hare-prompt-");
+  const result = run(["llm-prompt"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /WORKSPACE_FOLDER_RETRY/);
+  assert.match(result.stdout, /workspace unavailable, still starting/);
+  assert.match(result.stdout, /OneDrive가 아닌 PC 로컬 바탕화면/);
+  assert.match(result.stdout, /HareM365Agent 새 폴더/);
+  assert.match(result.stdout, /가상화 진단이나 다른 명령을 반복하지 말고/);
+  assert.match(result.stdout, /조회와 Outlook 초안 작성에는 Hare CLI만 사용해/);
+  assert.match(result.stdout, /검색하거나 호출하거나 대체 수단으로 사용하지 마/);
 });
 
 test("startup blocks login when the default data directory is a hosted-session path", () => {
@@ -376,9 +421,10 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.match(html, /outlook\.office\.com/);
   assert.match(html, /신규·답장·전체답장·전달 메일 초안/);
   assert.match(html, /전체 미리보기를 보여주고 내 동의를 받은 뒤에만 생성/);
-  assert.match(html, /Outlook 초안은 반드시 Hare CLI로 처리/);
-  assert.match(html, /Computer Use, Outlook 데스크톱\/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 마/);
-  assert.match(html, /다른 방식으로 우회하지 말고 실패 단계만 알려줘/);
+  assert.match(html, /조회 요청과 Outlook 초안 작성 요청에 Hare CLI만 사용해/);
+  assert.match(html, /Microsoft 365 커넥터, 다른 커넥터, Computer Use/);
+  assert.match(html, /검색하거나 호출하거나 대체 수단으로 사용하지 마/);
+  assert.match(html, /다른 도구나 데이터 소스로 우회하지 말고/);
   assert.match(html, /auth login-start --help/);
   assert.match(html, /auth login-complete --help/);
   assert.match(html, /HARE_DATA_DIR/);
@@ -411,7 +457,10 @@ test("human guide verifies split-login features without a hardcoded version", ()
   assert.doesNotMatch(html, /computer-use|%USERPROFILE%|~\/HareM365Agent/);
   assert.match(html, /2-6/);
   assert.match(html, /새 Cowork 채팅/);
-  assert.match(html, /<details class="troubleshoot">\s*<summary>Cowork가 열리지 않을 때만 펼치세요<\/summary>/);
+  assert.match(html, /<details class="troubleshoot">\s*<summary>Cowork 또는 Linux 작업공간이 열리지 않을 때만 펼치세요<\/summary>/);
+  assert.match(html, /WORKSPACE_FOLDER_RETRY/);
+  assert.match(html, /OneDrive가 아닌 PC 로컬 바탕화면/);
+  assert.match(html, /HareM365Agent 새 폴더/);
   assert.match(html, /<details class="optional-details">\s*<summary>프롬프트 직접 보기<\/summary>/);
   assert.match(html, /id="prompt" rows="16"/);
   assert.doesNotMatch(html, /<details class="(?:troubleshoot|optional-details)" open/);
@@ -444,8 +493,11 @@ test("Japanese human guide preserves the setup contract and embedded images", ()
   assert.match(html, /<summary>Personalへの切り替え画面を表示<\/summary>/);
   assert.ok(html.indexOf("STEP 2") < html.indexOf("アカウントメニューにPersonalが表示される場合のみ確認してください"));
   assert.match(html, /自分自身の会社Microsoftアカウント/);
-  assert.match(html, /Outlookの下書きには必ずHare CLIを使用/);
-  assert.match(html, /Computer Use、Outlookのデスクトップ／Web UI、ブラウザー自動化、Microsoft 365コネクターを使用しない/);
+  assert.match(html, /WORKSPACE_FOLDER_RETRY/);
+  assert.match(html, /OneDriveではないPCのローカルデスクトップ/);
+  assert.match(html, /参照依頼とOutlookの下書き作成依頼にはHare CLIだけを使用/);
+  assert.match(html, /Microsoft 365コネクター、その他のコネクター、Computer Use/);
+  assert.match(html, /検索、呼び出し、または代替手段として使用しない/);
   assert.match(html, /auth login-start --help/);
   assert.match(html, /auth login-complete --help/);
   assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
@@ -463,8 +515,11 @@ test("English human guide preserves the setup contract and embedded images", () 
   assert.equal((html.match(/data:image\//g) ?? []).length, 10);
   assert.match(html, /Initial connection prompt/);
   assert.match(html, /my own company Microsoft account that I will use with Hare/);
-  assert.match(html, /Always use the Hare CLI for Outlook drafts/);
-  assert.match(html, /Never use Computer Use, Outlook desktop\/web UI, browser automation, or a Microsoft 365 connector/);
+  assert.match(html, /WORKSPACE_FOLDER_RETRY/);
+  assert.match(html, /local Desktop, not in OneDrive/);
+  assert.match(html, /use only the Hare CLI.*Microsoft 365 lookup requests and Outlook draft requests/s);
+  assert.match(html, /Do not search for, invoke, or fall back to a Microsoft 365 connector/);
+  assert.match(html, /instead of using another tool or data source/);
   assert.match(html, /auth login-start --help/);
   assert.match(html, /auth login-complete --help/);
   assert.match(html, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);

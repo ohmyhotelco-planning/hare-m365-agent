@@ -159,6 +159,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 \`\`\`
 
 주의:
+- Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용한다. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI 또는 브라우저 자동화를 검색하거나 호출하거나 대체 수단으로 사용하지 않는다.
+- Hare가 지원하지 않거나 실행에 실패하면 실패한 Hare 단계와 오류만 보고하고 멈춘다. 다른 도구나 데이터 소스로 우회하지 않는다.
 - 일반적인 메일 조회와 최근 메일 요청은 outlook recent --folder all을 사용해 삭제된 항목을 제외한 전체 메일함을 대상으로 한다. outlook inbox는 사용자가 받은편지함을 명시한 경우에만 사용한다.
 - 플래그된 메일 요청은 outlook flagged --folder all을 사용한다. 모든 메일 조회 결과의 flagStatus를 함께 확인한다.
 - 사용자가 기간을 지정한 조회는 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 search 명령의 --since/--until에 반영한다.
@@ -211,6 +213,8 @@ repo 접근은 git ls-remote 또는 git clone으로 판단해.
 이 Cowork 작업을 만들 때 사용자가 미리 선택한 프로젝트 루트를 확인해. 이름이 무엇이든 현재 선택된 프로젝트 루트 하나가 Hare의 영구 dataDir야.
 선택된 프로젝트가 없으면 FOLDER_REQUIRED라고 말하고, 기존 Hare 프로젝트 또는 폴더를 선택해 새 Cowork 작업을 연 뒤 같은 프롬프트를 붙여넣으라고 한 문장으로 안내하고 멈춰.
 
+Cowork 세션 셸이 시작되지 않고 workspace unavailable, still starting 또는 유사한 작업공간 시작 오류가 나오면 WORKSPACE_FOLDER_RETRY라고 알려줘. 가상화 진단이나 다른 명령을 반복하지 말고, OneDrive가 아닌 PC 로컬 바탕화면에 HareM365Agent 새 폴더를 만든 뒤 그 폴더 하나만 프로젝트로 선택해 새 Cowork 작업을 열고 같은 프롬프트를 붙여넣으라고 안내하고 멈춰.
+
 아래 순서로 준비해.
 
 ${setupCommandForGuide}
@@ -229,6 +233,8 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 - 그 밖의 명령 실패: BLOCKED로 취급해 실패 단계와 오류 한 줄만 알려주고 멈춰. 다른 경로를 시도하거나 같은 명령을 반복하지 마.
 
 clone/build 전체 반복, 도메인 반복 진단, 임의 프록시 우회는 시작하지 마.
+
+앞으로 Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용해. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI 또는 브라우저 자동화를 검색하거나 호출하거나 대체 수단으로 사용하지 마. Hare가 지원하지 않거나 명령이 실패하면 실패 단계와 오류만 알려주고 멈춰. 다른 도구나 데이터 소스로 우회하지 마.
 
 일반적인 메일 조회 또는 최근 메일 요청은 outlook recent --folder all을 사용해. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상이야. 사용자가 받은편지함을 명시한 경우에만 outlook inbox를 사용해.
 플래그된 메일을 요청하면 outlook flagged --folder all을 사용하고, 일반 메일 결과에서도 flagStatus를 확인해.
