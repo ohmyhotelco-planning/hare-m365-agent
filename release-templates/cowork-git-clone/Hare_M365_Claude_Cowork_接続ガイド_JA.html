@@ -175,8 +175,12 @@
       </div>
 
       <details class="troubleshoot">
-        <summary>Coworkが開かない場合のみ展開してください</summary>
+        <summary>CoworkまたはLinuxワークスペースが開かない場合のみ展開してください</summary>
         <div class="details-body">
+        <div class="folder-choice-note">
+          <strong>まず、ローカルデスクトップの新しいフォルダーでやり直してください。</strong>
+          <span>OneDriveではなく、PCのローカルデスクトップに新しい<b>HareM365Agent</b>フォルダーを作成し、そのフォルダーだけをプロジェクトとして選択して新しいCoworkチャットを開いてください。同じ問題が続く場合のみ、以下のWindows設定を確認してください。</span>
+        </div>
         <ol>
           <li><strong>Windowsキー</strong>を押し、<strong>Windowsの機能の有効化または無効化</strong>と入力してEnterキーを押してください。</li>
           <li><strong>Virtual Machine Platform</strong>にチェックを入れてください。</li>
@@ -294,6 +298,8 @@ git、npm、ログイン、Graph呼び出しは、ドメイン許可リストが
 このCoworkチャットを作成するときに私が選択したプロジェクトルートを確認してください。名前にかかわらず、現在選択されている1つのプロジェクトルートがHareの永続dataDirです。
 選択されているプロジェクトがない場合はFOLDER_REQUIREDと伝え、既存のHareプロジェクトまたはフォルダーを選択して新しいCoworkチャットを開き、同じプロンプトを貼り付けるよう1文で案内して停止してください。
 
+Coworkセッションシェルが起動せず、workspace unavailable、still starting、または同様のワークスペース起動エラーが表示された場合は、WORKSPACE_FOLDER_RETRYと報告してください。仮想化診断や他のコマンドを繰り返さず、OneDriveではないPCのローカルデスクトップに新しいHareM365Agentフォルダーを作成し、そのフォルダーだけをプロジェクトとして選択して新しいCoworkチャットを開き、このプロンプトをもう一度貼り付けるよう案内して停止してください。
+
 以下の順序で準備してください。
 GitHub APIやRelease assetではなく、git cloneの経路を使用してください。
 
@@ -344,7 +350,7 @@ startup JSONのsetup.stateだけを確認し、以下から一致する手順を
 - HTTP 403とX-Proxy-Error: blocked-by-allowlistが同時に表示された場合はNETWORK_PERMISSION_REQUIREDと伝え、ブロックされたドメインだけを示して停止してください。
 - その他のコマンド失敗: BLOCKEDとして扱い、失敗した手順とエラーを1行だけ伝えて停止してください。別の経路を試したり、同じコマンドを繰り返したりしないでください。
 
-接続完了後は、このユーザーのOutlook、Teams、SharePoint/OneDrive、Microsoft 365の参照依頼とOutlookの下書き作成依頼をHare M365 Agentで処理するという運用ルールを記憶してください。Outlookの下書きには必ずHare CLIを使用してください。下書きの作成や本文の貼り付けにComputer Use、Outlookのデスクトップ／Web UI、ブラウザー自動化、Microsoft 365コネクターを使用しないでください。Hareの下書きコマンドが失敗した場合は、失敗した手順を報告し、別の方法に切り替えないでください。下書きは必ず全体プレビューを表示し、私の同意を得た後にのみ作成してください。メールは送信しないでください。
+接続完了後は、このユーザーのOutlook、Teams、SharePoint/OneDrive、Microsoft 365の参照依頼とOutlookの下書き作成依頼にはHare CLIだけを使用してください。Microsoft 365コネクター、その他のコネクター、Computer Use、Outlook/Teams/SharePointのユーザーインターフェース、ブラウザー自動化を検索、呼び出し、または代替手段として使用しないでください。Hareが依頼をサポートしていない場合やHareコマンドが失敗した場合は、別のツールやデータソースに切り替えず、失敗したHareの手順とエラーを報告して停止してください。下書きは必ず全体プレビューを表示し、私の同意を得た後にのみ作成してください。メールは送信しないでください。
 メモリまたはプロジェクト指示を保存できる環境では、このルールを保存してください。
 保存できない環境では、同じチャット内で自然な言葉で業務データの参照を依頼するよう短く案内してください。
 

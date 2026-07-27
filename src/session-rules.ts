@@ -3,6 +3,9 @@ import path from "node:path";
 import type { AppConfig } from "./config.js";
 import { writeStoredText } from "./persistent-storage.js";
 
+const managedClaudeRulesStart = "<!-- HARE_M365_AGENT_RULES_START -->";
+const managedClaudeRulesEnd = "<!-- HARE_M365_AGENT_RULES_END -->";
+
 export type SessionRulesOptions = {
   commandPrefix: string;
   repository: string;
@@ -25,12 +28,37 @@ export function writeSessionRules(
   const contents = buildSessionRules(config, options, rulesFile);
   fs.mkdirSync(path.dirname(rulesFile), { recursive: true });
 
-  if (fs.existsSync(rulesFile) && fs.readFileSync(rulesFile, "utf8") === contents) {
-    return rulesFile;
+  if (!fs.existsSync(rulesFile) || fs.readFileSync(rulesFile, "utf8") !== contents) {
+    writeStoredText(rulesFile, contents);
   }
 
-  writeStoredText(rulesFile, contents);
+  writeClaudeProjectInstructions(config, rulesFile);
   return rulesFile;
+}
+
+function writeClaudeProjectInstructions(config: AppConfig, rulesFile: string): void {
+  const claudeFile = path.join(config.dataDir, "CLAUDE.md");
+  const managedBlock = `${managedClaudeRulesStart}
+## Hare M365 Agent
+
+- Before any Outlook, Teams, SharePoint, OneDrive, or Microsoft 365 request, read and follow [the Hare session rules](claude/hare-m365-agent-rules.md).
+- Hare CLI is the exclusive tool for these lookups and for Outlook draft creation.
+- Do not search for, invoke, or fall back to a Microsoft 365 connector, another connector, Computer Use, browser automation, or an Outlook/Teams/SharePoint user interface.
+- If Hare is unavailable, unsupported, or fails, report the failed Hare step and stop instead of using another tool.
+- Keep using the exact data directory and command prefix recorded in ${rulesFile}.
+${managedClaudeRulesEnd}`;
+  const existing = fs.existsSync(claudeFile) ? fs.readFileSync(claudeFile, "utf8") : "";
+  const withoutManagedBlocks = existing
+    .replace(
+      /<!-- HARE_M365_AGENT_RULES_START -->[\s\S]*?<!-- HARE_M365_AGENT_RULES_END -->\s*/g,
+      ""
+    )
+    .trimEnd();
+  const nextContents = withoutManagedBlocks
+    ? `${withoutManagedBlocks}\n\n${managedBlock}\n`
+    : `${managedBlock}\n`;
+
+  if (existing !== nextContents) writeStoredText(claudeFile, nextContents);
 }
 
 function buildSessionRules(
@@ -96,7 +124,9 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 
 ## Microsoft 365 operation
 
-- Use Hare for requested Outlook, Teams, SharePoint, and OneDrive lookups.
+- Hare CLI is the exclusive tool for requested Outlook, Teams, SharePoint, OneDrive, and Microsoft 365 lookups and for Outlook draft creation.
+- Do not search for, invoke, or fall back to a Microsoft 365 connector, another connector, Computer Use, Outlook/Teams/SharePoint user interfaces, or browser automation for these requests.
+- If Hare is unavailable, unsupported, or fails, report the failed Hare step and stop. Do not substitute another tool or data source.
 - Default to read-only operation. The only enabled write action is creating an Outlook draft after exact user approval. Sending mail, Teams posting, calendar creation, file upload/delete/share, and permission changes are unavailable.
 - Always use the Hare CLI for Outlook draft requests. Never use Computer Use, Outlook desktop/web UI, browser automation, or a Microsoft 365 connector to create a draft or paste its content.
 - If a Hare draft command fails, report the failed Hare step and stop. Do not fall back to GUI automation or another connector.

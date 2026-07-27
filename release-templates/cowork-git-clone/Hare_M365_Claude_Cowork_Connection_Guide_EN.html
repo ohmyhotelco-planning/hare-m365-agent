@@ -175,8 +175,12 @@
       </div>
 
       <details class="troubleshoot">
-        <summary>Expand only if Cowork does not open</summary>
+        <summary>Expand only if Cowork or the Linux workspace does not open</summary>
         <div class="details-body">
+        <div class="folder-choice-note">
+          <strong>First, start again with a new folder on the local Desktop.</strong>
+          <span>Create a new <b>HareM365Agent</b> folder on the PC's local Desktop, not in OneDrive. Select only that folder as the project and open a new Cowork chat. Check the Windows settings below only if the same problem continues.</span>
+        </div>
         <ol>
           <li>Press the <strong>Windows key</strong>, type <strong>Turn Windows features on or off</strong>, and press Enter.</li>
           <li>Select <strong>Virtual Machine Platform</strong>.</li>
@@ -294,6 +298,8 @@ If the domain settings were changed after this Cowork chat was opened, explain t
 Check the project root I selected when creating this Cowork chat. Regardless of its name, the one currently selected project root is Hare's persistent dataDir.
 If no project is selected, say FOLDER_REQUIRED and use one sentence to tell me to select an existing Hare project or folder, open a new Cowork chat, and paste the same prompt. Then stop.
 
+If the Cowork session shell does not start and reports workspace unavailable, still starting, or a similar workspace-start error, report WORKSPACE_FOLDER_RETRY. Do not repeat virtualization diagnostics or other commands. Tell me to create a new HareM365Agent folder on the local Desktop, not in OneDrive, select only that folder as the project, open a new Cowork chat, and paste this prompt again. Then stop.
+
 Prepare it in the order below.
 Use the git clone path, not the GitHub API or a Release asset.
 
@@ -344,7 +350,7 @@ Check only setup.state in the startup JSON and perform exactly one matching acti
 - If HTTP 403 and X-Proxy-Error: blocked-by-allowlist appear together, report NETWORK_PERMISSION_REQUIRED, state only the blocked domain, and stop.
 - Any other command failure: Treat it as BLOCKED, report the failed step and one line of error information, and stop. Do not try another path or repeat the same command.
 
-After the connection is complete, remember the operating rule that this user's Outlook, Teams, SharePoint/OneDrive, and Microsoft 365 lookup requests and Outlook draft requests must be handled with Hare M365 Agent. Always use the Hare CLI for Outlook drafts. Never use Computer Use, Outlook desktop/web UI, browser automation, or a Microsoft 365 connector to create a draft or paste its content. If a Hare draft command fails, report the failed step and do not fall back to another method. Always show the full draft preview and create it only after my approval. Never send email.
+After the connection is complete, use only the Hare CLI for this user's Outlook, Teams, SharePoint/OneDrive, and Microsoft 365 lookup requests and Outlook draft requests. Do not search for, invoke, or fall back to a Microsoft 365 connector, another connector, Computer Use, an Outlook/Teams/SharePoint user interface, or browser automation. If Hare does not support the request or a Hare command fails, report the failed Hare step and error, then stop instead of using another tool or data source. Always show the full draft preview and create it only after my approval. Never send email.
 If this environment can save memory or project instructions, save this rule.
 If it cannot, briefly tell me to request business data in natural language within the same chat.
 
