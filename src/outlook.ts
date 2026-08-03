@@ -525,7 +525,7 @@ export function buildFlaggedMessagesPath(
       "flag/flagStatus eq 'flagged'"
     ].join(" and "),
     "$orderby": `${dateProperty} desc`,
-    "$select": mailSelect
+    "$select": mailSearchSelect
   });
   return `${getFolderPath(folderScope)}?${params.toString()}`;
 }

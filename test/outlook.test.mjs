@@ -32,6 +32,7 @@ test("flagged mail query filters the whole mailbox by flag and date", () => {
   const filter = url.searchParams.get("$filter") ?? "";
   assert.equal(url.pathname, "/v1.0/me/messages");
   assert.equal(url.searchParams.get("$top"), "100");
+  assert.match(url.searchParams.get("$select") ?? "", /body/);
   assert.match(filter, /^receivedDateTime ge /);
   assert.match(filter, /flag\/flagStatus eq 'flagged'/);
   assert.match(filter, /receivedDateTime ge 2026-06-30T15:00:00\.000Z/);
