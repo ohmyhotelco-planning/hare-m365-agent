@@ -24,6 +24,7 @@ export type Policy = {
   maxTeamsFetchLimit: number;
   maxFileSearchLimit: number;
   maxDownloadBytes: number;
+  maxApprovedDownloadBytes: number;
   maxDraftAttachmentBytes: number;
   maxDraftTotalAttachmentBytes: number;
   retentionDays: number;
@@ -60,6 +61,7 @@ const defaultPolicy: Policy = {
   maxTeamsFetchLimit: 50,
   maxFileSearchLimit: 25,
   maxDownloadBytes: 104857600,
+  maxApprovedDownloadBytes: 1073741824,
   maxDraftAttachmentBytes: 157286400,
   maxDraftTotalAttachmentBytes: 157286400,
   retentionDays: 7,

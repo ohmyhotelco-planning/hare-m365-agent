@@ -10,6 +10,7 @@
   "maxTeamsFetchLimit": 50,
   "maxFileSearchLimit": 25,
   "maxDownloadBytes": 104857600,
+  "maxApprovedDownloadBytes": 1073741824,
   "maxDraftAttachmentBytes": 157286400,
   "maxDraftTotalAttachmentBytes": 157286400,
   "retentionDays": 7,
