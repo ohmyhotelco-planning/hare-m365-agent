@@ -1,9 +1,13 @@
-import fs from "node:fs";
-import path from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import type { AppConfig } from "./config.js";
-import { clearStoredFile } from "./persistent-storage.js";
+import {
+  authorizeDownload,
+  type PendingDownloadApproval
+} from "./download-approval.js";
+import {
+  sanitizeFilename,
+  saveDownloadResponse,
+  type DownloadResponse
+} from "./downloads.js";
 import {
   graphDownloadResponse,
   graphGet,
@@ -53,6 +57,11 @@ export type FileSearchOptions = {
 
 export type SharePointGraphClient = {
   post<T>(pathOrUrl: string, body: unknown, options?: GraphRequestOptions): Promise<T>;
+};
+
+export type DriveItemDownloadGraphClient = {
+  get<T>(pathOrUrl: string): Promise<T>;
+  download(pathOrUrl: string): Promise<DownloadResponse>;
 };
 
 export type SiteSummary = {
@@ -246,8 +255,10 @@ export async function downloadDriveItem(
   config: AppConfig,
   driveId: string,
   itemId: string,
-  filename?: string
-): Promise<string> {
+  filename?: string,
+  approvalToken?: string,
+  client: DriveItemDownloadGraphClient = defaultDriveItemDownloadClient(config)
+): Promise<string | PendingDownloadApproval> {
   if (!config.policy.allowDownloads) {
     throw new Error("Downloads are disabled by policy.");
   }
@@ -255,70 +266,43 @@ export async function downloadDriveItem(
   if (!driveId.trim()) throw new Error("drive-id must not be empty.");
   if (!itemId.trim()) throw new Error("item-id must not be empty.");
 
-  const response = await graphDownloadResponse(
+  const metadata = await client.get<GraphDriveItem>(
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,name,size,file,folder`
+  );
+  if (!metadata.file || metadata.folder) throw new Error("The selected drive item is not a file.");
+  const outputName = sanitizeFilename(filename?.trim() || metadata.name || `${itemId}.bin`);
+  const authorization = authorizeDownload(
     config,
+    {
+      source: "sharepoint",
+      resourceKey: `${driveId}\u0000${itemId}`,
+      name: metadata.name || outputName,
+      size: metadata.size ?? Number.NaN,
+      outputName
+    },
+    approvalToken
+  );
+  if (!authorization.approved) return authorization.pending;
+
+  const response = await client.download(
     `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}/content`
   );
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > config.policy.maxDownloadBytes) {
-    await response.body?.cancel();
-    throw new Error(`Download exceeds policy limit of ${config.policy.maxDownloadBytes} bytes.`);
-  }
-  if (!response.body) throw new Error("Download response contained no file body.");
-
-  fs.mkdirSync(config.downloadDir, { recursive: true });
-  const safeName = sanitizeFilename(filename || `${itemId}.bin`);
-  const outputPath = uniqueOutputPath(config.downloadDir, safeName);
-  let receivedBytes = 0;
-  const limiter = new Transform({
-    transform(chunk: Buffer, _encoding, callback) {
-      receivedBytes += chunk.length;
-      if (receivedBytes > config.policy.maxDownloadBytes) {
-        callback(new Error(`Download exceeds policy limit of ${config.policy.maxDownloadBytes} bytes.`));
-        return;
-      }
-      callback(null, chunk);
-    }
-  });
-
-  try {
-    await pipeline(
-      Readable.fromWeb(response.body as never),
-      limiter,
-      fs.createWriteStream(outputPath, { flags: "wx", mode: 0o600 })
-    );
-  } catch (error) {
-    clearStoredFile(outputPath);
-    throw error;
-  }
-  return outputPath;
+  return saveDownloadResponse(config, response, outputName, authorization.maxBytes);
 }
 
-export function sanitizeFilename(value: string): string {
-  const sanitized = value
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
-    .replace(/[. ]+$/g, "")
-    .trim()
-    .slice(0, 180);
-  const fallback = sanitized || "download.bin";
-  const baseName = path.parse(fallback).name;
-  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(baseName) ? `_${fallback}` : fallback;
-}
-
-function uniqueOutputPath(directory: string, filename: string): string {
-  const parsed = path.parse(filename);
-  for (let index = 0; index < 10_000; index += 1) {
-    const suffix = index === 0 ? "" : ` (${index})`;
-    const candidate = path.join(directory, `${parsed.name}${suffix}${parsed.ext}`);
-    if (!fs.existsSync(candidate)) return candidate;
-  }
-  throw new Error("Could not allocate a unique download filename.");
-}
+export { sanitizeFilename } from "./downloads.js";
 
 function defaultSharePointClient(config: AppConfig): SharePointGraphClient {
   return {
     post: <T>(pathOrUrl: string, body: unknown, options?: GraphRequestOptions) =>
       graphPost<T>(config, pathOrUrl, body, options)
+  };
+}
+
+function defaultDriveItemDownloadClient(config: AppConfig): DriveItemDownloadGraphClient {
+  return {
+    get: <T>(pathOrUrl: string) => graphGet<T>(config, pathOrUrl),
+    download: (pathOrUrl: string) => graphDownloadResponse(config, pathOrUrl)
   };
 }
 

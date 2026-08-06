@@ -151,6 +151,10 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /loggedIn.*tokenUsable/s);
   assert.match(rules, /Do not start a new login/);
   assert.match(rules, /default lookback.*90 days/i);
+  assert.match(rules, /outlook attachments list/);
+  assert.match(rules, /outlook attachments download/);
+  assert.match(rules, /larger download returns AWAITING_USER_APPROVAL/);
+  assert.match(rules, /token expires after 10 minutes/);
   assert.match(rules, /selected when this Cowork task was opened/);
   assert.match(rules, /Do not clone the repository, run npm ci, or build inside it/);
   assert.match(rules, /without requesting folder deletion permission/);
@@ -214,6 +218,8 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(result.stdout, /outlook recent --folder all/);
   assert.match(result.stdout, /outlook flagged --folder all/);
+  assert.match(result.stdout, /outlook attachments list/);
+  assert.match(result.stdout, /outlook attachments download/);
   assert.match(result.stdout, /outlook draft new/);
   assert.match(result.stdout, /approval-token/);
   assert.match(result.stdout, /Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다/);
@@ -393,6 +399,25 @@ test("Outlook exposes whole-mailbox recent and flagged commands", () => {
   assert.match(result.stdout, /recent/);
   assert.match(result.stdout, /flagged/);
   assert.match(result.stdout, /inbox/);
+  assert.match(result.stdout, /attachments/);
+});
+
+test("Outlook exposes attachment list and download commands", () => {
+  const dataDir = makeDataDir("hare-outlook-attachment-help-");
+  const result = run(["outlook", "attachments", "--help"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /list/);
+  assert.match(result.stdout, /download/);
+  const download = run(["outlook", "attachments", "download", "--help"], dataDir);
+  assert.equal(download.status, 0, download.stderr);
+  assert.match(download.stdout, /--approval-token/);
+});
+
+test("SharePoint and OneDrive downloads expose the approval token gate", () => {
+  const dataDir = makeDataDir("hare-file-download-help-");
+  const result = run(["files", "download", "--help"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--approval-token/);
 });
 
 test("Outlook exposes draft preview commands but no send command", () => {

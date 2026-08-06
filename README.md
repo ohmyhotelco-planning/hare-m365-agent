@@ -86,6 +86,8 @@ node dist/cli.js outlook inbox --limit 10
 node dist/cli.js outlook flagged --folder all --limit 1000
 node dist/cli.js outlook search --query "나이스페이 OR nicepay" --since 2026-06-26 --until 2026-07-10 --folder all
 node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
+node dist/cli.js outlook attachments list --message-id "<message-id>"
+node dist/cli.js outlook attachments download --message-id "<message-id>" --attachment-id "<attachment-id>"
 node dist/cli.js outlook draft new --to "user@example.com" --subject "제목" --body "본문"
 node dist/cli.js outlook draft reply --message-id "<message-id>" --body "답장 본문"
 node dist/cli.js outlook draft reply --message-id "<message-id>" --reply-all --body "전체답장 본문"
@@ -104,6 +106,10 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용합니다. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI, 브라우저 자동화를 검색하거나 대체 수단으로 사용하지 않습니다. Hare가 지원하지 않거나 명령이 실패하면 다른 도구로 우회하지 않고 실패한 Hare 단계와 오류를 보고합니다. 선택 프로젝트 루트의 `CLAUDE.md`에는 이 규칙을 자동으로 읽을 수 있는 Hare 관리 구역이 생성되며, 기존 사용자 작성 내용은 유지됩니다.
 
 일반적인 메일 조회와 최근 메일 조회는 `outlook recent --folder all`을 사용합니다. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상입니다. `outlook inbox`는 받은편지함이 명시된 요청에만 사용합니다. 플래그된 메일은 `outlook flagged --folder all`로 조회하며 모든 메일 결과에는 `flagStatus`가 포함됩니다.
+
+메일 첨부파일은 메일 조회 결과의 `id`를 `outlook attachments list --message-id`에 전달해 목록을 확인하고, 반환된 첨부파일 `id`를 `outlook attachments download --attachment-id`에 전달해 내려받습니다. 파일은 Hare의 `downloadsDir`에 저장되며 SharePoint/Teams/OneDrive 파일과 동일한 다운로드 정책이 적용됩니다. Excel 등 내려받은 파일의 내용 분석은 다운로드 완료 후 로컬 파일 처리 도구로 수행합니다.
+
+기본 다운로드 상한은 `maxDownloadBytes`의 100MiB입니다. 이를 초과하고 `maxApprovedDownloadBytes`의 1GiB 이하인 파일은 다운로드를 시작하지 않고 `AWAITING_USER_APPROVAL` 미리보기를 반환합니다. LLM은 출처, 파일명, 크기와 저장 위치를 모두 보여주고 명시적 동의를 받은 뒤 동일한 명령에 반환된 `--approval-token`을 추가해 한 번만 실행합니다. 토큰은 10분 동안 유효하고 정확히 같은 파일과 출력명에만 사용할 수 있으며 사용 즉시 무효화됩니다. 1GiB를 초과하는 파일은 승인 여부와 관계없이 차단됩니다.
 
 기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회합니다. 두 검색 모두 기본 100건씩 반환합니다. Outlook은 `search.nextCursor`를 `--cursor`로, Teams는 `search.nextOffset`을 `--offset`으로 전달해 이어서 조회합니다. Teams는 명령당 최대 100개의 고유 메시지만 전체 본문으로 조회하고, Microsoft Search의 최대 1,000건 검색 창 안에서만 이어봅니다. `duplicateHitCount`, `noProgressDetected`, `searchWindowExhausted`가 중복 및 중단 사유를 보여줍니다. Outlook 검색 결과의 `body`와 `bodyHtml`은 전체 본문이며 `fullBodyUnavailableCount`로 누락 여부를 확인합니다. `search.partialResult`가 `true`이면 35초 시간 예산 안에 처리한 부분 결과입니다. 결과 JSON의 `search.range.notice`에는 실제 조회 기간이 표시됩니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
 
