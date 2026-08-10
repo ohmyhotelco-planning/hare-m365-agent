@@ -26,7 +26,7 @@ import {
   listMessageAttachments
 } from "./outlook-attachments.js";
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
-import { listChatMessages, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
+import { listChatMessagesPage, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
 import { cleanupExpiredResults, resolveResultPath } from "./results.js";
 import { writeSessionRules } from "./session-rules.js";
 import { buildSetupContract } from "./setup-state.js";
@@ -157,7 +157,7 @@ node dist/cli.js outlook draft reply --message-id "<message-id>" --reply-all --b
 node dist/cli.js outlook draft forward --message-id "<message-id>" --to "user@example.com" --body "Forward note" --attachment "<file-path>"
 node dist/cli.js teams teams
 node dist/cli.js teams chats --limit 20
-node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20
+node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 100 --offset 0
 node dist/cli.js teams search-messages --query "keyword" --since 2026-04-01 --until 2026-07-10
 node dist/cli.js sharepoint sites --query "Agent Automation"
 node dist/cli.js files search --query "keyword" --limit 10
@@ -190,6 +190,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - 로그인 계정은 "Hare를 실제로 사용할 사용자 본인의 회사 Microsoft 계정"으로만 안내한다. 기존 캐시, 예시, 대화 문맥에서 발견한 특정 이메일 주소를 로그인 대상으로 표시하거나 추천하지 않는다.
 - Teams 최신 채팅 판단은 lastMessageCreatedDateTime을 우선한다. lastUpdatedDateTime만으로 최신 메시지 방을 판단하지 않는다.
 - teams chat-messages의 body와 bodyHtml은 잘리지 않은 전체 본문이다. bodyPreview는 호환용 전체 텍스트 별칭이며 요약 필드로 취급하지 않는다.
+- teams chat-messages는 기본 20건, 명령당 최대 1,000개의 고유 메시지를 반환한다. page.continuationAvailable이 true이면 page.nextOffset을 --offset에 전달해 이어서 조회한다.
 - teams search-messages는 검색 스니펫과 별도로 메시지 상세를 조회해 body와 bodyHtml에 전체 본문을 반환한다. fullBodyUnavailableCount가 0이 아니면 누락된 전체 본문이 있다고 사용자에게 알리고, searchSummary를 전체 본문으로 간주하지 않는다.
 `;
 
@@ -745,12 +746,23 @@ teams
   .command("chat-messages")
   .description("List messages in one chat")
   .requiredOption("--chat-id <id>", "chat ID returned by teams chats")
-  .option("--limit <number>", "maximum message count", "20")
+  .option("--limit <number>", "maximum message count (hard maximum: 1000)", "20")
+  .option("--offset <number>", "unique message offset for the next page", "0")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
-  .action(async (options: { chatId: string; limit: string; out?: string }) => {
+  .action(async (options: {
+    chatId: string;
+    limit: string;
+    offset: string;
+    out?: string;
+  }) => {
     requireConfigured(config);
-    const data = await listChatMessages(config, options.chatId, Number(options.limit));
-    emitJson({ messages: data }, options.out);
+    const data = await listChatMessagesPage(
+      config,
+      options.chatId,
+      Number(options.limit),
+      Number(options.offset)
+    );
+    emitJson(data, options.out);
   });
 
 teams

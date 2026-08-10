@@ -378,6 +378,15 @@ test("Teams search defaults to a bounded result page and supports continuation",
   assert.match(result.stdout, /--offset <number>.*default: "0"/s);
 });
 
+test("Teams chat messages supports large bounded pages and continuation offsets", () => {
+  const dataDir = makeDataDir("hare-teams-chat-help-");
+  const result = run(["teams", "chat-messages", "--help"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--limit <number>.*default: "20"/s);
+  assert.match(result.stdout, /hard\s+maximum: 1000/);
+  assert.match(result.stdout, /--offset <number>.*default: "0"/s);
+});
+
 test("Outlook and file search expose bounded continuation controls", () => {
   const dataDir = makeDataDir("hare-search-continuation-help-");
   const outlook = run(["outlook", "search", "--help"], dataDir);

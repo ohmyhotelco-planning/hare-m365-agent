@@ -94,7 +94,7 @@ node dist/cli.js outlook draft reply --message-id "<message-id>" --reply-all --b
 node dist/cli.js outlook draft forward --message-id "<message-id>" --to "user@example.com" --body "전달 메모" --attachment "<file-path>"
 node dist/cli.js teams teams
 node dist/cli.js teams chats --limit 20
-node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 20
+node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 100 --offset 0
 node dist/cli.js teams search-messages --query "와플" --since 2026-04-01 --until 2026-07-10
 node dist/cli.js sharepoint sites --query "Agent Automation"
 node dist/cli.js files search --query "keyword" --limit 10
@@ -118,6 +118,8 @@ Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작
 `files search`는 Microsoft Search API를 통해 사용자가 접근할 수 있는 SharePoint, Teams, OneDrive 파일 전체를 검색합니다. 결과의 `nextOffset`을 `--offset`으로 전달해 다음 페이지를 조회할 수 있습니다. SharePoint 사이트 자체의 존재 여부는 `sharepoint sites`로 확인합니다.
 
 Teams `chat-messages`는 `body`에 전체 일반 텍스트, `bodyHtml`에 Graph 원본 HTML을 반환합니다. `search-messages`도 검색 결과마다 채팅 또는 채널 메시지 상세를 추가 조회해 같은 전체 본문 필드를 반환합니다. 일부 상세 조회가 불가능하면 `fullBodyUnavailableCount`와 항목별 `bodyUnavailableReason`으로 명시하며 검색 스니펫을 전체 본문으로 취급하지 않습니다.
+
+한 채팅방의 메시지는 기본 20건, 명령당 최대 1,000개의 고유 메시지까지 조회합니다. 결과의 `page.continuationAvailable`이 `true`이면 `page.nextOffset`을 다음 명령의 `--offset`으로 전달해 이어서 조회합니다. Graph 페이지는 내부적으로 50건씩 처리하며 중복 메시지 ID는 제거합니다.
 
 Teams의 `totalMatchesReported`는 Microsoft Search가 발신자, 본문, 첨부파일을 대상으로 찾은 메시지 수입니다. 따라서 “검색어가 포함된 메시지가 몇 개인가”에는 참고할 수 있지만 “메시지 본문에 단어가 총 몇 번 등장했는가”와는 다릅니다. 정확한 본문 등장 횟수는 첫 페이지에서 전체 후보 수를 확인합니다. 후보가 `searchWindowLimit`인 1,000건을 초과하면 더 조회하지 않고 기간이나 검색어를 좁혀야 합니다. 그 이하일 때만 고유 메시지 본문을 이어서 확인하며, 중복 페이지나 무진행 상태가 감지되면 반복을 중단하고 한계를 보고합니다.
 

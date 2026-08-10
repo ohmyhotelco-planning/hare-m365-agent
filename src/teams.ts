@@ -35,6 +35,18 @@ export type ChatMessageSummary = {
   bodyPreview?: string;
 };
 
+export type ChatMessageListResult = {
+  page: {
+    limit: number;
+    offset: number;
+    returnedCount: number;
+    nextOffset?: number;
+    continuationAvailable: boolean;
+    maxResults: number;
+  };
+  messages: ChatMessageSummary[];
+};
+
 export type ChatMessageSearchSummary = {
   id: string;
   createdDateTime?: string;
@@ -147,6 +159,7 @@ const fullBodyConcurrency = 5;
 const defaultSearchTimeBudgetMs = 35_000;
 const maxHydratedSearchResults = 100;
 const maxSearchWindow = 1_000;
+const maxChatMessageResults = 1_000;
 
 export async function listJoinedTeams(
   config: AppConfig,
@@ -188,14 +201,76 @@ export async function listChatMessages(
   limit: number,
   client: TeamsGraphClient = defaultTeamsClient(config)
 ): Promise<ChatMessageSummary[]> {
+  const result = await listChatMessagesPage(config, chatId, limit, 0, client);
+  return result.messages;
+}
+
+export async function listChatMessagesPage(
+  config: AppConfig,
+  chatId: string,
+  limit: number,
+  offset: number,
+  client: TeamsGraphClient = defaultTeamsClient(config)
+): Promise<ChatMessageListResult> {
   if (!chatId.trim()) throw new Error("chat-id must not be empty.");
-  const top = normalizeSearchLimit(limit, config.policy.maxTeamsFetchLimit);
-  const messages = await collectPages<GraphChatMessage>(
-    client,
-    `/chats/${encodeURIComponent(chatId)}/messages?$top=${Math.min(top, 50)}&$orderby=createdDateTime%20desc`,
-    top
-  );
-  return messages.map(toChatMessageSummary);
+  const top = normalizeSearchLimit(limit, maxChatMessageResults);
+  const normalizedOffset = normalizeSearchOffset(offset);
+  if (normalizedOffset >= maxChatMessageResults) {
+    throw new Error(`offset must be less than the chat message limit of ${maxChatMessageResults}.`);
+  }
+
+  const effectiveLimit = Math.min(top, maxChatMessageResults - normalizedOffset);
+  const messages: ChatMessageSummary[] = [];
+  const seenMessageIds = new Set<string>();
+  const visitedPages = new Set<string>();
+  let uniqueIndex = 0;
+  let continuationAvailable = false;
+  let nextUrl: string | undefined =
+    `/chats/${encodeURIComponent(chatId)}/messages?$top=50&$orderby=createdDateTime%20desc`;
+
+  while (nextUrl && uniqueIndex < maxChatMessageResults) {
+    if (visitedPages.has(nextUrl)) break;
+    visitedPages.add(nextUrl);
+
+    const page: GraphPage<GraphChatMessage> = await client.get<GraphPage<GraphChatMessage>>(nextUrl);
+    const pageValues = page.value ?? [];
+    let consumedPage = true;
+
+    for (let index = 0; index < pageValues.length; index += 1) {
+      const message = pageValues[index];
+      if (seenMessageIds.has(message.id)) continue;
+      seenMessageIds.add(message.id);
+
+      if (uniqueIndex >= normalizedOffset && messages.length < effectiveLimit) {
+        messages.push(toChatMessageSummary(message));
+      }
+      uniqueIndex += 1;
+
+      if (messages.length >= effectiveLimit || uniqueIndex >= maxChatMessageResults) {
+        continuationAvailable =
+          index < pageValues.length - 1 || Boolean(page["@odata.nextLink"]);
+        consumedPage = false;
+        break;
+      }
+    }
+
+    if (!consumedPage) break;
+    nextUrl = page["@odata.nextLink"];
+  }
+
+  const returnedCount = messages.length;
+  const nextOffset = normalizedOffset + returnedCount;
+  return {
+    page: {
+      limit: effectiveLimit,
+      offset: normalizedOffset,
+      returnedCount,
+      nextOffset: continuationAvailable ? nextOffset : undefined,
+      continuationAvailable,
+      maxResults: maxChatMessageResults
+    },
+    messages
+  };
 }
 
 export async function searchChatMessages(

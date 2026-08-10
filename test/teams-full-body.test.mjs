@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { listChatMessages, searchChatMessages } from "../dist/teams.js";
+import { listChatMessages, listChatMessagesPage, searchChatMessages } from "../dist/teams.js";
 
 function configFor() {
   return {
@@ -39,6 +39,77 @@ test("chat-messages returns complete text and original HTML without a 500-charac
   assert.equal(messages[0].bodyHtml, bodyHtml);
   assert.equal(messages[0].bodyPreview, longText);
   assert.equal(messages[0].body.length, 800);
+});
+
+test("chat-messages follows Graph nextLink pages beyond 50 messages", async () => {
+  const page = (start, count, nextLink) => ({
+    value: Array.from({ length: count }, (_, index) => ({
+      id: `message-${start + index}`,
+      body: { contentType: "text", content: `body-${start + index}` }
+    })),
+    ...(nextLink ? { "@odata.nextLink": nextLink } : {})
+  });
+  const pages = new Map([
+    ["/chats/chat-1/messages?$top=50&$orderby=createdDateTime%20desc", page(0, 50, "next-2")],
+    ["next-2", page(50, 50, "next-3")],
+    ["next-3", page(100, 21)]
+  ]);
+  const requestedUrls = [];
+  const client = {
+    async get(url) {
+      requestedUrls.push(url);
+      const result = pages.get(url);
+      if (!result) throw new Error(`Unexpected GET ${url}`);
+      return result;
+    },
+    async post() {
+      throw new Error("Unexpected POST");
+    }
+  };
+
+  const result = await listChatMessagesPage(configFor(), "chat-1", 120, 0, client);
+  assert.equal(result.messages.length, 120);
+  assert.equal(result.messages[0].id, "message-0");
+  assert.equal(result.messages[119].id, "message-119");
+  assert.deepEqual(requestedUrls, [
+    "/chats/chat-1/messages?$top=50&$orderby=createdDateTime%20desc",
+    "next-2",
+    "next-3"
+  ]);
+  assert.deepEqual(result.page, {
+    limit: 120,
+    offset: 0,
+    returnedCount: 120,
+    nextOffset: 120,
+    continuationAvailable: true,
+    maxResults: 1000
+  });
+});
+
+test("chat-messages offset uses unique messages and removes page-boundary duplicates", async () => {
+  const ids = (start, end) => Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  const page = (values, nextLink) => ({
+    value: values.map((id) => ({ id: `message-${id}`, body: { content: `body-${id}` } })),
+    ...(nextLink ? { "@odata.nextLink": nextLink } : {})
+  });
+  const pages = new Map([
+    ["/chats/chat-1/messages?$top=50&$orderby=createdDateTime%20desc", page(ids(0, 49), "next-2")],
+    ["next-2", page(ids(49, 98), "next-3")],
+    ["next-3", page(ids(98, 119))]
+  ]);
+  const client = {
+    async get(url) {
+      const result = pages.get(url);
+      if (!result) throw new Error(`Unexpected GET ${url}`);
+      return result;
+    }
+  };
+
+  const result = await listChatMessagesPage(configFor(), "chat-1", 40, 60, client);
+  assert.deepEqual(result.messages.map((message) => message.id), ids(60, 99).map((id) => `message-${id}`));
+  assert.equal(new Set(result.messages.map((message) => message.id)).size, 40);
+  assert.equal(result.page.nextOffset, 100);
+  assert.equal(result.page.continuationAvailable, true);
 });
 
 test("search-messages resolves complete bodies for chat and channel hits", async () => {

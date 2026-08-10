@@ -145,6 +145,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 - File search covers accessible SharePoint, Teams, and OneDrive files. Pass nextOffset through --offset while continuationAvailable is true. Use sharepoint sites to check whether a site itself exists.
 - Use lastMessageCreatedDateTime, not lastUpdatedDateTime alone, when deciding the latest Teams chat.
 - Teams chat-messages body and bodyHtml are the complete untruncated message. bodyPreview is only a compatibility alias for the same full text.
+- Teams chat-messages returns 20 messages by default and at most 1,000 unique messages per command. While page.continuationAvailable is true, pass page.nextOffset through --offset.
 - Teams search-messages performs detail lookups for full bodies. Use body/bodyHtml, check fullBodyUnavailableCount, and never present searchSummary as the complete message when fullBodyAvailable is false.
 - Teams search-messages hydrates at most 100 unique messages per command and Microsoft Search exposes at most a 1,000-result window. Never raise the limit above 100 or continue after searchWindowExhausted or noProgressDetected.
 - totalMatchesReported counts messages matched by Microsoft Search across sender, body, and attachments. It is not an exact count of text occurrences in message bodies. Do not exhaustively paginate only to revalidate totalMatchesReported.
