@@ -153,6 +153,8 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /default lookback.*90 days/i);
   assert.match(rules, /outlook attachments list/);
   assert.match(rules, /outlook attachments download/);
+  assert.match(rules, /teams attachments list/);
+  assert.match(rules, /teams attachments download/);
   assert.match(rules, /larger download returns AWAITING_USER_APPROVAL/);
   assert.match(rules, /token expires after 10 minutes/);
   assert.match(rules, /selected when this Cowork task was opened/);
@@ -220,6 +222,8 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /outlook flagged --folder all/);
   assert.match(result.stdout, /outlook attachments list/);
   assert.match(result.stdout, /outlook attachments download/);
+  assert.match(result.stdout, /teams attachments list/);
+  assert.match(result.stdout, /teams attachments download/);
   assert.match(result.stdout, /outlook draft new/);
   assert.match(result.stdout, /approval-token/);
   assert.match(result.stdout, /Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다/);
@@ -422,6 +426,18 @@ test("Outlook exposes attachment list and download commands", () => {
   assert.match(download.stdout, /--approval-token/);
 });
 
+
+test("Teams exposes attachment list and download commands", () => {
+  const dataDir = makeDataDir("hare-teams-attachment-help-");
+  const result = run(["teams", "attachments", "--help"], dataDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /list/);
+  assert.match(result.stdout, /download/);
+  const download = run(["teams", "attachments", "download", "--help"], dataDir);
+  assert.equal(download.status, 0, download.stderr);
+  assert.match(download.stdout, /--approval-token/);
+  assert.match(download.stdout, /--attachment-id/);
+});
 test("SharePoint and OneDrive downloads expose the approval token gate", () => {
   const dataDir = makeDataDir("hare-file-download-help-");
   const result = run(["files", "download", "--help"], dataDir);

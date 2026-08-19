@@ -96,6 +96,8 @@ node dist/cli.js teams teams
 node dist/cli.js teams chats --limit 20
 node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 100 --offset 0
 node dist/cli.js teams search-messages --query "와플" --since 2026-04-01 --until 2026-07-10
+node dist/cli.js teams attachments list --chat-id "<chat-id>" --message-id "<message-id>"
+node dist/cli.js teams attachments download --chat-id "<chat-id>" --message-id "<message-id>" --attachment-id "<attachment-id>"
 node dist/cli.js sharepoint sites --query "Agent Automation"
 node dist/cli.js files search --query "keyword" --limit 10
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
@@ -108,6 +110,8 @@ Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작
 일반적인 메일 조회와 최근 메일 조회는 `outlook recent --folder all`을 사용합니다. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상입니다. `outlook inbox`는 받은편지함이 명시된 요청에만 사용합니다. 플래그된 메일은 `outlook flagged --folder all`로 조회하며 모든 메일 결과에는 `flagStatus`가 포함됩니다.
 
 메일 첨부파일은 메일 조회 결과의 `id`를 `outlook attachments list --message-id`에 전달해 목록을 확인하고, 반환된 첨부파일 `id`를 `outlook attachments download --attachment-id`에 전달해 내려받습니다. 파일은 Hare의 `downloadsDir`에 저장되며 SharePoint/Teams/OneDrive 파일과 동일한 다운로드 정책이 적용됩니다. Excel 등 내려받은 파일의 내용 분석은 다운로드 완료 후 로컬 파일 처리 도구로 수행합니다.
+
+Teams 채팅 첨부파일은 메시지의 `chatId`와 `id`를 `teams attachments list`에 전달해 안전한 메타데이터를 확인하고, 반환된 첨부파일 `id`를 `teams attachments download`에 전달해 내려받습니다. Microsoft Search 색인에서 파일을 찾지 못해도 Teams 메시지에 포함된 회사 SharePoint 직접 경로를 해석하며, 원본 공유 URL은 결과에 출력하지 않습니다. 기존 다운로드 크기 상한과 승인 절차를 그대로 적용합니다.
 
 기본 다운로드 상한은 `maxDownloadBytes`의 100MiB입니다. 이를 초과하고 `maxApprovedDownloadBytes`의 1GiB 이하인 파일은 다운로드를 시작하지 않고 `AWAITING_USER_APPROVAL` 미리보기를 반환합니다. LLM은 출처, 파일명, 크기와 저장 위치를 모두 보여주고 명시적 동의를 받은 뒤 동일한 명령에 반환된 `--approval-token`을 추가해 한 번만 실행합니다. 토큰은 10분 동안 유효하고 정확히 같은 파일과 출력명에만 사용할 수 있으며 사용 즉시 무효화됩니다. 1GiB를 초과하는 파일은 승인 여부와 관계없이 차단됩니다.
 
