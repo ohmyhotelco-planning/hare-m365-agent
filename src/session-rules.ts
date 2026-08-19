@@ -136,6 +136,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 - Use outlook recent --folder all for general or recent-mail requests. Use outlook inbox only when the user explicitly asks for the Inbox.
 - Use outlook flagged --folder all for flagged-mail requests and inspect flagStatus in every mail result.
 - When the user asks for an Outlook attachment, use outlook attachments list with the message ID, then outlook attachments download with the selected attachment ID. Downloaded files are saved under Hare downloadsDir and remain subject to the download policy and size limit.
+- When the user asks for a Teams chat attachment, use teams attachments list with the chat and message IDs, then teams attachments download with the selected attachment ID. Never expose the original sharing URL. The existing download policy and size approval gate still apply.
 - Downloads at or below the default limit run normally. A larger download returns AWAITING_USER_APPROVAL without downloading content. Show the complete source, file name, size, output name, destination, and limits, then stop.
 - Only after explicit approval, rerun the exact same download command once with the returned --approval-token. The token expires after 10 minutes, is bound to that exact file and output name, and cannot be reused. Never change the policy or choose another download path to bypass the gate.
 - When the user omits a date range, the default lookback is ${config.policy.defaultSearchLookbackDays} days and the actual range must be reported.

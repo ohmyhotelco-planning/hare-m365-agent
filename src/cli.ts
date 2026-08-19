@@ -27,6 +27,10 @@ import {
 } from "./outlook-attachments.js";
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
 import { listChatMessagesPage, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
+import {
+  downloadTeamsMessageAttachment,
+  listTeamsMessageAttachments
+} from "./teams-attachments.js";
 import { cleanupExpiredResults, resolveResultPath } from "./results.js";
 import { writeSessionRules } from "./session-rules.js";
 import { buildSetupContract } from "./setup-state.js";
@@ -159,6 +163,8 @@ node dist/cli.js teams teams
 node dist/cli.js teams chats --limit 20
 node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 100 --offset 0
 node dist/cli.js teams search-messages --query "keyword" --since 2026-04-01 --until 2026-07-10
+node dist/cli.js teams attachments list --chat-id "<chat-id>" --message-id "<message-id>"
+node dist/cli.js teams attachments download --chat-id "<chat-id>" --message-id "<message-id>" --attachment-id "<attachment-id>"
 node dist/cli.js sharepoint sites --query "Agent Automation"
 node dist/cli.js files search --query "keyword" --limit 10
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
@@ -180,6 +186,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - teams search-messages의 search.partialResult가 true이면 시간 예산 안에 처리한 부분 결과다. partialReason과 fullBodyUnavailableCount를 알리고, 필요한 경우 같은 범위를 더 작은 limit으로 다시 조회한다.
 - 메일 건수 질문은 검색 인덱스 결과를 세지 말고 outlook count로 전체 페이지를 검사한다. count.complete가 false이면 nextCursor를 --cursor에 전달해 계속한다. 커서가 누적 집계를 보존하므로 complete가 true인 마지막 matchedCount만 정확한 전체 건수로 답한다.
 - files search는 접근 가능한 SharePoint, Teams, OneDrive 파일 전체를 검색한다. search.continuationAvailable이 true이면 search.nextOffset을 --offset에 전달한다. SharePoint 사이트 자체의 존재 여부는 sharepoint sites로 확인한다.
+- Teams 채팅 첨부파일은 teams attachments list로 메타데이터를 확인한 뒤 teams attachments download로 내려받는다. 원본 공유 URL은 출력하지 않으며 기존 다운로드 크기 상한과 승인 절차를 그대로 적용한다.
 - 다운로드가 기본 상한을 초과해 AWAITING_USER_APPROVAL을 반환하면 출처, 파일명, 크기, 출력명, 저장 위치와 상한을 모두 사용자에게 보여주고 멈춘다. 사용자가 명시적으로 동의한 뒤에만 동일한 명령에 반환된 --approval-token을 추가해 한 번 실행한다. 토큰은 10분 동안 정확히 같은 파일과 출력명에만 유효하며 재사용할 수 없다.
 - Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다. 초안을 만들거나 본문을 붙여넣기 위해 Computer Use, Outlook 데스크톱/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 않는다.
 - Hare 초안 명령이 실패하면 실패 단계와 오류만 보고하고 멈춘다. GUI 자동화나 다른 커넥터로 우회하지 않는다.
@@ -795,6 +802,52 @@ teams
       emitJson(data, options.out);
     }
   );
+
+const teamsAttachments = teams
+  .command("attachments")
+  .description("List and download SharePoint files attached to a Teams chat message");
+
+teamsAttachments
+  .command("list")
+  .description("List attachment metadata for one Teams chat message")
+  .requiredOption("--chat-id <id>", "chat ID returned by a Teams read command")
+  .requiredOption("--message-id <id>", "message ID returned by a Teams read command")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
+  .action(async (options: { chatId: string; messageId: string; out?: string }) => {
+    requireConfigured(config);
+    const data = await listTeamsMessageAttachments(config, options.chatId, options.messageId);
+    emitJson(data, options.out);
+  });
+
+teamsAttachments
+  .command("download")
+  .description("Download one SharePoint file attached to a Teams chat message")
+  .requiredOption("--chat-id <id>", "chat ID returned by a Teams read command")
+  .requiredOption("--message-id <id>", "message ID returned by a Teams read command")
+  .requiredOption("--attachment-id <id>", "attachment ID returned by teams attachments list")
+  .option("--name <filename>", "output filename; defaults to the attachment name")
+  .option(
+    "--approval-token <token>",
+    "one-time token returned after previewing a download above the default size limit"
+  )
+  .action(async (options: {
+    chatId: string;
+    messageId: string;
+    attachmentId: string;
+    name?: string;
+    approvalToken?: string;
+  }) => {
+    requireConfigured(config);
+    const data = await downloadTeamsMessageAttachment(
+      config,
+      options.chatId,
+      options.messageId,
+      options.attachmentId,
+      options.name,
+      options.approvalToken
+    );
+    emitJson({ ok: true, ...data });
+  });
 
 const files = program.command("files").description("SharePoint/OneDrive file commands");
 
