@@ -31,6 +31,10 @@ import {
   downloadTeamsMessageAttachment,
   listTeamsMessageAttachments
 } from "./teams-attachments.js";
+import {
+  downloadTeamsInlineImage,
+  listTeamsInlineImages
+} from "./teams-inline-images.js";
 import { cleanupExpiredResults, resolveResultPath } from "./results.js";
 import { writeSessionRules } from "./session-rules.js";
 import { buildSetupContract } from "./setup-state.js";
@@ -132,6 +136,7 @@ ${setupCommandForGuide}
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행하고 Microsoft 로그인 주소와 userCode를 보여준 뒤 멈춘다.
 - LOGIN_COMPLETE_REQUIRED: 사용자가 "로그인 완료"라고 말할 때까지 기다린다. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행한다. COMPLETE는 선택 프로젝트에 저장된 캐시 재검증까지 성공했다는 뜻이다.
 - READY: 사용 준비 완료를 보고하고 사용자의 업무 조회 요청을 기다린다.
+- BLOCKED에 TOKEN_ACQUISITION_FAILED 또는 네트워크 오류가 있으면 기존 캐시를 유지하고 오류만 보고한다. login-start를 실행하지 않는다.
 - HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED로 보고하고 막힌 도메인만 알려준 뒤 멈춘다.
 - 그 밖의 명령 실패는 BLOCKED로 취급해 실패 단계와 오류 한 줄만 보고한다. 다른 경로를 추측하거나 반복 실행하지 않는다.
 
@@ -165,6 +170,8 @@ node dist/cli.js teams chat-messages --chat-id "<chat-id>" --limit 100 --offset 
 node dist/cli.js teams search-messages --query "keyword" --since 2026-04-01 --until 2026-07-10
 node dist/cli.js teams attachments list --chat-id "<chat-id>" --message-id "<message-id>"
 node dist/cli.js teams attachments download --chat-id "<chat-id>" --message-id "<message-id>" --attachment-id "<attachment-id>"
+node dist/cli.js teams inline-images list --chat-id "<chat-id>" --message-id "<message-id>"
+node dist/cli.js teams inline-images download --chat-id "<chat-id>" --message-id "<message-id>" --hosted-content-id "<hosted-content-id>"
 node dist/cli.js sharepoint sites --query "Agent Automation"
 node dist/cli.js files search --query "keyword" --limit 10
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
@@ -187,6 +194,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - 메일 건수 질문은 검색 인덱스 결과를 세지 말고 outlook count로 전체 페이지를 검사한다. count.complete가 false이면 nextCursor를 --cursor에 전달해 계속한다. 커서가 누적 집계를 보존하므로 complete가 true인 마지막 matchedCount만 정확한 전체 건수로 답한다.
 - files search는 접근 가능한 SharePoint, Teams, OneDrive 파일 전체를 검색한다. search.continuationAvailable이 true이면 search.nextOffset을 --offset에 전달한다. SharePoint 사이트 자체의 존재 여부는 sharepoint sites로 확인한다.
 - Teams 채팅 첨부파일은 teams attachments list로 메타데이터를 확인한 뒤 teams attachments download로 내려받는다. 원본 공유 URL은 출력하지 않으며 기존 다운로드 크기 상한과 승인 절차를 그대로 적용한다.
+- Teams 메시지 본문이 비어 있고 bodyHtml에 hostedContents 이미지가 있으면 teams inline-images list로 ID를 확인한 뒤 teams inline-images download로 내려받아 판독한다. 다운로드 응답이 허용된 래스터 이미지 형식인지 검증하며 Graph 원본 URL이나 바이너리를 출력하지 않는다. 크기 미상 이미지는 기본 다운로드 상한까지만 허용한다.
 - 다운로드가 기본 상한을 초과해 AWAITING_USER_APPROVAL을 반환하면 출처, 파일명, 크기, 출력명, 저장 위치와 상한을 모두 사용자에게 보여주고 멈춘다. 사용자가 명시적으로 동의한 뒤에만 동일한 명령에 반환된 --approval-token을 추가해 한 번 실행한다. 토큰은 10분 동안 정확히 같은 파일과 출력명에만 유효하며 재사용할 수 없다.
 - Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다. 초안을 만들거나 본문을 붙여넣기 위해 Computer Use, Outlook 데스크톱/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 않는다.
 - Hare 초안 명령이 실패하면 실패 단계와 오류만 보고하고 멈춘다. GUI 자동화나 다른 커넥터로 우회하지 않는다.
@@ -244,6 +252,7 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 - 로그인 계정은 "Hare를 실제로 사용할 사용자 본인의 회사 Microsoft 계정"으로만 안내해. 특정 이메일 주소를 예시로 들거나 로그인 대상으로 지정하지 마.
 - LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 선택 프로젝트에 저장된 캐시 재검증까지 성공한 상태야.
 - READY: "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
+- BLOCKED에 TOKEN_ACQUISITION_FAILED 또는 네트워크 오류가 표시되면 기존 캐시를 유지하고 오류만 알려줘. login-start를 실행하지 마.
 - HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED라고 알려주고 막힌 도메인만 말한 뒤 멈춰.
 - 그 밖의 명령 실패: BLOCKED로 취급해 실패 단계와 오류 한 줄만 알려주고 멈춰. 다른 경로를 시도하거나 같은 명령을 반복하지 마.
 
@@ -438,6 +447,7 @@ auth.command("status").description("Show current login and policy status").actio
       loggedIn,
       tokenUsable: authStatus.tokenUsable,
       authMigrationRequired: authStatus.migrationRequired,
+      authReason: authStatus.reason,
       dataDirPersistent: config.dataDirPersistent,
       pendingLoginStateExists
     },
@@ -845,6 +855,52 @@ teamsAttachments
       options.attachmentId,
       options.name,
       options.approvalToken
+    );
+    emitJson({ ok: true, ...data });
+  });
+
+const teamsInlineImages = teams
+  .command("inline-images")
+  .description("List and download images embedded in a Teams chat message");
+
+teamsInlineImages
+  .command("list")
+  .description("List inline image metadata for one Teams chat message")
+  .requiredOption("--chat-id <id>", "chat ID returned by a Teams read command")
+  .requiredOption("--message-id <id>", "message ID returned by a Teams read command")
+  .option("--limit <number>", "maximum inline image count", "20")
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
+  .action(async (options: { chatId: string; messageId: string; limit: string; out?: string }) => {
+    requireConfigured(config);
+    const data = await listTeamsInlineImages(
+      config,
+      options.chatId,
+      options.messageId,
+      Number(options.limit)
+    );
+    emitJson(data, options.out);
+  });
+
+teamsInlineImages
+  .command("download")
+  .description("Download one image embedded in a Teams chat message")
+  .requiredOption("--chat-id <id>", "chat ID returned by a Teams read command")
+  .requiredOption("--message-id <id>", "message ID returned by a Teams read command")
+  .requiredOption("--hosted-content-id <id>", "hosted content ID returned by teams inline-images list")
+  .option("--name <filename>", "output filename; defaults to a safe image filename")
+  .action(async (options: {
+    chatId: string;
+    messageId: string;
+    hostedContentId: string;
+    name?: string;
+  }) => {
+    requireConfigured(config);
+    const data = await downloadTeamsInlineImage(
+      config,
+      options.chatId,
+      options.messageId,
+      options.hostedContentId,
+      options.name
     );
     emitJson({ ok: true, ...data });
   });

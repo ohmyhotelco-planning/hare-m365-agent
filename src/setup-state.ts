@@ -6,14 +6,13 @@ export type SetupState =
   | "READY"
   | "BLOCKED";
 
-type EvaluatedSetupState = Exclude<SetupState, "BLOCKED">;
-
 export type SetupSnapshot = {
   configured: boolean;
   dataDirPersistent: boolean;
   loggedIn: boolean;
   tokenUsable: boolean;
   authMigrationRequired: boolean;
+  authReason?: string;
   pendingLoginStateExists: boolean;
 };
 
@@ -31,12 +30,42 @@ export type SetupContract = {
   instruction: string;
 };
 
-export function determineSetupState(snapshot: SetupSnapshot): EvaluatedSetupState {
+export function determineSetupState(snapshot: SetupSnapshot): SetupState {
   if (!snapshot.configured) return "SETUP_REQUIRED";
   if (!snapshot.dataDirPersistent) return "FOLDER_REQUIRED";
   if (snapshot.loggedIn && snapshot.tokenUsable) return "READY";
+  if (snapshot.authMigrationRequired) return "LOGIN_START_REQUIRED";
   if (snapshot.pendingLoginStateExists) return "LOGIN_COMPLETE_REQUIRED";
+  const authFailure = classifyAuthFailure(snapshot.authReason);
+  if (authFailure === "NETWORK_BLOCKED" || authFailure === "UNKNOWN_BLOCKED") {
+    return "BLOCKED";
+  }
   return "LOGIN_START_REQUIRED";
+}
+
+export type AuthFailureClass =
+  | "NONE"
+  | "LOGIN_REQUIRED"
+  | "NETWORK_BLOCKED"
+  | "UNKNOWN_BLOCKED";
+
+export function classifyAuthFailure(reason: string | undefined): AuthFailureClass {
+  if (!reason || reason === "NO_ACCOUNT_IN_CACHE" || reason === "NO_ACCESS_TOKEN") {
+    return reason ? "LOGIN_REQUIRED" : "NONE";
+  }
+  if (reason === "AUTH_APP_CHANGED") return "LOGIN_REQUIRED";
+  if (!reason.startsWith("TOKEN_ACQUISITION_FAILED:")) return "UNKNOWN_BLOCKED";
+  if (
+    /network_error|fetch failed|eai_again|etimedout|econnreset|econnrefused|enotfound|blocked-by-allowlist/i.test(
+      reason
+    )
+  ) {
+    return "NETWORK_BLOCKED";
+  }
+  if (/interaction_required|invalid_grant|login_required|consent_required/i.test(reason)) {
+    return "LOGIN_REQUIRED";
+  }
+  return "UNKNOWN_BLOCKED";
 }
 
 export function buildSetupContract(
@@ -87,6 +116,10 @@ export function buildSetupContract(
         stopAfterAction: true,
         instruction: "Hare M365 Agent is ready. Wait for the user's Microsoft 365 lookup request."
       };
+    case "BLOCKED":
+      return buildBlockedSetupContract(
+        snapshot.authReason ?? "Microsoft token validation failed. Do not start a new login flow."
+      );
   }
 }
 
@@ -95,6 +128,6 @@ export function buildBlockedSetupContract(reason: string): SetupContract {
     state: "BLOCKED",
     nextAction: "REPORT_BLOCKER",
     stopAfterAction: true,
-    instruction: `Report this blocker in one sentence and stop: ${reason}`
+    instruction: `Report this blocker in one sentence and stop. Do not start a new Microsoft sign-in or replace the existing cache: ${reason}`
   };
 }

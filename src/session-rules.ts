@@ -114,7 +114,8 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address from a cache, example, or prior conversation. If authReason is AUTH_APP_CHANGED, explain only that Hare was updated to a new Microsoft application and one Microsoft sign-in is required.
 4. LOGIN_COMPLETE_REQUIRED: wait until the user says the browser login is complete, then run setup.nextCommand once.
 5. FOLDER_REQUIRED: stop and tell the user to open a new Cowork task with the existing Hare project selected.
-6. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.
+6. BLOCKED with TOKEN_ACQUISITION_FAILED or a network error: report the blocker and stop. Do not run login-start or replace the existing cache.
+7. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.
 
 ## Cowork network permission
 
@@ -137,6 +138,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 - Use outlook flagged --folder all for flagged-mail requests and inspect flagStatus in every mail result.
 - When the user asks for an Outlook attachment, use outlook attachments list with the message ID, then outlook attachments download with the selected attachment ID. Downloaded files are saved under Hare downloadsDir and remain subject to the download policy and size limit.
 - When the user asks for a Teams chat attachment, use teams attachments list with the chat and message IDs, then teams attachments download with the selected attachment ID. Never expose the original sharing URL. The existing download policy and size approval gate still apply.
+- When a Teams message has an empty text body and bodyHtml references hostedContents, use teams inline-images list and teams inline-images download. The list endpoint exposes IDs only; the download command allows only a verified raster image Content-Type before saving. Inspect the saved local image, never expose the Graph URL or binary content, and do not ask the user to reattach an image that Hare can retrieve.
 - Downloads at or below the default limit run normally. A larger download returns AWAITING_USER_APPROVAL without downloading content. Show the complete source, file name, size, output name, destination, and limits, then stop.
 - Only after explicit approval, rerun the exact same download command once with the returned --approval-token. The token expires after 10 minutes, is bound to that exact file and output name, and cannot be reused. Never change the policy or choose another download path to bypass the gate.
 - When the user omits a date range, the default lookback is ${config.policy.defaultSearchLookbackDays} days and the actual range must be reported.
