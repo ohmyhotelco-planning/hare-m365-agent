@@ -34,4 +34,5 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 - 정확한 메일 건수는 `outlook count`를 사용합니다.
 - 최신 Teams 채팅은 실제 마지막 메시지 생성 시각으로 판단합니다.
 - SharePoint 사이트 존재 여부는 `sharepoint sites`로 확인합니다.
+- SharePoint 사이트 파일을 외부 경로에 복사할 때는 `sharepoint export-files`의 전체 계획을 먼저 보여주고 명시적 승인을 받은 뒤 실행합니다. 동일한 승인 작업은 파일별 재승인 없이 재개하며 기존 파일을 덮어쓰지 않습니다.
 - 메일 발송, Teams 게시, 일정 생성, 파일 업로드·삭제·공유, 권한 변경은 서비스하지 않습니다.

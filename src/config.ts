@@ -25,6 +25,7 @@ export type Policy = {
   maxFileSearchLimit: number;
   maxDownloadBytes: number;
   maxApprovedDownloadBytes: number;
+  maxSharePointExportFileBytes: number;
   maxDraftAttachmentBytes: number;
   maxDraftTotalAttachmentBytes: number;
   retentionDays: number;
@@ -62,6 +63,7 @@ const defaultPolicy: Policy = {
   maxFileSearchLimit: 25,
   maxDownloadBytes: 104857600,
   maxApprovedDownloadBytes: 1073741824,
+  maxSharePointExportFileBytes: 10737418240,
   maxDraftAttachmentBytes: 157286400,
   maxDraftTotalAttachmentBytes: 157286400,
   retentionDays: 7,

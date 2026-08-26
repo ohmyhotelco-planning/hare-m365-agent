@@ -101,6 +101,7 @@ node dist/cli.js teams attachments download --chat-id "<chat-id>" --message-id "
 node dist/cli.js teams inline-images list --chat-id "<chat-id>" --message-id "<message-id>"
 node dist/cli.js teams inline-images download --chat-id "<chat-id>" --message-id "<message-id>" --hosted-content-id "<hosted-content-id>"
 node dist/cli.js sharepoint sites --query "Agent Automation"
+node dist/cli.js sharepoint export-files --site-url "https://ohmylab.sharepoint.com/sites/<site>" --destination "<absolute-path>"
 node dist/cli.js files search --query "keyword" --limit 10
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
 ```
@@ -118,6 +119,9 @@ Teams 채팅 첨부파일은 메시지의 `chatId`와 `id`를 `teams attachments
 Teams 본문에 붙여넣은 이미지는 일반 첨부파일과 달리 `hostedContents`로 저장됩니다. Graph 목록 API는 형식을 반환하지 않으므로 `teams inline-images list`에서는 hosted content ID만 확인하고, `teams inline-images download`가 실제 다운로드 응답이 PNG/JPEG/GIF/WebP/BMP/TIFF 래스터 이미지인지 검증한 뒤 Hare의 `downloadsDir`에 저장합니다. Graph 원본 URL과 이미지 바이트는 목록 결과에 노출하지 않으며, 크기를 미리 알 수 없는 인라인 이미지는 기본 다운로드 상한까지만 스트리밍합니다.
 
 기본 다운로드 상한은 `maxDownloadBytes`의 100MiB입니다. 이를 초과하고 `maxApprovedDownloadBytes`의 1GiB 이하인 파일은 다운로드를 시작하지 않고 `AWAITING_USER_APPROVAL` 미리보기를 반환합니다. LLM은 출처, 파일명, 크기와 저장 위치를 모두 보여주고 명시적 동의를 받은 뒤 동일한 명령에 반환된 `--approval-token`을 추가해 한 번만 실행합니다. 토큰은 10분 동안 유효하고 정확히 같은 파일과 출력명에만 사용할 수 있으며 사용 즉시 무효화됩니다. 1GiB를 초과하는 파일은 승인 여부와 관계없이 차단됩니다.
+
+`sharepoint export-files`는 지정한 SharePoint 사이트의 기본 문서 라이브러리를 검색 색인 없이 재귀 열거하고, 파일 폴더 구조를 지정한 절대 경로에 보존합니다. 파일 목록 열거가 시간 예산을 넘으면 `ENUMERATION_IN_PROGRESS`와 체크포인트를 반환하므로 승인 토큰 없이 같은 명령을 다시 실행합니다. 열거가 끝난 첫 실행은 전체 파일 수·총용량·기존 파일·10GiB 초과 제외 파일·디스크 여유를 포함한 `AWAITING_USER_APPROVAL` 계획만 반환하며 다운로드하지 않습니다. 한 번 승인하면 같은 계정·사이트·파일 목록·대상·정책에 묶인 작업을 24시간 동안 파일별 추가 승인 없이 재개합니다. 기존 파일은 덮어쓰지 않고 건너뛰며, 파일당 상한은 `maxSharePointExportFileBytes`의 10GiB입니다. 부분 파일은 HTTP Range로 이어받고, 서버가 Range를 무시하면 해당 부분 파일을 안전하게 처음부터 다시 씁니다. 빈 폴더, 버전 기록, 권한, 메타데이터와 10GiB 초과 파일은 복사하지 않습니다.
+파일시스템이 hard-link를 지원하지 않을 때도 기존 파일을 덮어쓰지 않고 배타적 복사로 마무리할 수 있도록, 계획의 `requiredDiskBytes`에는 전체 대기 용량에 가장 큰 대상 파일 1개분의 임시 여유가 보수적으로 추가됩니다.
 
 기간을 지정하지 않은 `outlook search`와 `teams search-messages`는 `Asia/Seoul` 기준 최근 90일을 조회합니다. 두 검색 모두 기본 100건씩 반환합니다. Outlook은 `search.nextCursor`를 `--cursor`로, Teams는 `search.nextOffset`을 `--offset`으로 전달해 이어서 조회합니다. Teams는 명령당 최대 100개의 고유 메시지만 전체 본문으로 조회하고, Microsoft Search의 최대 1,000건 검색 창 안에서만 이어봅니다. `duplicateHitCount`, `noProgressDetected`, `searchWindowExhausted`가 중복 및 중단 사유를 보여줍니다. Outlook 검색 결과의 `body`와 `bodyHtml`은 전체 본문이며 `fullBodyUnavailableCount`로 누락 여부를 확인합니다. `search.partialResult`가 `true`이면 35초 시간 예산 안에 처리한 부분 결과입니다. 결과 JSON의 `search.range.notice`에는 실제 조회 기간이 표시됩니다. 기간이 명확한 요청은 `--since`와 `--until`에 `YYYY-MM-DD` 형식으로 지정합니다.
 

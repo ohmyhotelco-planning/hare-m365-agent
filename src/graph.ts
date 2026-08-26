@@ -9,6 +9,7 @@ const requestTimeoutMs = 30_000;
 
 export type GraphRequestOptions = {
   totalTimeoutMs?: number;
+  headers?: Record<string, string>;
 };
 
 export type GraphPage<T> = {
@@ -51,8 +52,12 @@ export async function graphDelete(config: AppConfig, pathOrUrl: string): Promise
   await graphRequest(config, pathOrUrl, "DELETE");
 }
 
-export async function graphDownloadResponse(config: AppConfig, pathOrUrl: string) {
-  return graphRequest(config, pathOrUrl, "GET", undefined, false);
+export async function graphDownloadResponse(
+  config: AppConfig,
+  pathOrUrl: string,
+  options: GraphRequestOptions = {}
+) {
+  return graphRequest(config, pathOrUrl, "GET", undefined, false, options);
 }
 
 async function graphRequest(
@@ -78,9 +83,10 @@ async function graphRequest(
       const response = await fetchWithProxy(url, {
         method,
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...(options.headers ?? {}),
           ...(acceptJson ? { Accept: "application/json" } : {}),
-          ...(body ? { "Content-Type": "application/json" } : {})
+          ...(body ? { "Content-Type": "application/json" } : {}),
+          Authorization: `Bearer ${token}`
         },
         body,
         signal: controller.signal

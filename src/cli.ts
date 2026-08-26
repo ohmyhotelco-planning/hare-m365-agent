@@ -26,6 +26,7 @@ import {
   listMessageAttachments
 } from "./outlook-attachments.js";
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
+import { exportSharePointFiles } from "./sharepoint-export.js";
 import { listChatMessagesPage, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
 import {
   downloadTeamsMessageAttachment,
@@ -173,6 +174,7 @@ node dist/cli.js teams attachments download --chat-id "<chat-id>" --message-id "
 node dist/cli.js teams inline-images list --chat-id "<chat-id>" --message-id "<message-id>"
 node dist/cli.js teams inline-images download --chat-id "<chat-id>" --message-id "<message-id>" --hosted-content-id "<hosted-content-id>"
 node dist/cli.js sharepoint sites --query "Agent Automation"
+node dist/cli.js sharepoint export-files --site-url "https://ohmylab.sharepoint.com/sites/<site>" --destination "<absolute-path>"
 node dist/cli.js files search --query "keyword" --limit 10
 node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --name "filename.ext"
 \`\`\`
@@ -196,6 +198,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - Teams 채팅 첨부파일은 teams attachments list로 메타데이터를 확인한 뒤 teams attachments download로 내려받는다. 원본 공유 URL은 출력하지 않으며 기존 다운로드 크기 상한과 승인 절차를 그대로 적용한다.
 - Teams 메시지 본문이 비어 있고 bodyHtml에 hostedContents 이미지가 있으면 teams inline-images list로 ID를 확인한 뒤 teams inline-images download로 내려받아 판독한다. 다운로드 응답이 허용된 래스터 이미지 형식인지 검증하며 Graph 원본 URL이나 바이너리를 출력하지 않는다. 크기 미상 이미지는 기본 다운로드 상한까지만 허용한다.
 - 다운로드가 기본 상한을 초과해 AWAITING_USER_APPROVAL을 반환하면 출처, 파일명, 크기, 출력명, 저장 위치와 상한을 모두 사용자에게 보여주고 멈춘다. 사용자가 명시적으로 동의한 뒤에만 동일한 명령에 반환된 --approval-token을 추가해 한 번 실행한다. 토큰은 10분 동안 정확히 같은 파일과 출력명에만 유효하며 재사용할 수 없다.
+- SharePoint 사이트 파일 일괄 복사는 sharepoint export-files를 approval-token 없이 먼저 실행한다. ENUMERATION_IN_PROGRESS가 반환되면 저장된 Graph 페이지 체크포인트를 이어가도록 approval-token 없이 같은 명령을 다시 실행한다. 전체 파일 수, 총용량, 기존 파일, 10GiB 초과 제외 파일, 대상 경로와 디스크 여유가 포함된 전체 계획이 나온 뒤에만 멈춰 사용자 승인을 받는다. 사용자가 전체 계획을 명시적으로 승인한 뒤에만 같은 명령에 반환된 --approval-token을 추가한다. 같은 계정, 사이트, 파일 목록, 대상과 정책에 묶인 승인 작업은 24시간 동안 파일별 추가 승인 없이 같은 명령으로 재개하며 기존 파일을 덮어쓰지 않는다.
 - Outlook 초안 작성 요청은 반드시 Hare CLI로 처리한다. 초안을 만들거나 본문을 붙여넣기 위해 Computer Use, Outlook 데스크톱/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 않는다.
 - Hare 초안 명령이 실패하면 실패 단계와 오류만 보고하고 멈춘다. GUI 자동화나 다른 커넥터로 우회하지 않는다.
 - Outlook 초안은 신규, 답장, 전체답장, 전달과 첨부파일을 지원한다. 먼저 approval-token 없이 명령을 실행해 AWAITING_USER_APPROVAL 미리보기를 만들고 수신자, 제목, 본문, 첨부파일 전체를 사용자에게 보여준 뒤 멈춘다.
@@ -265,6 +268,7 @@ clone/build 전체 반복, 도메인 반복 진단, 임의 프록시 우회는 �
 Outlook 또는 Teams에서 기간·키워드 조회를 요청받으면 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 outlook search 또는 teams search-messages를 사용해.
 메일이 몇 건인지 묻는 정확한 집계 요청은 outlook search 결과를 세지 말고 outlook count를 사용해.
 files search는 접근 가능한 SharePoint, Teams, OneDrive 파일 전체를 검색해. SharePoint 사이트 자체의 존재 여부는 sharepoint sites로 확인해.
+SharePoint 사이트의 파일 전체를 외부 경로에 복사해 달라는 요청은 sharepoint export-files의 전체 계획을 먼저 보여주고 명시적 승인을 받은 뒤 실행해. 동일한 승인 작업은 파일별 재승인 없이 재개하고 기존 파일은 덮어쓰지 마.
 Outlook 초안 작성 요청은 반드시 Hare CLI로 처리해. 초안을 만들거나 본문을 붙여넣기 위해 Computer Use, Outlook 데스크톱/웹 UI, 브라우저 자동화 또는 Microsoft 365 커넥터를 사용하지 마. Hare 초안 명령이 실패하면 실패 단계와 오류만 알려주고 멈춰. 다른 방식으로 우회하지 마.
 사용자가 기간을 말하면 --since/--until에 그대로 반영해.
 기간을 말하지 않으면 기본 최근 90일이 적용되며, 결과의 search.range.notice를 답변에 포함해 실제 조회 범위를 알려줘.
@@ -920,6 +924,47 @@ sharepoint
     const data = await searchSites(config, options.query, Number(options.limit));
     emitJson(data, options.out);
   });
+
+sharepoint
+  .command("export-files")
+  .description("Export the default document library while preserving its folder structure")
+  .requiredOption("--site-url <url>", "SharePoint site URL")
+  .requiredOption("--destination <path>", "absolute destination directory")
+  .option(
+    "--approval-token <token>",
+    "one-time token returned after previewing the complete export manifest"
+  )
+  .option(
+    "--time-budget-ms <number>",
+    "stop between files after this time and return a resumable result",
+    "240000"
+  )
+  .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
+  .action(async (options: {
+    siteUrl: string;
+    destination: string;
+    approvalToken?: string;
+    timeBudgetMs: string;
+    out?: string;
+  }) => {
+    requireConfigured(config);
+    const auth = await getAuthStatus(config);
+    if (!auth.tokenUsable || !auth.account?.homeAccountId) {
+      throw new Error("A usable logged-in account is required for SharePoint export.");
+    }
+    const result = await exportSharePointFiles(
+      config,
+      options.siteUrl,
+      options.destination,
+      {
+        accountId: auth.account.homeAccountId,
+        approvalToken: options.approvalToken,
+        timeBudgetMs: Number(options.timeBudgetMs)
+      }
+    );
+    emitJson({ ok: true, ...result }, options.out);
+  });
+
 
 files
   .command("search")

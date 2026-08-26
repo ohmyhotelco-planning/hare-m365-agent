@@ -157,6 +157,11 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /teams attachments download/);
   assert.match(rules, /larger download returns AWAITING_USER_APPROVAL/);
   assert.match(rules, /token expires after 10 minutes/);
+  assert.match(rules, /sharepoint export-files/);
+  assert.match(rules, /complete batch preview/);
+  assert.match(rules, /ENUMERATION_IN_PROGRESS/);
+  assert.match(rules, /Graph-page checkpoint/);
+  assert.match(rules, /10GiB per-file export cap/);
   assert.match(rules, /selected when this Cowork task was opened/);
   assert.match(rules, /Do not clone the repository, run npm ci, or build inside it/);
   assert.match(rules, /without requesting folder deletion permission/);
