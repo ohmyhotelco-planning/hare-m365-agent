@@ -104,7 +104,7 @@ test("application migration explains the one-time sign-in without changing the f
 
   assert.equal(contract.state, "LOGIN_START_REQUIRED");
   assert.equal(contract.nextCommand, "node dist/cli.js auth login-start");
-  assert.match(contract.instruction, /updated to a new Microsoft application/);
+  assert.match(contract.instruction, /authentication permissions or application changed/);
   assert.match(contract.instruction, /one Microsoft sign-in/);
   assert.match(contract.instruction, /their own company Microsoft account/);
   assert.match(contract.instruction, /Never name, recommend, or preselect a specific email address/);

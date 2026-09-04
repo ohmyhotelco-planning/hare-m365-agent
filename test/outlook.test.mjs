@@ -7,6 +7,7 @@ import {
   searchMailbox,
   toMailSummary
 } from "../dist/outlook.js";
+import { resolveMailboxTarget } from "../dist/outlook-mailbox.js";
 
 test("recent mail defaults can target the whole mailbox and include flag state", () => {
   const url = graphUrl(buildRecentMessagesPath("all", 10));
@@ -37,6 +38,28 @@ test("flagged mail query filters the whole mailbox by flag and date", () => {
   assert.match(filter, /flag\/flagStatus eq 'flagged'/);
   assert.match(filter, /receivedDateTime ge 2026-06-30T15:00:00\.000Z/);
   assert.match(filter, /receivedDateTime lt 2026-07-14T15:00:00\.000Z/);
+});
+
+test("shared mailbox paths use the resolved mailbox and never the signed-in user", async () => {
+  const mailbox = await sharedMailbox("cto@example.com", "cto-user-id");
+  const recent = graphUrl(buildRecentMessagesPath("all", 10, mailbox));
+  assert.equal(recent.pathname, "/v1.0/users/cto-user-id/messages");
+
+  const range = {
+    since: "2026-07-01",
+    until: "2026-07-14",
+    startDateTime: "2026-06-30T15:00:00.000Z",
+    endDateTimeExclusive: "2026-07-14T15:00:00.000Z",
+    timeZone: "Asia/Seoul",
+    days: 14,
+    usedDefaultLookback: false,
+    notice: "fixture"
+  };
+  const flagged = graphUrl(buildFlaggedMessagesPath("inbox", range, 20, mailbox));
+  assert.equal(
+    flagged.pathname,
+    "/v1.0/users/cto-user-id/mailFolders/inbox/messages"
+  );
 });
 
 test("mail summaries expose the Outlook flag status", () => {
@@ -115,6 +138,76 @@ test("mail search returns complete bodies and an opaque continuation cursor", as
     ),
     /cursor does not match/
   );
+});
+
+test("search and count bind shared mailbox metadata and continuations", async () => {
+  const mailbox = await sharedMailbox("cto@example.com", "cto-user-id");
+  const otherMailbox = await sharedMailbox("other@example.com", "other-user-id");
+  const calls = [];
+  const client = {
+    async get(url) {
+      calls.push(url);
+      if (url.includes("deleteditems")) return { id: "deleted" };
+      return {
+        value: [{
+          id: "m1",
+          subject: "Shared result",
+          receivedDateTime: "2026-07-20T00:00:00Z",
+          body: { contentType: "text", content: "keyword" }
+        }],
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/users/cto-user-id/messages?$skip=100"
+      };
+    }
+  };
+
+  const result = await searchMailbox(
+    config(),
+    "keyword",
+    "2026-07-01",
+    "2026-07-22",
+    "all",
+    100,
+    { mailbox },
+    client
+  );
+  assert.equal(result.search.mailbox.address, "cto@example.com");
+  assert.match(calls[0], /^\/users\/cto-user-id\/mailFolders\/deleteditems/);
+  assert.match(calls[1], /^\/users\/cto-user-id\/messages\?/);
+
+  await assert.rejects(
+    () => searchMailbox(
+      config(),
+      "keyword",
+      "2026-07-01",
+      "2026-07-22",
+      "all",
+      100,
+      { mailbox: otherMailbox, cursor: result.search.nextCursor },
+      client
+    ),
+    /cursor does not match/
+  );
+
+  const countCalls = [];
+  const counted = await countMailboxMessages(
+    config(),
+    "Shared",
+    undefined,
+    "2026-07-01",
+    "2026-07-22",
+    "all",
+    { mailbox },
+    {
+      async get(url) {
+        countCalls.push(url);
+        if (url.includes("deleteditems")) return { id: "deleted" };
+        return { value: [{ id: "m1", subject: "Shared result", receivedDateTime: "2026-07-20T00:00:00Z" }] };
+      }
+    }
+  );
+  assert.equal(counted.count.mailbox.address, "cto@example.com");
+  assert.equal(counted.count.matchedCount, 1);
+  assert.match(countCalls[1], /^\/users\/cto-user-id\/messages\?/);
 });
 
 test("mail search returns a resumable partial result when its time budget expires", async () => {
@@ -214,6 +307,21 @@ function config() {
       maxMailFetchLimit: 20
     }
   };
+}
+
+async function sharedMailbox(address, id) {
+  return resolveMailboxTarget(config(), address, {
+    async get() {
+      return {
+        value: [{
+          id,
+          displayName: "Shared mailbox",
+          mail: address,
+          userPrincipalName: `${id}@tenant.onmicrosoft.com`
+        }]
+      };
+    }
+  });
 }
 
 function graphUrl(relativePath) {

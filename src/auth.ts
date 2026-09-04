@@ -30,7 +30,9 @@ import {
 
 const scopes = [
   "User.Read",
+  "User.ReadBasic.All",
   "Mail.ReadWrite",
+  "Mail.Read.Shared",
   "Chat.Read",
   "Team.ReadBasic.All",
   "Channel.ReadBasic.All",
@@ -281,7 +283,7 @@ export async function getAuthStatus(config: AppConfig): Promise<AuthStatus> {
 export async function getAccessToken(config: AppConfig): Promise<string> {
   if (prepareAuthProfile(config, scopes).migrationRequired) {
     throw new Error(
-      "Hare M365 Agent was updated to a new Microsoft application. Complete Microsoft sign-in once, then retry."
+      "Hare M365 Agent authentication permissions or application changed. Complete Microsoft sign-in once, then retry."
     );
   }
   const pca = await buildPca(config);

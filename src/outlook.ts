@@ -1,6 +1,14 @@
 import type { AppConfig } from "./config.js";
 import { decodeGraphContinuation, encodeGraphContinuation } from "./continuation.js";
 import { graphGet, type GraphPage, type GraphRequestOptions } from "./graph.js";
+import {
+  mailboxKey,
+  mailboxPath,
+  mailboxReference,
+  selfMailboxTarget,
+  type MailboxReference,
+  type MailboxTarget
+} from "./outlook-mailbox.js";
 import { resolveSearchRange, type SearchRange } from "./search-range.js";
 
 export type MailSummary = {
@@ -45,6 +53,7 @@ export type MailFolderScope = "all" | "inbox" | "sent";
 
 export type MailSearchResult = {
   search: {
+    mailbox: MailboxReference;
     query: string;
     folderScope: MailFolderScope;
     range: SearchRange;
@@ -64,6 +73,7 @@ export type MailSearchResult = {
 
 export type MailListResult = {
   list: {
+    mailbox: MailboxReference;
     folderScope: MailFolderScope;
     returnedCount: number;
     excludedDeletedItems: boolean;
@@ -73,6 +83,7 @@ export type MailListResult = {
 
 export type FlaggedMailResult = {
   flagged: {
+    mailbox: MailboxReference;
     folderScope: MailFolderScope;
     range: SearchRange;
     returnedCount: number;
@@ -103,6 +114,7 @@ const mailSearchSelect = `${mailSelect},body`;
 
 export type MailCountResult = {
   count: {
+    mailbox: MailboxReference;
     subjectContains?: string;
     fromContains?: string;
     folderScope: MailFolderScope;
@@ -130,6 +142,7 @@ export type MailSearchOptions = {
   cursor?: string;
   timeBudgetMs?: number;
   now?: () => number;
+  mailbox?: MailboxTarget;
 };
 
 export type MailCountOptions = MailSearchOptions;
@@ -170,19 +183,24 @@ export async function listInbox(config: AppConfig, limit: number): Promise<MailS
 export async function listRecentMailbox(
   config: AppConfig,
   folderScope: MailFolderScope,
-  limit: number
+  limit: number,
+  mailbox: MailboxTarget = selfMailboxTarget(),
+  client: OutlookGraphClient = defaultOutlookClient(config)
 ): Promise<MailListResult> {
   const maxResults = normalizeSearchLimit(limit, config.policy.maxMailFetchLimit);
-  const deletedItemsFolderId = folderScope === "all" ? await getDeletedItemsFolderId(config) : undefined;
+  const deletedItemsFolderId = folderScope === "all"
+    ? await getDeletedItemsFolderId(client, mailbox)
+    : undefined;
   const collected = await collectMessages(
-    config,
-    buildRecentMessagesPath(folderScope, maxResults),
+    client,
+    buildRecentMessagesPath(folderScope, maxResults, mailbox),
     maxResults,
     deletedItemsFolderId
   );
 
   return {
     list: {
+      mailbox: mailboxReference(mailbox),
       folderScope,
       returnedCount: collected.messages.length,
       excludedDeletedItems: folderScope === "all"
@@ -196,7 +214,9 @@ export async function listFlaggedMessages(
   since: string | undefined,
   until: string | undefined,
   folderScope: MailFolderScope,
-  requestedLimit: number
+  requestedLimit: number,
+  mailbox: MailboxTarget = selfMailboxTarget(),
+  client: OutlookGraphClient = defaultOutlookClient(config)
 ): Promise<FlaggedMailResult> {
   const range = resolveSearchRange(
     since,
@@ -206,16 +226,19 @@ export async function listFlaggedMessages(
     config.timeZone
   );
   const maxResults = normalizeSearchLimit(requestedLimit, config.policy.maxSearchResults);
-  const deletedItemsFolderId = folderScope === "all" ? await getDeletedItemsFolderId(config) : undefined;
+  const deletedItemsFolderId = folderScope === "all"
+    ? await getDeletedItemsFolderId(client, mailbox)
+    : undefined;
   const collected = await collectMessages(
-    config,
-    buildFlaggedMessagesPath(folderScope, range, maxResults),
+    client,
+    buildFlaggedMessagesPath(folderScope, range, maxResults, mailbox),
     maxResults,
     deletedItemsFolderId
   );
 
   return {
     flagged: {
+      mailbox: mailboxReference(mailbox),
       folderScope,
       range,
       returnedCount: collected.messages.length,
@@ -250,12 +273,14 @@ export async function searchMailbox(
     config.timeZone
   );
   const maxResults = normalizePageLimit(requestedLimit, config.policy.maxSearchResults);
-  const folderPath = getFolderPath(folderScope);
+  const mailbox = options.mailbox ?? selfMailboxTarget();
+  const folderPath = getFolderPath(folderScope, mailbox);
   const dateProperty = getDateProperty(folderScope);
   const kqlDateProperty = dateProperty === "sentDateTime" ? "sent" : "received";
   const kql = `${trimmedQuery} AND ${kqlDateProperty}>=${range.since} AND ${kqlDateProperty}<=${range.until}`;
   const criteriaKey = JSON.stringify({
     query: trimmedQuery,
+    mailbox: mailboxKey(mailbox),
     folderScope,
     startDateTime: range.startDateTime,
     endDateTimeExclusive: range.endDateTimeExclusive
@@ -280,7 +305,7 @@ export async function searchMailbox(
 
   try {
     deletedItemsFolderId = folderScope === "all"
-      ? await getDeletedItemsFolderId(config, client, {
+      ? await getDeletedItemsFolderId(client, mailbox, {
           totalTimeoutMs: Math.max(1, deadline - now())
         })
       : undefined;
@@ -305,6 +330,7 @@ export async function searchMailbox(
   const continuationAvailable = Boolean(nextUrl);
   return {
     search: {
+      mailbox: mailboxReference(mailbox),
       query: trimmedQuery,
       folderScope,
       range,
@@ -344,7 +370,8 @@ export async function countMailboxMessages(
     new Date(),
     config.timeZone
   );
-  const folderPath = getFolderPath(folderScope);
+  const mailbox = options.mailbox ?? selfMailboxTarget();
+  const folderPath = getFolderPath(folderScope, mailbox);
   const dateProperty = getDateProperty(folderScope);
   const timeBudgetMs = normalizeTimeBudget(options.timeBudgetMs ?? defaultSearchTimeBudgetMs);
   const now = options.now ?? Date.now;
@@ -363,6 +390,7 @@ export async function countMailboxMessages(
   const criteriaKey = JSON.stringify({
     subjectNeedle,
     fromNeedle,
+    mailbox: mailboxKey(mailbox),
     folderScope,
     startDateTime: range.startDateTime,
     endDateTimeExclusive: range.endDateTimeExclusive,
@@ -380,7 +408,7 @@ export async function countMailboxMessages(
 
   try {
     deletedItemsFolderId = folderScope === "all"
-      ? await getDeletedItemsFolderId(config, client, {
+      ? await getDeletedItemsFolderId(client, mailbox, {
           totalTimeoutMs: Math.max(1, deadline - now())
         })
       : undefined;
@@ -442,6 +470,7 @@ export async function countMailboxMessages(
 
   return {
     count: {
+      mailbox: mailboxReference(mailbox),
       subjectContains: subjectContains?.trim() || undefined,
       fromContains: fromContains?.trim() || undefined,
       folderScope,
@@ -501,20 +530,25 @@ export function toMailSummary(mail: GraphMail): MailSummary {
   };
 }
 
-export function buildRecentMessagesPath(folderScope: MailFolderScope, limit: number): string {
+export function buildRecentMessagesPath(
+  folderScope: MailFolderScope,
+  limit: number,
+  mailbox: MailboxTarget = selfMailboxTarget()
+): string {
   const dateProperty = getDateProperty(folderScope);
   const params = new URLSearchParams({
     "$top": String(Math.min(100, limit)),
     "$orderby": `${dateProperty} desc`,
     "$select": mailSelect
   });
-  return `${getFolderPath(folderScope)}?${params.toString()}`;
+  return `${getFolderPath(folderScope, mailbox)}?${params.toString()}`;
 }
 
 export function buildFlaggedMessagesPath(
   folderScope: MailFolderScope,
   range: SearchRange,
-  limit: number
+  limit: number,
+  mailbox: MailboxTarget = selfMailboxTarget()
 ): string {
   const dateProperty = getDateProperty(folderScope);
   const params = new URLSearchParams({
@@ -527,11 +561,11 @@ export function buildFlaggedMessagesPath(
     "$orderby": `${dateProperty} desc`,
     "$select": mailSearchSelect
   });
-  return `${getFolderPath(folderScope)}?${params.toString()}`;
+  return `${getFolderPath(folderScope, mailbox)}?${params.toString()}`;
 }
 
 async function collectMessages(
-  config: AppConfig,
+  client: OutlookGraphClient,
   initialUrl: string,
   maxResults: number,
   deletedItemsFolderId?: string
@@ -541,7 +575,7 @@ async function collectMessages(
   const messages: GraphMail[] = [];
 
   while (nextUrl && messages.length < maxResults) {
-    const page: GraphPage<GraphMail> = await graphGet<GraphPage<GraphMail>>(config, nextUrl);
+    const page: GraphPage<GraphMail> = await client.get<GraphPage<GraphMail>>(nextUrl);
     const eligible = (page.value ?? []).filter(
       (mail) => !deletedItemsFolderId || mail.parentFolderId !== deletedItemsFolderId
     );
@@ -561,10 +595,10 @@ function formatRecipients(recipients: GraphMail["toRecipients"]): string[] | und
     .filter((value): value is string => Boolean(value));
 }
 
-function getFolderPath(folderScope: MailFolderScope): string {
-  if (folderScope === "inbox") return "/me/mailFolders/inbox/messages";
-  if (folderScope === "sent") return "/me/mailFolders/sentitems/messages";
-  return "/me/messages";
+function getFolderPath(folderScope: MailFolderScope, mailbox: MailboxTarget): string {
+  if (folderScope === "inbox") return mailboxPath(mailbox, "/mailFolders/inbox/messages");
+  if (folderScope === "sent") return mailboxPath(mailbox, "/mailFolders/sentitems/messages");
+  return mailboxPath(mailbox, "/messages");
 }
 
 function getDateProperty(folderScope: MailFolderScope): "receivedDateTime" | "sentDateTime" {
@@ -572,12 +606,12 @@ function getDateProperty(folderScope: MailFolderScope): "receivedDateTime" | "se
 }
 
 async function getDeletedItemsFolderId(
-  config: AppConfig,
-  client: OutlookGraphClient = defaultOutlookClient(config),
+  client: OutlookGraphClient,
+  mailbox: MailboxTarget,
   options?: GraphRequestOptions
 ): Promise<string> {
   const folder = await client.get<GraphMailFolder>(
-    "/me/mailFolders/deleteditems?$select=id",
+    `${mailboxPath(mailbox, "/mailFolders/deleteditems")}?$select=id`,
     options
   );
   return folder.id;

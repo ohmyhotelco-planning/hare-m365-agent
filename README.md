@@ -39,7 +39,7 @@ Cowork의 도메인 허용 기준은 `설정 > 기능 > 도메인 허용 목록`
 
 기본 Azure Application 설정은 `hare.config.json`에 포함됩니다. 일반 사용자는 `.env`를 만들거나 수정하지 않습니다. 과거 POC에서 만든 `.env`가 남아 있어도 앱 설정에는 사용되지 않습니다.
 
-Azure Application 또는 요청 권한이 변경되면 Hare는 기존 앱의 인증 캐시와 진행 중인 로그인 상태만 자동 초기화합니다. 다운로드, 조회 결과, 로그와 Claude 운영 규칙은 유지됩니다. startup의 `authReason`이 `AUTH_APP_CHANGED`이면 새 앱으로 Microsoft 로그인을 한 번 완료한 뒤 기존과 같이 사용합니다.
+Azure Application 또는 요청 권한이 변경되면 Hare는 기존 앱의 인증 캐시와 진행 중인 로그인 상태만 자동 초기화합니다. 다운로드, 조회 결과, 로그와 Claude 운영 규칙은 유지됩니다. startup의 `authReason`이 `AUTH_APP_CHANGED`이면 변경된 인증 권한 또는 앱으로 Microsoft 로그인을 한 번 완료한 뒤 기존과 같이 사용합니다.
 
 개발자용 로컬 override가 필요하면 실행 프로세스의 `OMH_M365_CLIENT_ID`, `OMH_M365_TENANT_ID` 환경 변수를 명시적으로 설정합니다.
 
@@ -85,9 +85,10 @@ node dist/cli.js outlook recent --folder all --limit 10
 node dist/cli.js outlook inbox --limit 10
 node dist/cli.js outlook flagged --folder all --limit 1000
 node dist/cli.js outlook search --query "나이스페이 OR nicepay" --since 2026-06-26 --until 2026-07-10 --folder all
+node dist/cli.js outlook search --mailbox "CTO" --query "keyword" --folder all
 node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
-node dist/cli.js outlook attachments list --message-id "<message-id>"
-node dist/cli.js outlook attachments download --message-id "<message-id>" --attachment-id "<attachment-id>"
+node dist/cli.js outlook attachments list --mailbox "<shared-mailbox-address>" --message-id "<message-id>"
+node dist/cli.js outlook attachments download --mailbox "<shared-mailbox-address>" --message-id "<message-id>" --attachment-id "<attachment-id>"
 node dist/cli.js outlook draft new --to "user@example.com" --subject "제목" --body "본문"
 node dist/cli.js outlook draft reply --message-id "<message-id>" --body "답장 본문"
 node dist/cli.js outlook draft reply --message-id "<message-id>" --reply-all --body "전체답장 본문"
@@ -112,7 +113,9 @@ Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작
 
 일반적인 메일 조회와 최근 메일 조회는 `outlook recent --folder all`을 사용합니다. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상입니다. `outlook inbox`는 받은편지함이 명시된 요청에만 사용합니다. 플래그된 메일은 `outlook flagged --folder all`로 조회하며 모든 메일 결과에는 `flagStatus`가 포함됩니다.
 
-메일 첨부파일은 메일 조회 결과의 `id`를 `outlook attachments list --message-id`에 전달해 목록을 확인하고, 반환된 첨부파일 `id`를 `outlook attachments download --attachment-id`에 전달해 내려받습니다. 파일은 Hare의 `downloadsDir`에 저장되며 SharePoint/Teams/OneDrive 파일과 동일한 다운로드 정책이 적용됩니다. Excel 등 내려받은 파일의 내용 분석은 다운로드 완료 후 로컬 파일 처리 도구로 수행합니다.
+`--mailbox <name-or-address>`가 없으면 Outlook 명령은 로그인한 사용자의 사서함만 조회합니다. 사용자가 `CTO 공유 사서함`처럼 대상을 명시하면 `recent`, `flagged`, `search`, `count`, 첨부파일 목록·다운로드에 `--mailbox`를 사용합니다. 이름은 기본 디렉터리 정보로 주소를 해석하며, 후보가 여러 개면 정확한 주소를 확인하기 전까지 중단합니다. 공유 사서함 오류가 발생해도 본인 사서함으로 자동 대체하지 않습니다.
+
+메일 첨부파일은 메일 조회 결과의 `id`를 `outlook attachments list --message-id`에 전달해 목록을 확인하고, 반환된 첨부파일 `id`를 `outlook attachments download --attachment-id`에 전달해 내려받습니다. 공유 사서함 메일이면 조회에 사용한 동일한 `--mailbox`를 두 첨부파일 명령에도 전달합니다. 파일은 Hare의 `downloadsDir`에 저장되며 SharePoint/Teams/OneDrive 파일과 동일한 다운로드 정책이 적용됩니다. Excel 등 내려받은 파일의 내용 분석은 다운로드 완료 후 로컬 파일 처리 도구로 수행합니다.
 
 Teams 채팅 첨부파일은 메시지의 `chatId`와 `id`를 `teams attachments list`에 전달해 안전한 메타데이터를 확인하고, 반환된 첨부파일 `id`를 `teams attachments download`에 전달해 내려받습니다. Microsoft Search 색인에서 파일을 찾지 못해도 Teams 메시지에 포함된 회사 SharePoint 직접 경로를 해석하며, 원본 공유 URL은 결과에 출력하지 않습니다. 기존 다운로드 크기 상한과 승인 절차를 그대로 적용합니다.
 

@@ -66,7 +66,7 @@ test("startup migrates a legacy cache and requests one sign-in for the new appli
   assert.equal(output.status.authReason, "AUTH_APP_CHANGED");
   assert.equal(output.setup.state, "LOGIN_START_REQUIRED");
   assert.equal(output.setup.nextAction, "RUN_LOGIN_START");
-  assert.match(output.setup.instruction, /updated to a new Microsoft application/);
+  assert.match(output.setup.instruction, /authentication permissions or application changed/);
   assert.deepEqual(output.requiredDomains, [
     "github.com",
     "registry.npmjs.org",
@@ -153,6 +153,8 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /default lookback.*90 days/i);
   assert.match(rules, /outlook attachments list/);
   assert.match(rules, /outlook attachments download/);
+  assert.match(rules, /Without --mailbox.*signed-in user's mailbox/);
+  assert.match(rules, /Never fall back to the signed-in user's mailbox/);
   assert.match(rules, /teams attachments list/);
   assert.match(rules, /teams attachments download/);
   assert.match(rules, /larger download returns AWAITING_USER_APPROVAL/);
@@ -227,6 +229,8 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /outlook flagged --folder all/);
   assert.match(result.stdout, /outlook attachments list/);
   assert.match(result.stdout, /outlook attachments download/);
+  assert.match(result.stdout, /--mailbox/);
+  assert.match(result.stdout, /공유 사서함/);
   assert.match(result.stdout, /teams attachments list/);
   assert.match(result.stdout, /teams attachments download/);
   assert.match(result.stdout, /outlook draft new/);
@@ -406,7 +410,9 @@ test("Outlook and file search expose bounded continuation controls", () => {
   assert.equal(files.status, 0, files.stderr);
   assert.match(outlook.stdout, /--limit <number>.*default:\s*"100"/s);
   assert.match(outlook.stdout, /--cursor <cursor>/);
+  assert.match(outlook.stdout, /--mailbox <name-or-address>/);
   assert.match(count.stdout, /--cursor <cursor>/);
+  assert.match(count.stdout, /--mailbox <name-or-address>/);
   assert.match(files.stdout, /--offset <number>.*default: "0"/s);
 });
 
@@ -420,15 +426,32 @@ test("Outlook exposes whole-mailbox recent and flagged commands", () => {
   assert.match(result.stdout, /attachments/);
 });
 
+test("Outlook shared mailbox targeting is optional on reads and absent from drafts", () => {
+  const dataDir = makeDataDir("hare-outlook-shared-help-");
+  for (const command of ["recent", "flagged"]) {
+    const result = run(["outlook", command, "--help"], dataDir);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /--mailbox <name-or-address>/);
+    assert.match(result.stdout, /shared mailbox display name or exact email\s+address/);
+  }
+  const draft = run(["outlook", "draft", "new", "--help"], dataDir);
+  assert.equal(draft.status, 0, draft.stderr);
+  assert.doesNotMatch(draft.stdout, /--mailbox/);
+});
+
 test("Outlook exposes attachment list and download commands", () => {
   const dataDir = makeDataDir("hare-outlook-attachment-help-");
   const result = run(["outlook", "attachments", "--help"], dataDir);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /list/);
   assert.match(result.stdout, /download/);
+  const list = run(["outlook", "attachments", "list", "--help"], dataDir);
+  assert.equal(list.status, 0, list.stderr);
+  assert.match(list.stdout, /--mailbox <name-or-address>/);
   const download = run(["outlook", "attachments", "download", "--help"], dataDir);
   assert.equal(download.status, 0, download.stderr);
   assert.match(download.stdout, /--approval-token/);
+  assert.match(download.stdout, /--mailbox <name-or-address>/);
 });
 
 

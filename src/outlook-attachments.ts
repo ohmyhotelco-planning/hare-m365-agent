@@ -9,6 +9,14 @@ import {
   type DownloadResponse
 } from "./downloads.js";
 import { graphDownloadResponse, graphGet, type GraphPage } from "./graph.js";
+import {
+  mailboxKey,
+  mailboxPath,
+  mailboxReference,
+  selfMailboxTarget,
+  type MailboxReference,
+  type MailboxTarget
+} from "./outlook-mailbox.js";
 
 export type OutlookAttachmentSummary = {
   id: string;
@@ -23,6 +31,7 @@ export type OutlookAttachmentSummary = {
 
 export type OutlookAttachmentListResult = {
   list: {
+    mailbox: MailboxReference;
     messageId: string;
     returnedCount: number;
     maxResults: number;
@@ -46,6 +55,12 @@ export type OutlookAttachmentGraphClient = {
   download(pathOrUrl: string): Promise<DownloadResponse>;
 };
 
+type PendingOutlookAttachmentApproval = PendingDownloadApproval & {
+  preview: PendingDownloadApproval["preview"] & {
+    mailbox: MailboxReference;
+  };
+};
+
 const attachmentSelect = [
   "id",
   "name",
@@ -59,13 +74,18 @@ export async function listMessageAttachments(
   config: AppConfig,
   messageId: string,
   limit: number,
-  client: OutlookAttachmentGraphClient = defaultAttachmentClient(config)
+  client: OutlookAttachmentGraphClient = defaultAttachmentClient(config),
+  mailbox: MailboxTarget = selfMailboxTarget()
 ): Promise<OutlookAttachmentListResult> {
   const normalizedMessageId = requireIdentifier(messageId, "message-id");
   if (!Number.isFinite(limit) || limit < 1) throw new Error("limit must be a positive number.");
 
   const maxResults = Math.min(Math.floor(limit), config.policy.maxSearchResults);
-  let nextUrl: string | undefined = buildAttachmentListPath(normalizedMessageId, maxResults);
+  let nextUrl: string | undefined = buildAttachmentListPath(
+    normalizedMessageId,
+    maxResults,
+    mailbox
+  );
   const attachments: OutlookAttachmentSummary[] = [];
   let limitReached = false;
 
@@ -80,6 +100,7 @@ export async function listMessageAttachments(
 
   return {
     list: {
+      mailbox: mailboxReference(mailbox),
       messageId: normalizedMessageId,
       returnedCount: attachments.length,
       maxResults,
@@ -95,16 +116,26 @@ export async function downloadMessageAttachment(
   attachmentId: string,
   filename?: string,
   approvalToken?: string,
-  client: OutlookAttachmentGraphClient = defaultAttachmentClient(config)
+  client: OutlookAttachmentGraphClient = defaultAttachmentClient(config),
+  mailbox: MailboxTarget = selfMailboxTarget()
 ): Promise<
-  | { stage: "DOWNLOADED"; outputPath: string; attachment: OutlookAttachmentSummary }
-  | PendingDownloadApproval
+  | {
+      stage: "DOWNLOADED";
+      outputPath: string;
+      mailbox: MailboxReference;
+      attachment: OutlookAttachmentSummary;
+    }
+  | PendingOutlookAttachmentApproval
 > {
   if (!config.policy.allowDownloads) throw new Error("Downloads are disabled by policy.");
 
   const normalizedMessageId = requireIdentifier(messageId, "message-id");
   const normalizedAttachmentId = requireIdentifier(attachmentId, "attachment-id");
-  const metadataPath = buildAttachmentMetadataPath(normalizedMessageId, normalizedAttachmentId);
+  const metadataPath = buildAttachmentMetadataPath(
+    normalizedMessageId,
+    normalizedAttachmentId,
+    mailbox
+  );
   const attachment = toAttachmentSummary(await client.get<GraphAttachment>(metadataPath));
 
   if (!attachment.downloadable) {
@@ -119,17 +150,25 @@ export async function downloadMessageAttachment(
     config,
     {
       source: "outlook",
-      resourceKey: `${normalizedMessageId}\u0000${normalizedAttachmentId}`,
+      resourceKey: `${mailboxKey(mailbox)}\u0000${normalizedMessageId}\u0000${normalizedAttachmentId}`,
       name: attachment.name || outputName,
       size: attachment.size ?? Number.NaN,
       outputName
     },
     approvalToken
   );
-  if (!authorization.approved) return authorization.pending;
+  if (!authorization.approved) {
+    return {
+      ...authorization.pending,
+      preview: {
+        ...authorization.pending.preview,
+        mailbox: mailboxReference(mailbox)
+      }
+    };
+  }
 
   const response = await client.download(
-    buildAttachmentContentPath(normalizedMessageId, normalizedAttachmentId)
+    buildAttachmentContentPath(normalizedMessageId, normalizedAttachmentId, mailbox)
   );
   const outputPath = await saveDownloadResponse(
     config,
@@ -137,19 +176,34 @@ export async function downloadMessageAttachment(
     outputName,
     authorization.maxBytes
   );
-  return { stage: "DOWNLOADED", outputPath, attachment };
+  return { stage: "DOWNLOADED", outputPath, mailbox: mailboxReference(mailbox), attachment };
 }
 
-export function buildAttachmentListPath(messageId: string, limit: number): string {
-  return `/me/messages/${encodeURIComponent(messageId)}/attachments?$select=${attachmentSelect}&$top=${Math.min(100, limit)}`;
+export function buildAttachmentListPath(
+  messageId: string,
+  limit: number,
+  mailbox: MailboxTarget = selfMailboxTarget()
+): string {
+  return `${mailboxPath(mailbox, `/messages/${encodeURIComponent(messageId)}/attachments`)}?$select=${attachmentSelect}&$top=${Math.min(100, limit)}`;
 }
 
-export function buildAttachmentMetadataPath(messageId: string, attachmentId: string): string {
-  return `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}?$select=${attachmentSelect}`;
+export function buildAttachmentMetadataPath(
+  messageId: string,
+  attachmentId: string,
+  mailbox: MailboxTarget = selfMailboxTarget()
+): string {
+  return `${mailboxPath(mailbox, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`)}?$select=${attachmentSelect}`;
 }
 
-export function buildAttachmentContentPath(messageId: string, attachmentId: string): string {
-  return `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
+export function buildAttachmentContentPath(
+  messageId: string,
+  attachmentId: string,
+  mailbox: MailboxTarget = selfMailboxTarget()
+): string {
+  return mailboxPath(
+    mailbox,
+    `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`
+  );
 }
 
 function toAttachmentSummary(attachment: GraphAttachment): OutlookAttachmentSummary {

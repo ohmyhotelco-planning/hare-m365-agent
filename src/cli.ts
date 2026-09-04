@@ -25,6 +25,7 @@ import {
   downloadMessageAttachment,
   listMessageAttachments
 } from "./outlook-attachments.js";
+import { resolveMailboxTarget, runMailboxRead } from "./outlook-mailbox.js";
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
 import { exportSharePointFiles } from "./sharepoint-export.js";
 import { listChatMessagesPage, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
@@ -158,9 +159,10 @@ node dist/cli.js outlook recent --folder all --limit 10
 node dist/cli.js outlook inbox --limit 10
 node dist/cli.js outlook flagged --folder all --limit 1000
 node dist/cli.js outlook search --query "keyword" --since 2026-04-01 --until 2026-07-10 --folder all
+node dist/cli.js outlook search --mailbox "CTO" --query "keyword" --folder all
 node dist/cli.js outlook count --subject-contains "[RPA]" --since 2024-07-10 --until 2026-07-10 --folder all
-node dist/cli.js outlook attachments list --message-id "<message-id>"
-node dist/cli.js outlook attachments download --message-id "<message-id>" --attachment-id "<attachment-id>"
+node dist/cli.js outlook attachments list --mailbox "<shared-mailbox-address>" --message-id "<message-id>"
+node dist/cli.js outlook attachments download --mailbox "<shared-mailbox-address>" --message-id "<message-id>" --attachment-id "<attachment-id>"
 node dist/cli.js outlook draft new --to "user@example.com" --subject "Subject" --body "Body"
 node dist/cli.js outlook draft reply --message-id "<message-id>" --body "Reply body"
 node dist/cli.js outlook draft reply --message-id "<message-id>" --reply-all --body "Reply-all body"
@@ -184,6 +186,8 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - Hare가 지원하지 않거나 실행에 실패하면 실패한 Hare 단계와 오류만 보고하고 멈춘다. 다른 도구나 데이터 소스로 우회하지 않는다.
 - 일반적인 메일 조회와 최근 메일 요청은 outlook recent --folder all을 사용해 삭제된 항목을 제외한 전체 메일함을 대상으로 한다. outlook inbox는 사용자가 받은편지함을 명시한 경우에만 사용한다.
 - 플래그된 메일 요청은 outlook flagged --folder all을 사용한다. 모든 메일 조회 결과의 flagStatus를 함께 확인한다.
+- --mailbox가 없는 Outlook 명령은 로그인한 사용자의 사서함만 조회한다. 사용자가 공유 사서함 이름이나 주소를 명시하면 recent, flagged, search, count에 --mailbox를 사용한다. 이름 후보가 여러 개면 정확한 주소를 확인하고, 공유 사서함 조회가 실패해도 본인 사서함으로 대체하지 않는다.
+- 공유 사서함 메일의 첨부파일은 조회에 사용한 동일한 --mailbox를 attachments list와 attachments download에도 전달한다.
 - 사용자가 기간을 지정한 조회는 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 search 명령의 --since/--until에 반영한다.
 - 사용자가 기간을 지정하지 않은 검색은 최근 90일을 조회한다. 결과 JSON의 search.range.notice를 사용자에게 알려 실제 조회 범위를 명확히 한다.
 - search.limitReached가 true이면 일부 결과만 반환된 것이므로 사용자에게 한도 도달 사실을 알린다.
@@ -528,15 +532,21 @@ const outlook = program.command("outlook").description("Outlook read commands");
 outlook
   .command("recent")
   .description("List recent messages across the mailbox; deleted items are excluded for all scope")
+  .option("--mailbox <name-or-address>", "shared mailbox display name or exact email address")
   .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
   .option("--limit <number>", "maximum message count", "10")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
-  .action(async (options: { folder: string; limit: string; out?: string }) => {
+  .action(async (options: { mailbox?: string; folder: string; limit: string; out?: string }) => {
     requireConfigured(config);
-    const data = await listRecentMailbox(
-      config,
-      parseMailFolderScope(options.folder),
-      Number(options.limit)
+    const mailbox = await resolveMailboxTarget(config, options.mailbox);
+    const data = await runMailboxRead(
+      mailbox,
+      () => listRecentMailbox(
+        config,
+        parseMailFolderScope(options.folder),
+        Number(options.limit),
+        mailbox
+      )
     );
     emitJson(data, options.out);
   });
@@ -555,6 +565,7 @@ outlook
 outlook
   .command("flagged")
   .description("List flagged Outlook messages by date range")
+  .option("--mailbox <name-or-address>", "shared mailbox display name or exact email address")
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
   .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
@@ -564,17 +575,23 @@ outlook
     async (options: {
       since?: string;
       until?: string;
+      mailbox?: string;
       folder: string;
       limit: string;
       out?: string;
     }) => {
       requireConfigured(config);
-      const data = await listFlaggedMessages(
-        config,
-        options.since,
-        options.until,
-        parseMailFolderScope(options.folder),
-        Number(options.limit)
+      const mailbox = await resolveMailboxTarget(config, options.mailbox);
+      const data = await runMailboxRead(
+        mailbox,
+        () => listFlaggedMessages(
+          config,
+          options.since,
+          options.until,
+          parseMailFolderScope(options.folder),
+          Number(options.limit),
+          mailbox
+        )
       );
       emitJson(data, options.out);
     }
@@ -584,6 +601,7 @@ outlook
   .command("search")
   .description("Search Outlook messages by keyword and date range")
   .requiredOption("--query <text>", "search query or Outlook KQL")
+  .option("--mailbox <name-or-address>", "shared mailbox display name or exact email address")
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
   .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
@@ -593,6 +611,7 @@ outlook
   .action(
     async (options: {
       query: string;
+      mailbox?: string;
       since?: string;
       until?: string;
       folder: string;
@@ -601,14 +620,18 @@ outlook
       out?: string;
     }) => {
       requireConfigured(config);
-      const data = await searchMailbox(
-        config,
-        options.query,
-        options.since,
-        options.until,
-        parseMailFolderScope(options.folder),
-        Number(options.limit),
-        { cursor: options.cursor }
+      const mailbox = await resolveMailboxTarget(config, options.mailbox);
+      const data = await runMailboxRead(
+        mailbox,
+        () => searchMailbox(
+          config,
+          options.query,
+          options.since,
+          options.until,
+          parseMailFolderScope(options.folder),
+          Number(options.limit),
+          { cursor: options.cursor, mailbox }
+        )
       );
       emitJson(data, options.out);
     }
@@ -617,6 +640,7 @@ outlook
 outlook
   .command("count")
   .description("Count Outlook messages exactly by scanning every page in a date range")
+  .option("--mailbox <name-or-address>", "shared mailbox display name or exact email address")
   .option("--subject-contains <text>", "literal text that must appear in the subject")
   .option("--from <text>", "text that must appear in the sender name or address")
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
@@ -628,6 +652,7 @@ outlook
     async (options: {
       subjectContains?: string;
       from?: string;
+      mailbox?: string;
       since?: string;
       until?: string;
       folder: string;
@@ -635,14 +660,18 @@ outlook
       out?: string;
     }) => {
       requireConfigured(config);
-      const data = await countMailboxMessages(
-        config,
-        options.subjectContains,
-        options.from,
-        options.since,
-        options.until,
-        parseMailFolderScope(options.folder),
-        { cursor: options.cursor }
+      const mailbox = await resolveMailboxTarget(config, options.mailbox);
+      const data = await runMailboxRead(
+        mailbox,
+        () => countMailboxMessages(
+          config,
+          options.subjectContains,
+          options.from,
+          options.since,
+          options.until,
+          parseMailFolderScope(options.folder),
+          { cursor: options.cursor, mailbox }
+        )
       );
       emitJson(data, options.out);
     }
@@ -656,11 +685,27 @@ outlookAttachments
   .command("list")
   .description("List attachment metadata for one Outlook message")
   .requiredOption("--message-id <id>", "message ID returned by an Outlook read command")
+  .option("--mailbox <name-or-address>", "shared mailbox used to retrieve the message")
   .option("--limit <number>", "maximum attachment count", "20")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
-  .action(async (options: { messageId: string; limit: string; out?: string }) => {
+  .action(async (options: {
+    messageId: string;
+    mailbox?: string;
+    limit: string;
+    out?: string;
+  }) => {
     requireConfigured(config);
-    const data = await listMessageAttachments(config, options.messageId, Number(options.limit));
+    const mailbox = await resolveMailboxTarget(config, options.mailbox);
+    const data = await runMailboxRead(
+      mailbox,
+      () => listMessageAttachments(
+        config,
+        options.messageId,
+        Number(options.limit),
+        undefined,
+        mailbox
+      )
+    );
     emitJson(data, options.out);
   });
 
@@ -669,6 +714,7 @@ outlookAttachments
   .description("Download one Outlook message attachment")
   .requiredOption("--message-id <id>", "message ID returned by an Outlook read command")
   .requiredOption("--attachment-id <id>", "attachment ID returned by outlook attachments list")
+  .option("--mailbox <name-or-address>", "shared mailbox used to retrieve the message")
   .option("--name <filename>", "output filename; defaults to the attachment name")
   .option(
     "--approval-token <token>",
@@ -677,16 +723,23 @@ outlookAttachments
   .action(async (options: {
     messageId: string;
     attachmentId: string;
+    mailbox?: string;
     name?: string;
     approvalToken?: string;
   }) => {
     requireConfigured(config);
-    const data = await downloadMessageAttachment(
-      config,
-      options.messageId,
-      options.attachmentId,
-      options.name,
-      options.approvalToken
+    const mailbox = await resolveMailboxTarget(config, options.mailbox);
+    const data = await runMailboxRead(
+      mailbox,
+      () => downloadMessageAttachment(
+        config,
+        options.messageId,
+        options.attachmentId,
+        options.name,
+        options.approvalToken,
+        undefined,
+        mailbox
+      )
     );
     emitJson({ ok: true, ...data });
   });
