@@ -114,7 +114,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address from a cache, example, or prior conversation. If authReason is AUTH_APP_CHANGED, explain only that Hare authentication permissions or its Microsoft application changed and one Microsoft sign-in is required.
 4. LOGIN_COMPLETE_REQUIRED: wait until the user says the browser login is complete, then run setup.nextCommand once.
 5. FOLDER_REQUIRED: stop and tell the user to open a new Cowork task with the existing Hare project selected.
-6. BLOCKED with TOKEN_ACQUISITION_FAILED or a network error: report the blocker and stop. Do not run login-start or replace the existing cache.
+6. BLOCKED with AUTH_CHECK_BLOCKED means token validity is unknown: loggedIn=null and tokenUsable=null do not mean signed out or expired. Keep the existing cache. Ask for connectivity to be restored in an approved execution environment, then recheck the same cache. Do not start a new login, reset the cache, bypass network policy, or run M365 queries. BLOCKED with TOKEN_ACQUISITION_FAILED or a network error also requires reporting the blocker and stopping without login-start or cache replacement.
 7. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.
 
 ## Cowork network permission

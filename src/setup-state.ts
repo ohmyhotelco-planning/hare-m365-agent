@@ -9,8 +9,8 @@ export type SetupState =
 export type SetupSnapshot = {
   configured: boolean;
   dataDirPersistent: boolean;
-  loggedIn: boolean;
-  tokenUsable: boolean;
+  loggedIn: boolean | null;
+  tokenUsable: boolean | null;
   authMigrationRequired: boolean;
   authReason?: string;
   pendingLoginStateExists: boolean;
@@ -35,6 +35,7 @@ export function determineSetupState(snapshot: SetupSnapshot): SetupState {
   if (!snapshot.dataDirPersistent) return "FOLDER_REQUIRED";
   if (snapshot.loggedIn && snapshot.tokenUsable) return "READY";
   if (snapshot.authMigrationRequired) return "LOGIN_START_REQUIRED";
+  if (snapshot.authReason?.startsWith("AUTH_CHECK_BLOCKED:")) return "BLOCKED";
   if (snapshot.pendingLoginStateExists) return "LOGIN_COMPLETE_REQUIRED";
   const authFailure = classifyAuthFailure(snapshot.authReason);
   if (authFailure === "NETWORK_BLOCKED" || authFailure === "UNKNOWN_BLOCKED") {
@@ -50,13 +51,14 @@ export type AuthFailureClass =
   | "UNKNOWN_BLOCKED";
 
 export function classifyAuthFailure(reason: string | undefined): AuthFailureClass {
+  if (reason?.startsWith("AUTH_CHECK_BLOCKED:")) return "NETWORK_BLOCKED";
   if (!reason || reason === "NO_ACCOUNT_IN_CACHE" || reason === "NO_ACCESS_TOKEN") {
     return reason ? "LOGIN_REQUIRED" : "NONE";
   }
   if (reason === "AUTH_APP_CHANGED") return "LOGIN_REQUIRED";
   if (!reason.startsWith("TOKEN_ACQUISITION_FAILED:")) return "UNKNOWN_BLOCKED";
   if (
-    /network_error|fetch failed|eai_again|etimedout|econnreset|econnrefused|enotfound|blocked-by-allowlist/i.test(
+    /network_error|fetch failed|eacces|eperm|eai_again|etimedout|econnreset|econnrefused|enotfound|und_err_.*timeout|blocked-by-allowlist/i.test(
       reason
     )
   ) {
