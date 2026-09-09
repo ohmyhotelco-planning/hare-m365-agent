@@ -21,6 +21,7 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 - `startup.setup.state`와 `setup.nextCommand`만 따릅니다.
 - `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365 조회를 실행합니다.
 - 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
+- `AUTH_CHECK_BLOCKED`의 `loggedIn=null`, `tokenUsable=null`은 네트워크 문제로 확인 불가이며 만료나 로그아웃이 아닙니다. 기존 캐시를 유지하고 승인된 실행 환경의 연결 복구 후 같은 캐시를 재검증합니다. 재로그인, 캐시 초기화, 정책 우회 또는 M365 조회를 진행하지 않습니다.
 - `LOGIN_START_REQUIRED`이면 `auth login-start`를 한 번 실행하고 사용자에게 Microsoft 주소와 코드를 보여줍니다.
 - 사용자가 로그인을 마쳤다고 말하면 `LOGIN_COMPLETE_REQUIRED`의 명령을 한 번 실행합니다.
 - 장기 poller, 백그라운드, `setsid`, `nohup`을 사용하지 않습니다.

@@ -20,7 +20,8 @@ import {
   startDeviceLogin,
   type DeviceLoginStartResult
 } from "./device-login.js";
-import { ProxyAwareNetworkClient } from "./msal-network.js";
+import { ProxyAwareNetworkClient, type AuthNetworkFailure } from "./msal-network.js";
+import { classifyAuthFailure } from "./setup-state.js";
 import {
   clearStoredFile,
   storedFileHasContent,
@@ -208,14 +209,17 @@ export async function completeLogin(
   }
 
   markAuthProfileReady(config, scopes);
-  const verifiedStatus = await getAuthStatus(config);
+  // The code was redeemed successfully; token verification must never resume it again.
+  clearDeviceLoginState(config);
+  const verifiedStatus = await getAuthStatus(config, networkClient);
+  if (verifiedStatus.reason?.startsWith("AUTH_CHECK_BLOCKED:")) {
+    throw new Error(verifiedStatus.reason);
+  }
   if (!verifiedStatus.loggedIn || !verifiedStatus.tokenUsable) {
-    clearDeviceLoginState(config);
     throw new Error(
       `LOGIN_CACHE_VERIFICATION_FAILED: ${verifiedStatus.reason ?? "Persisted token is unavailable"}. Run auth login-start again.`
     );
   }
-  clearDeviceLoginState(config);
   return result;
 }
 
@@ -228,13 +232,38 @@ export async function getAccount(config: AppConfig): Promise<AccountInfo | null>
 
 export type AuthStatus = {
   account: AccountInfo | null;
-  loggedIn: boolean;
-  tokenUsable: boolean;
+  // null means connectivity prevented verification, not that sign-in was rejected.
+  loggedIn: boolean | null;
+  tokenUsable: boolean | null;
   migrationRequired: boolean;
   reason?: string;
+  networkFailure?: AuthNetworkFailure;
 };
 
-export async function getAuthStatus(config: AppConfig): Promise<AuthStatus> {
+function networkBlockedReason(error: unknown, failure?: AuthNetworkFailure): string | undefined {
+  const code = (error as { errorCode?: unknown } | null)?.errorCode;
+  if (typeof code === "string" && /^(interaction_required|invalid_grant|login_required|consent_required)$/i.test(code)) {
+    return undefined;
+  }
+  if (!failure && classifyAuthFailure(`TOKEN_ACQUISITION_FAILED: ${typeof code === "string" ? code : ""} ${errorMessage(error)}`) !== "NETWORK_BLOCKED") {
+    return undefined;
+  }
+  const detail = failure ? `${failure.code} ${failure.method} ${failure.hostname} ${failure.stage}` : "network_error";
+  return `AUTH_CHECK_BLOCKED: ${detail}. Token validity is unknown because Microsoft connectivity could not be verified. Keep the existing cache; do not sign in again or reset it. Retry the same cache only after connectivity is restored in an approved execution environment.`;
+}
+
+function tokenFailureReason(error: unknown): string {
+  const code = (error as { errorCode?: unknown } | null)?.errorCode;
+  const diagnostic = `${typeof code === "string" ? code : ""} ${errorMessage(error)}`;
+  const knownCode = diagnostic.match(/\b(interaction_required|invalid_grant|login_required|consent_required)\b/i)?.[1];
+  return `TOKEN_ACQUISITION_FAILED: ${knownCode?.toLowerCase() ?? "unclassified_error"}`;
+}
+
+export async function getAuthStatus(
+  config: AppConfig,
+  networkClient: INetworkModule = new ProxyAwareNetworkClient()
+): Promise<AuthStatus> {
+  if (networkClient instanceof ProxyAwareNetworkClient) networkClient.takeNetworkFailure();
   const profile = prepareAuthProfile(config, scopes);
   if (profile.migrationRequired) {
     return {
@@ -246,7 +275,7 @@ export async function getAuthStatus(config: AppConfig): Promise<AuthStatus> {
     };
   }
 
-  const pca = await buildPca(config);
+  const pca = await buildPca(config, networkClient);
   const accounts = await pca.getTokenCache().getAllAccounts();
   const account = accounts[0] ?? null;
   if (!account) {
@@ -270,23 +299,31 @@ export async function getAuthStatus(config: AppConfig): Promise<AuthStatus> {
       reason: tokenUsable ? undefined : "NO_ACCESS_TOKEN"
     };
   } catch (error) {
+    const networkFailure = networkClient instanceof ProxyAwareNetworkClient
+      ? networkClient.takeNetworkFailure() : undefined;
+    const blockedReason = networkBlockedReason(error, networkFailure);
     return {
       account,
-      loggedIn: false,
-      tokenUsable: false,
+      loggedIn: blockedReason ? null : false,
+      tokenUsable: blockedReason ? null : false,
       migrationRequired: false,
-      reason: `TOKEN_ACQUISITION_FAILED: ${errorMessage(error)}`
+      reason: blockedReason ?? tokenFailureReason(error),
+      networkFailure: blockedReason ? networkFailure : undefined
     };
   }
 }
 
-export async function getAccessToken(config: AppConfig): Promise<string> {
+export async function getAccessToken(
+  config: AppConfig,
+  networkClient: INetworkModule = new ProxyAwareNetworkClient()
+): Promise<string> {
+  if (networkClient instanceof ProxyAwareNetworkClient) networkClient.takeNetworkFailure();
   if (prepareAuthProfile(config, scopes).migrationRequired) {
     throw new Error(
       "Hare M365 Agent authentication permissions or application changed. Complete Microsoft sign-in once, then retry."
     );
   }
-  const pca = await buildPca(config);
+  const pca = await buildPca(config, networkClient);
   const accounts = await pca.getTokenCache().getAllAccounts();
   const account = accounts[0] ?? null;
   if (!account) {
@@ -295,10 +332,16 @@ export async function getAccessToken(config: AppConfig): Promise<string> {
     );
   }
 
-  const result = await pca.acquireTokenSilent({
-    account,
-    scopes
-  });
+  let result: AuthenticationResult | null;
+  try {
+    result = await pca.acquireTokenSilent({ account, scopes });
+  } catch (error) {
+    const failure = networkClient instanceof ProxyAwareNetworkClient
+      ? networkClient.takeNetworkFailure() : undefined;
+    const reason = networkBlockedReason(error, failure);
+    if (reason) throw new Error(reason);
+    throw error;
+  }
 
   if (!result?.accessToken) throw new Error("Could not acquire access token.");
   return result.accessToken;

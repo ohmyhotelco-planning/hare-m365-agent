@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { completeLogin, getAuthStatus, getScopeList, startLogin, logout } from "./auth.js";
+import { completeLogin, getAuthStatus, getScopeList, startLogin, logout, type AuthStatus } from "./auth.js";
 import { ensureRuntimeDirs, loadConfig, requireConfigured } from "./config.js";
 import { hasPendingDeviceLoginState } from "./device-login.js";
 import {
@@ -138,6 +138,7 @@ ${setupCommandForGuide}
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행하고 Microsoft 로그인 주소와 userCode를 보여준 뒤 멈춘다.
 - LOGIN_COMPLETE_REQUIRED: 사용자가 "로그인 완료"라고 말할 때까지 기다린다. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행한다. COMPLETE는 선택 프로젝트에 저장된 캐시 재검증까지 성공했다는 뜻이다.
 - READY: 사용 준비 완료를 보고하고 사용자의 업무 조회 요청을 기다린다.
+- BLOCKED에 AUTH_CHECK_BLOCKED가 있으면 loggedIn/tokenUsable의 null은 미로그인이 아니라 확인 불가를 뜻한다. 기존 캐시를 유지하고 재로그인이나 초기화 없이 승인된 실행 환경의 연결 복구가 필요하다고 안내한다.
 - BLOCKED에 TOKEN_ACQUISITION_FAILED 또는 네트워크 오류가 있으면 기존 캐시를 유지하고 오류만 보고한다. login-start를 실행하지 않는다.
 - HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED로 보고하고 막힌 도메인만 알려준 뒤 멈춘다.
 - 그 밖의 명령 실패는 BLOCKED로 취급해 실패 단계와 오류 한 줄만 보고한다. 다른 경로를 추측하거나 반복 실행하지 않는다.
@@ -259,6 +260,7 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 - 로그인 계정은 "Hare를 실제로 사용할 사용자 본인의 회사 Microsoft 계정"으로만 안내해. 특정 이메일 주소를 예시로 들거나 로그인 대상으로 지정하지 마.
 - LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 선택 프로젝트에 저장된 캐시 재검증까지 성공한 상태야.
 - READY: "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
+- BLOCKED에 AUTH_CHECK_BLOCKED가 있으면 loggedIn/tokenUsable의 null은 미로그인이 아니라 확인 불가야. 기존 캐시를 유지하고 재로그인이나 초기화 없이 승인된 실행 환경의 연결 복구가 필요하다고 안내해.
 - BLOCKED에 TOKEN_ACQUISITION_FAILED 또는 네트워크 오류가 표시되면 기존 캐시를 유지하고 오류만 알려줘. login-start를 실행하지 마.
 - HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED라고 알려주고 막힌 도메인만 말한 뒤 멈춰.
 - 그 밖의 명령 실패: BLOCKED로 취급해 실패 단계와 오류 한 줄만 알려주고 멈춰. 다른 경로를 시도하거나 같은 명령을 반복하지 마.
@@ -319,7 +321,7 @@ function emitJson(payload: unknown, out?: string): void {
 }
 
 async function getDoctorStatus() {
-  const authStatus = config.clientId && config.tenantId
+  const authStatus: AuthStatus = config.clientId && config.tenantId
     ? await getAuthStatus(config)
     : {
         account: null,
@@ -337,6 +339,7 @@ async function getDoctorStatus() {
     tokenUsable: authStatus.tokenUsable,
     authMigrationRequired: authStatus.migrationRequired,
     authReason: authStatus.reason,
+    authNetworkFailure: authStatus.networkFailure,
     dataDir: config.dataDir,
     dataDirSource: config.dataDirSource,
     dataDirPersistent: config.dataDirPersistent,
@@ -468,6 +471,7 @@ auth.command("status").description("Show current login and policy status").actio
         tokenUsable: authStatus.tokenUsable,
         authMigrationRequired: authStatus.migrationRequired,
         authReason: authStatus.reason,
+        authNetworkFailure: authStatus.networkFailure,
         account: authStatus.account?.username,
         policy: config.policy,
         dataDir: config.dataDir,
