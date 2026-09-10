@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { completeLogin, getAuthStatus, getScopeList, startLogin, logout, type AuthStatus } from "./auth.js";
 import { ensureRuntimeDirs, loadConfig, requireConfigured } from "./config.js";
 import { hasPendingDeviceLoginState } from "./device-login.js";
@@ -41,16 +41,11 @@ import { cleanupExpiredResults, resolveResultPath } from "./results.js";
 import { writeSessionRules } from "./session-rules.js";
 import { buildSetupContract } from "./setup-state.js";
 import { buildLocalSetupCommand } from "./local-install.js";
+import { checkMicrosoftConnectivity, networkExecutionGuidance, type ExecutionEnvironment } from "./network-check.js";
 
 const program = new Command();
 program.option("--data-dir <path>", "Use this exact Hare data directory for every command in the session");
 const config = loadConfig({ dataDir: readDataDirArgument(process.argv.slice(2)) });
-ensureRuntimeDirs(config);
-try {
-  cleanupExpiredResults(config);
-} catch {
-  // Result cleanup is best-effort and must not block M365 commands.
-}
 
 const preferredCommand = "hare-m365";
 const packageName = "@ohmyhotel/hare-m365-agent";
@@ -65,7 +60,7 @@ const localSetupCommand = buildLocalSetupCommand({
 const setupCommandForGuide = config.dataDirPersistent
   ? localSetupCommand
   : "# FOLDER_REQUIRED: start Cowork with the user's existing Hare project folder selected, then rerun this guide with that selected project root as the persistent store.";
-const defaultCliCommand = `node "${path.join(packageRoot, "dist", "cli.js")}"`;
+const defaultCliCommand = `${process.platform === "win32" ? "& " : ""}${quoteCommandArgument(process.execPath)} ${quoteCommandArgument(path.join(packageRoot, "dist", "cli.js"))}`;
 
 const requiredDomains = [
   "github.com",
@@ -77,12 +72,22 @@ const requiredDomains = [
   "ohmylab.sharepoint.com"
 ];
 
-const rulesFile = writeSessionRules(config, {
-  commandPrefix: getExplicitSelfCommand(),
-  repository: repoUrl,
-  branch: "master",
-  workDir: packageRoot,
-  requiredDomains
+let rulesFile: string | undefined;
+program.hook("preAction", (_command, actionCommand) => {
+  if (actionCommand.name() === "check" && actionCommand.parent?.name() === "network") return;
+  ensureRuntimeDirs(config);
+  try {
+    cleanupExpiredResults(config);
+  } catch {
+    // Result cleanup is best-effort and must not block M365 commands.
+  }
+  rulesFile = writeSessionRules(config, {
+    commandPrefix: getExplicitSelfCommand(),
+    repository: repoUrl,
+    branch: "master",
+    workDir: packageRoot,
+    requiredDomains
+  });
 });
 
 function readPackageVersion(): string {
@@ -103,6 +108,9 @@ function readDataDirArgument(args: string[]): string | undefined {
 const llmGuide = `# Hare M365 Agent LLM Guide
 
 목적: 사용자의 자연어 요청을 Microsoft Graph delegated 권한으로 조회한다. 기본 정책은 read-only다.
+
+실행 환경 사전 확인 (startup/auth status 또는 첫 조회 전에 적용):
+${networkExecutionGuidance}
 
 시작 순서:
 1. Claude/Cowork처럼 도메인 허용 목록이 있는 환경이면 먼저 아래 7개 도메인 허용 여부를 사용자에게 확인한다.
@@ -138,7 +146,7 @@ ${setupCommandForGuide}
 - LOGIN_START_REQUIRED: setup.nextCommand를 수정하지 않고 한 번 실행하고 Microsoft 로그인 주소와 userCode를 보여준 뒤 멈춘다.
 - LOGIN_COMPLETE_REQUIRED: 사용자가 "로그인 완료"라고 말할 때까지 기다린다. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행한다. COMPLETE는 선택 프로젝트에 저장된 캐시 재검증까지 성공했다는 뜻이다.
 - READY: 사용 준비 완료를 보고하고 사용자의 업무 조회 요청을 기다린다.
-- BLOCKED에 AUTH_CHECK_BLOCKED가 있으면 loggedIn/tokenUsable의 null은 미로그인이 아니라 확인 불가를 뜻한다. 기존 캐시를 유지하고 재로그인이나 초기화 없이 승인된 실행 환경의 연결 복구가 필요하다고 안내한다.
+- BLOCKED에 AUTH_CHECK_BLOCKED가 있으면 loggedIn/tokenUsable의 null은 미로그인이 아니라 확인 불가를 뜻한다. 위 실행 환경 사전 확인 절차를 한 번 적용하며 재로그인이나 캐시 초기화는 하지 않는다.
 - BLOCKED에 TOKEN_ACQUISITION_FAILED 또는 네트워크 오류가 있으면 기존 캐시를 유지하고 오류만 보고한다. login-start를 실행하지 않는다.
 - HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED로 보고하고 막힌 도메인만 알려준 뒤 멈춘다.
 - 그 밖의 명령 실패는 BLOCKED로 취급해 실패 단계와 오류 한 줄만 보고한다. 다른 경로를 추측하거나 반복 실행하지 않는다.
@@ -184,7 +192,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 
 주의:
 - Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용한다. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI 또는 브라우저 자동화를 검색하거나 호출하거나 대체 수단으로 사용하지 않는다.
-- Hare가 지원하지 않거나 실행에 실패하면 실패한 Hare 단계와 오류만 보고하고 멈춘다. 다른 도구나 데이터 소스로 우회하지 않는다.
+- 연결 오류는 위 실행 환경 사전 확인 절차를 적용한다. 그 외에 Hare가 지원하지 않거나 실행에 실패하면 실패한 Hare 단계와 오류만 보고하고 멈춘다. 다른 도구나 데이터 소스로 우회하지 않는다.
 - 일반적인 메일 조회와 최근 메일 요청은 outlook recent --folder all을 사용해 삭제된 항목을 제외한 전체 메일함을 대상으로 한다. outlook inbox는 사용자가 받은편지함을 명시한 경우에만 사용한다.
 - 플래그된 메일 요청은 outlook flagged --folder all을 사용한다. 모든 메일 조회 결과의 flagStatus를 함께 확인한다.
 - --mailbox가 없는 Outlook 명령은 로그인한 사용자의 사서함만 조회한다. 사용자가 공유 사서함 이름이나 주소를 명시하면 recent, flagged, search, count에 --mailbox를 사용한다. 이름 후보가 여러 개면 정확한 주소를 확인하고, 공유 사서함 조회가 실패해도 본인 사서함으로 대체하지 않는다.
@@ -260,14 +268,14 @@ startup JSON의 setup.state만 확인하고 아래에서 일치하는 한 단계
 - 로그인 계정은 "Hare를 실제로 사용할 사용자 본인의 회사 Microsoft 계정"으로만 안내해. 특정 이메일 주소를 예시로 들거나 로그인 대상으로 지정하지 마.
 - LOGIN_COMPLETE_REQUIRED: 내가 "로그인 완료"라고 말하기 전에는 아무 명령도 실행하지 마. 완료 후 setup.nextCommand를 수정하지 않고 한 번 실행해. COMPLETE가 반환되면 선택 프로젝트에 저장된 캐시 재검증까지 성공한 상태야.
 - READY: "Hare M365 Agent 사용 준비 완료. 이제 자연어로 업무 조회를 요청하세요."라고 말하고 멈춰.
-- BLOCKED에 AUTH_CHECK_BLOCKED가 있으면 loggedIn/tokenUsable의 null은 미로그인이 아니라 확인 불가야. 기존 캐시를 유지하고 재로그인이나 초기화 없이 승인된 실행 환경의 연결 복구가 필요하다고 안내해.
+- BLOCKED에 AUTH_CHECK_BLOCKED가 있으면 loggedIn/tokenUsable의 null은 미로그인이 아니라 확인 불가야. 같은 명령 접두사와 dataDir로 network check --environment cowork를 한 번 실행하고 결과를 안내해. Cowork의 허용 목록을 우회하거나 재로그인·캐시 초기화는 하지 마.
 - BLOCKED에 TOKEN_ACQUISITION_FAILED 또는 네트워크 오류가 표시되면 기존 캐시를 유지하고 오류만 알려줘. login-start를 실행하지 마.
 - HTTP 403과 X-Proxy-Error: blocked-by-allowlist가 함께 나오면 NETWORK_PERMISSION_REQUIRED라고 알려주고 막힌 도메인만 말한 뒤 멈춰.
 - 그 밖의 명령 실패: BLOCKED로 취급해 실패 단계와 오류 한 줄만 알려주고 멈춰. 다른 경로를 시도하거나 같은 명령을 반복하지 마.
 
 clone/build 전체 반복, 도메인 반복 진단, 임의 프록시 우회는 시작하지 마.
 
-앞으로 Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용해. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI 또는 브라우저 자동화를 검색하거나 호출하거나 대체 수단으로 사용하지 마. Hare가 지원하지 않거나 명령이 실패하면 실패 단계와 오류만 알려주고 멈춰. 다른 도구나 데이터 소스로 우회하지 마.
+앞으로 Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용해. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI 또는 브라우저 자동화를 검색하거나 호출하거나 대체 수단으로 사용하지 마. 연결 오류는 위 network check 절차를 한 번 적용하고, 그 외에 Hare가 지원하지 않거나 명령이 실패하면 실패 단계와 오류만 알려주고 멈춰. 다른 도구나 데이터 소스로 우회하지 마.
 
 일반적인 메일 조회 또는 최근 메일 요청은 outlook recent --folder all을 사용해. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상이야. 사용자가 받은편지함을 명시한 경우에만 outlook inbox를 사용해.
 플래그된 메일을 요청하면 outlook flagged --folder all을 사용하고, 일반 메일 결과에서도 flagStatus를 확인해.
@@ -285,9 +293,7 @@ Teams 검색은 limit를 100보다 높이지 마. totalMatchesReported는 발신
 outlook count의 count.complete가 false이면 nextCursor를 --cursor에 전달해 계속 조회해. 커서가 누적값을 보존하므로 complete가 true인 마지막 matchedCount만 정확한 전체 건수로 답해.
 search.partialResult가 true이면 시간 예산 안에 처리한 부분 결과임을 알리고 partialReason과 fullBodyUnavailableCount를 함께 설명해.`;
 function getSelfCommand(): string {
-  const command = process.env.HARE_M365_COMMAND ?? defaultCliCommand;
-  if (config.dataDirSource === "os-default") return command;
-  return `${command} --data-dir ${quoteCommandArgument(config.dataDir)}`;
+  return getExplicitSelfCommand();
 }
 
 function getExplicitSelfCommand(): string {
@@ -296,8 +302,10 @@ function getExplicitSelfCommand(): string {
 }
 
 function quoteCommandArgument(value: string): string {
-  if (value.includes('"')) throw new Error("Hare data directory cannot contain a double quote.");
-  return `"${value}"`;
+  if (/[\0\r\n]/.test(value)) throw new Error("Hare command arguments cannot contain null bytes or line breaks.");
+  return process.platform === "win32"
+    ? `'${value.replaceAll("'", "''")}'`
+    : `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function getLoginCommand(): string {
@@ -399,6 +407,17 @@ program
         2
       )
     );
+  });
+
+program.command("network").description("Unauthenticated connection diagnostics")
+  .command("check")
+  .description("Check Microsoft connectivity without reading or changing the data directory")
+  .addOption(new Option("--environment <host>", "Actual host; this option does not grant execution permission")
+    .choices(["codex", "cowork", "unknown"]).default("unknown"))
+  .action(async (options: { environment: ExecutionEnvironment }) => {
+    const result = await checkMicrosoftConnectivity(options.environment);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exitCode = 1;
   });
 
 const auth = program.command("auth").description("Authentication commands");

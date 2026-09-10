@@ -35,6 +35,7 @@ if [ "$BUILT_HEAD" != "$LOCAL_HEAD" ] || [ ! -d "$HARE_APP/node_modules" ] || [ 
   cd "$HARE_APP" && npm ci --prefer-offline --no-audit --no-fund && npm run build
   printf '%s\n' "$LOCAL_HEAD" > "$HARE_BUILD_HEAD"
 fi
+node "$HARE_APP/dist/cli.js" --data-dir "$HARE_DATA_DIR" network check --environment cowork &&
 node "$HARE_APP/dist/cli.js" --data-dir "$HARE_DATA_DIR"`;
 }
 

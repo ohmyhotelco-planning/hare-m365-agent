@@ -24,6 +24,7 @@ export type SetupContract = {
     | "RUN_LOGIN_START"
     | "WAIT_FOR_USER_THEN_RUN_LOGIN_COMPLETE"
     | "WAIT_FOR_USER_REQUEST"
+    | "CHECK_EXECUTION_ENVIRONMENT"
     | "REPORT_BLOCKER";
   nextCommand?: string;
   stopAfterAction: true;
@@ -126,6 +127,14 @@ export function buildSetupContract(
 }
 
 export function buildBlockedSetupContract(reason: string): SetupContract {
+  if (reason.startsWith("AUTH_CHECK_BLOCKED:")) {
+    return {
+      state: "BLOCKED",
+      nextAction: "CHECK_EXECUTION_ENVIRONMENT",
+      stopAfterAction: true,
+      instruction: `Authentication is unverified, not expired. Run the same Hare runtime/app and exact --data-dir with network check --environment <actual-host> (codex, cowork, or unknown) once and follow its result. In Codex, EXECUTION_PERMISSION_REQUIRED calls for the host's standard permission request, not an automatic retry; continue only after approval. Cowork and explicit allowlist blocks must not bypass their policy. Keep the cache, do not start login or run M365 reads until verified. If the check/permission step already failed or was denied, report it and stop: ${reason}`
+    };
+  }
   return {
     state: "BLOCKED",
     nextAction: "REPORT_BLOCKER",

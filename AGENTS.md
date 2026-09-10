@@ -18,14 +18,18 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 
 ## 로그인 하드게이트
 
+- 새 실행 환경에서 startup/auth status 또는 첫 업무 조회 전, 같은 명령 접두사와 `--data-dir`로 `network check --environment <codex|cowork|unknown>`을 실행합니다. 실제 호스트를 지정하며 이 옵션 자체가 권한을 부여하지는 않습니다. 인증 캐시 접근·파일 변경 없이 최대 3초 연결 검사만 수행합니다.
+- Codex에서 `EXECUTION_PERMISSION_REQUIRED`이면 일반적인 실패 안내만 하고 끝내지 말고 호스트의 표준 실행 권한 요청 도구를 사용합니다. 승인된 경우에만 같은 검사를 1회 재실행하고, 같은 실행 파일·dataDir로 인증 확인 후 원래 요청한 읽기를 진행합니다. 거부·도구 없음·재실패 시 중단합니다. 쓰기 작업은 자동 재시도하지 않습니다.
+- `NETWORK_PERMISSION_REQUIRED`인 허용 목록 차단은 Codex에서도 실행 권한 요청으로 우회하지 않습니다. Cowork의 `EACCES`도 로컬 셸로 우회하지 않으며 정책이 바뀌면 같은 프로젝트로 새 Cowork 작업을 엽니다. 그 외 오류는 `NETWORK_CHECK_BLOCKED`로 보고합니다.
+- `REACHABLE`은 로그인 서버의 공개 주소 연결만 확인한 것입니다. 인증이나 Graph/SharePoint 권한 성공을 뜻하지 않습니다. 승인 유효 범위 안에서 같은 실행 환경을 유지하고 매 페이지마다 사전 검사를 반복하지 않습니다.
 - `startup.setup.state`와 `setup.nextCommand`만 따릅니다.
 - `loggedIn`과 `tokenUsable`이 모두 `true`일 때만 M365 조회를 실행합니다.
 - 캐시 파일 존재만으로 로그인 성공으로 판단하지 않습니다.
-- `AUTH_CHECK_BLOCKED`의 `loggedIn=null`, `tokenUsable=null`은 네트워크 문제로 확인 불가이며 만료나 로그아웃이 아닙니다. 기존 캐시를 유지하고 승인된 실행 환경의 연결 복구 후 같은 캐시를 재검증합니다. 재로그인, 캐시 초기화, 정책 우회 또는 M365 조회를 진행하지 않습니다.
+- `AUTH_CHECK_BLOCKED`의 `loggedIn=null`, `tokenUsable=null`은 네트워크 문제로 확인 불가이며 만료나 로그아웃이 아닙니다. 위 사전 검사를 한 번 적용하고 기존 캐시를 유지합니다. 재로그인, 캐시 초기화, 정책 우회 또는 인증 확인 전 M365 조회는 진행하지 않습니다.
 - `LOGIN_START_REQUIRED`이면 `auth login-start`를 한 번 실행하고 사용자에게 Microsoft 주소와 코드를 보여줍니다.
 - 사용자가 로그인을 마쳤다고 말하면 `LOGIN_COMPLETE_REQUIRED`의 명령을 한 번 실행합니다.
 - 장기 poller, 백그라운드, `setsid`, `nohup`을 사용하지 않습니다.
-- 실패 시 다른 경로로 이동하거나 삭제 권한을 요청하지 않고 실패 단계와 오류 한 줄만 보고합니다.
+- 네트워크 실패는 위 사전 확인 절차를 적용합니다. 그 밖의 실패 시 다른 경로로 이동하거나 삭제 권한을 요청하지 않고 실패 단계와 오류 한 줄만 보고합니다.
 
 ## 조회 기준
 
