@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AppConfig } from "./config.js";
 import { writeStoredText } from "./persistent-storage.js";
+import { networkExecutionGuidance } from "./network-check.js";
 
 const managedClaudeRulesStart = "<!-- HARE_M365_AGENT_RULES_START -->";
 const managedClaudeRulesEnd = "<!-- HARE_M365_AGENT_RULES_END -->";
@@ -44,7 +45,7 @@ function writeClaudeProjectInstructions(config: AppConfig, rulesFile: string): v
 - Before any Outlook, Teams, SharePoint, OneDrive, or Microsoft 365 request, read and follow [the Hare session rules](claude/hare-m365-agent-rules.md).
 - Hare CLI is the exclusive tool for these lookups and for Outlook draft creation.
 - Do not search for, invoke, or fall back to a Microsoft 365 connector, another connector, Computer Use, browser automation, or an Outlook/Teams/SharePoint user interface.
-- If Hare is unavailable, unsupported, or fails, report the failed Hare step and stop instead of using another tool.
+- If Hare is unavailable, unsupported, or fails, follow the bounded network-check procedure in the session rules for connectivity errors only; otherwise report the failed Hare step and stop instead of using another tool.
 - Keep using the exact data directory and command prefix recorded in ${rulesFile}.
 ${managedClaudeRulesEnd}`;
   const existing = fs.existsSync(claudeFile) ? fs.readFileSync(claudeFile, "utf8") : "";
@@ -107,6 +108,10 @@ The application checkout belongs in the Cowork session runtime shown by the setu
 
 Every command must keep this exact --data-dir. A new Cowork task may recreate the session app, but a usable login in this selected project remains reusable.
 
+## Execution environment preflight
+
+${networkExecutionGuidance}
+
 ## Startup state
 
 1. Run startup and follow only setup.state and setup.nextCommand. A usable login requires both loggedIn=true and tokenUsable=true.
@@ -114,7 +119,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address from a cache, example, or prior conversation. If authReason is AUTH_APP_CHANGED, explain only that Hare authentication permissions or its Microsoft application changed and one Microsoft sign-in is required.
 4. LOGIN_COMPLETE_REQUIRED: wait until the user says the browser login is complete, then run setup.nextCommand once.
 5. FOLDER_REQUIRED: stop and tell the user to open a new Cowork task with the existing Hare project selected.
-6. BLOCKED with AUTH_CHECK_BLOCKED means token validity is unknown: loggedIn=null and tokenUsable=null do not mean signed out or expired. Keep the existing cache. Ask for connectivity to be restored in an approved execution environment, then recheck the same cache. Do not start a new login, reset the cache, bypass network policy, or run M365 queries. BLOCKED with TOKEN_ACQUISITION_FAILED or a network error also requires reporting the blocker and stopping without login-start or cache replacement.
+6. BLOCKED with AUTH_CHECK_BLOCKED means token validity is unknown: loggedIn=null and tokenUsable=null do not mean signed out or expired. Keep the existing cache and follow the bounded execution-environment preflight above. Do not start a new login, reset the cache, bypass network policy, or run M365 queries before authentication is verified. Other TOKEN_ACQUISITION_FAILED errors must follow setup.state; never substitute another cache.
 7. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.
 
 ## Cowork network permission
@@ -127,7 +132,7 @@ Every command must keep this exact --data-dir. A new Cowork task may recreate th
 
 - Hare CLI is the exclusive tool for requested Outlook, Teams, SharePoint, OneDrive, and Microsoft 365 lookups and for Outlook draft creation.
 - Do not search for, invoke, or fall back to a Microsoft 365 connector, another connector, Computer Use, Outlook/Teams/SharePoint user interfaces, or browser automation for these requests.
-- If Hare is unavailable, unsupported, or fails, report the failed Hare step and stop. Do not substitute another tool or data source.
+- If Hare is unavailable, unsupported, or fails, use the bounded execution-environment preflight above for connectivity failures only; otherwise report the failed Hare step and stop. Do not substitute another tool or data source.
 - Default to read-only operation. The only enabled write action is creating an Outlook draft after exact user approval. Sending mail, Teams posting, calendar creation, file upload/delete/share, and permission changes are unavailable.
 - Always use the Hare CLI for Outlook draft requests. Never use Computer Use, Outlook desktop/web UI, browser automation, or a Microsoft 365 connector to create a draft or paste its content.
 - If a Hare draft command fails, report the failed Hare step and stop. Do not fall back to GUI automation or another connector.

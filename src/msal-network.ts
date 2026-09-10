@@ -56,6 +56,10 @@ export class ProxyAwareNetworkClient implements INetworkModule {
     return this.send<T>(url, "GET", options, timeout);
   }
 
+  async sendGetHeadersAsync(url: string, timeout: number): Promise<NetworkResponse<Record<string, never>>> {
+    return this.send(url, "GET", undefined, timeout, true);
+  }
+
   async sendPostRequestAsync<T>(
     url: string,
     options?: NetworkRequestOptions
@@ -67,7 +71,8 @@ export class ProxyAwareNetworkClient implements INetworkModule {
     url: string,
     method: "GET" | "POST",
     options?: NetworkRequestOptions,
-    timeout?: number
+    timeout?: number,
+    headersOnly = false
   ): Promise<NetworkResponse<T>> {
     const effectiveTimeout = timeout && timeout > 0 ? timeout : 30_000;
     const controller = new AbortController();
@@ -83,6 +88,11 @@ export class ProxyAwareNetworkClient implements INetworkModule {
         signal: controller.signal
       });
       stage = "response";
+      if (headersOnly) {
+        // A diagnostic needs headers only; body errors must not hide an allowlist denial.
+        void response.body?.cancel().catch(() => undefined);
+        return { headers: Object.fromEntries(response.headers.entries()), body: {} as T, status: response.status };
+      }
       const text = await response.text();
 
       return {
