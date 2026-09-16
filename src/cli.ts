@@ -355,7 +355,7 @@ async function getDoctorStatus() {
     cacheDir: config.cacheDir,
     cacheFile,
     cacheFileExists: fs.existsSync(cacheFile),
-    pendingLoginStateExists: hasPendingDeviceLoginState(config),
+    pendingLoginStateExists: hasPendingDeviceLoginState(config, getScopeList()),
     downloadDir: config.downloadDir,
     logsDir: config.logsDir,
     resultsDir: config.resultsDir,
@@ -470,7 +470,7 @@ auth.command("status").description("Show current login and policy status").actio
   const authStatus = await getAuthStatus(config);
   const loggedIn = authStatus.loggedIn;
   const cacheFile = path.join(config.cacheDir, "msal-cache.json");
-  const pendingLoginStateExists = hasPendingDeviceLoginState(config);
+  const pendingLoginStateExists = hasPendingDeviceLoginState(config, getScopeList());
   const setup = buildSetupContract(
     {
       configured: true,
