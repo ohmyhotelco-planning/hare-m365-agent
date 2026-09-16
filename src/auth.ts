@@ -207,10 +207,7 @@ export async function completeLogin(
 ): Promise<AuthenticationResult> {
   const profile = prepareAuthProfile(config, scopes);
   if (profile.reason) throw new Error(profile.reason);
-  const state = readDeviceLoginState(config);
-  if ([...state.scopes].sort().join(" ") !== [...scopes].sort().join(" ")) {
-    throw new Error("Pending login scopes changed. Run auth login-start again.");
-  }
+  const state = readDeviceLoginState(config, scopes);
   const { pca, commit } = await buildPca(config, new ResumeDeviceCodeNetworkClient(state, networkClient));
   let result: AuthenticationResult | null;
   try {

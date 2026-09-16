@@ -8,7 +8,7 @@ import type {
 import type { AppConfig } from "./config.js";
 import { prepareAuthProfile } from "./auth-profile.js";
 import { ProxyAwareNetworkClient } from "./msal-network.js";
-import { clearStoredFile, storedFileHasContent, writeStoredText } from "./persistent-storage.js";
+import { clearStoredFile, writeStoredText } from "./persistent-storage.js";
 
 type ServerDeviceCodeResponse = {
   user_code: string;
@@ -42,8 +42,14 @@ export function deviceLoginStatePath(config: AppConfig): string {
   return path.join(config.cacheDir, "device-login-state.json");
 }
 
-export function hasPendingDeviceLoginState(config: AppConfig): boolean {
-  return storedFileHasContent(deviceLoginStatePath(config));
+export function hasPendingDeviceLoginState(config: AppConfig, scopes?: string[]): boolean {
+  // Status inspection must not retire or rewrite a pending login.
+  try {
+    const state = readValidatedDeviceLoginState(config, scopes);
+    return Date.now() < Date.parse(state.expiresAt);
+  } catch {
+    return false;
+  }
 }
 
 export async function startDeviceLogin(
@@ -91,32 +97,62 @@ export async function startDeviceLogin(
   };
 }
 
-export function readDeviceLoginState(config: AppConfig): DeviceLoginState {
+export function readDeviceLoginState(config: AppConfig, scopes?: string[]): DeviceLoginState {
   requirePersistentDataDir(config);
-  const statePath = deviceLoginStatePath(config);
-  if (!hasPendingDeviceLoginState(config)) {
+  const state = readValidatedDeviceLoginState(config, scopes);
+  if (Date.now() >= Date.parse(state.expiresAt)) {
+    clearDeviceLoginState(config);
+    throw new Error("The Microsoft device code expired. Run auth login-start again.");
+  }
+  return state;
+}
+
+function readValidatedDeviceLoginState(config: AppConfig, scopes?: string[]): DeviceLoginState {
+  let text: string;
+  try {
+    text = fs.readFileSync(deviceLoginStatePath(config), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error("LOGIN_START_REQUIRED: No pending Hare login. Run auth login-start first.");
+    }
+    throw new Error("Pending Hare login state is unreadable.");
+  }
+  if (!text.trim()) {
     throw new Error("LOGIN_START_REQUIRED: No pending Hare login. Run auth login-start first.");
   }
 
   let state: DeviceLoginState;
   try {
-    state = JSON.parse(fs.readFileSync(statePath, "utf8")) as DeviceLoginState;
-  } catch (error) {
-    throw new Error(`Pending Hare login state is unreadable: ${errorMessage(error)}`);
+    state = JSON.parse(text) as DeviceLoginState;
+  } catch {
+    throw new Error("Pending Hare login state is unreadable. Run auth login-start again.");
   }
 
   if (
+    !state ||
     state.version !== 1 ||
     state.clientId !== config.clientId ||
     state.authority !== config.authority ||
-    !Array.isArray(state.scopes)
+    !Array.isArray(state.scopes) ||
+    state.scopes.length === 0 ||
+    !state.scopes.every((scope) => typeof scope === "string" && scope.trim().length > 0)
   ) {
     throw new Error("Pending Hare login state does not match the current configuration.");
   }
   validateServerResponse(state.response);
-  if (Date.now() >= Date.parse(state.expiresAt)) {
-    clearDeviceLoginState(config);
-    throw new Error("The Microsoft device code expired. Run auth login-start again.");
+  if (
+    typeof state.createdAt !== "string" || !Number.isFinite(Date.parse(state.createdAt)) ||
+    typeof state.expiresAt !== "string" || !Number.isFinite(Date.parse(state.expiresAt)) ||
+    Date.parse(state.expiresAt) <= Date.parse(state.createdAt)
+  ) {
+    throw new Error("Pending Hare login state has invalid timestamps. Run auth login-start again.");
+  }
+  if (scopes) {
+    const expected = new Set(scopes);
+    const pending = new Set(state.scopes);
+    if (expected.size !== pending.size || ![...expected].every((scope) => pending.has(scope))) {
+      throw new Error("Pending login scopes changed. Run auth login-start again.");
+    }
   }
   return state;
 }
@@ -167,10 +203,10 @@ export function requirePersistentDataDir(config: AppConfig): void {
 function validateServerResponse(value: ServerDeviceCodeResponse): void {
   if (
     !value ||
-    typeof value.user_code !== "string" ||
-    typeof value.device_code !== "string" ||
-    typeof value.verification_uri !== "string" ||
-    typeof value.message !== "string" ||
+    typeof value.user_code !== "string" || !value.user_code.trim() ||
+    typeof value.device_code !== "string" || !value.device_code.trim() ||
+    typeof value.verification_uri !== "string" || !value.verification_uri.trim() ||
+    typeof value.message !== "string" || !value.message.trim() ||
     !Number.isFinite(value.expires_in) || value.expires_in <= 0 ||
     !Number.isFinite(value.interval) || value.interval <= 0
   ) {
@@ -180,8 +216,4 @@ function validateServerResponse(value: ServerDeviceCodeResponse): void {
 
 function writeState(filePath: string, state: DeviceLoginState): void {
   writeStoredText(filePath, JSON.stringify(state));
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
