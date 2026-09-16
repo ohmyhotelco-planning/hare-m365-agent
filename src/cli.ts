@@ -514,8 +514,8 @@ auth.command("status").description("Show current login and policy status").actio
   );
 });
 
-auth.command("logout").description("Delete local token cache").action(() => {
-  logout(config);
+auth.command("logout").description("Delete local token cache").action(async () => {
+  await logout(config);
   console.log(JSON.stringify({ ok: true, message: "Local token cache removed." }, null, 2));
 });
 

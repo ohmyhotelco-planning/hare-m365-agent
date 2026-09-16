@@ -14,12 +14,15 @@ test("auth failures distinguish network blockers from real login requirements", 
 
   for (const reason of [
     "NO_ACCOUNT_IN_CACHE",
-    "NO_ACCESS_TOKEN",
-    "AUTH_APP_CHANGED",
     "TOKEN_ACQUISITION_FAILED: interaction_required",
     "TOKEN_ACQUISITION_FAILED: invalid_grant"
   ]) {
     assert.equal(classifyAuthFailure(reason), "LOGIN_REQUIRED", reason);
+  }
+
+  for (const reason of ["NO_ACCESS_TOKEN", "AUTH_APP_CHANGED", "AUTH_TENANT_CHANGED",
+    "AUTH_PROFILE_INVALID", "AUTH_ACCOUNT_MISMATCH", "AUTH_SCOPES_INSUFFICIENT"]) {
+    assert.equal(classifyAuthFailure(reason), "UNKNOWN_BLOCKED");
   }
 
   assert.equal(

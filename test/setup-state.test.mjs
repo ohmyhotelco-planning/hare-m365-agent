@@ -91,7 +91,7 @@ test("pending login contract keeps the same device code flow", () => {
   assert.doesNotMatch(JSON.stringify(contract), /login-start/);
 });
 
-test("application migration explains the one-time sign-in without changing the flow", () => {
+test("explicit migration blocks without an automatic login command", () => {
   const contract = buildSetupContract(
     {
       ...readySnapshot,
@@ -102,12 +102,9 @@ test("application migration explains the one-time sign-in without changing the f
     "node dist/cli.js"
   );
 
-  assert.equal(contract.state, "LOGIN_START_REQUIRED");
-  assert.equal(contract.nextCommand, "node dist/cli.js auth login-start");
-  assert.match(contract.instruction, /authentication permissions or application changed/);
-  assert.match(contract.instruction, /one Microsoft sign-in/);
-  assert.match(contract.instruction, /their own company Microsoft account/);
-  assert.match(contract.instruction, /Never name, recommend, or preselect a specific email address/);
+  assert.equal(contract.state, "BLOCKED");
+  assert.equal(contract.nextCommand, undefined);
+  assert.match(contract.instruction, /Do not start a new Microsoft sign-in/);
 });
 
 test("login start never recommends a specific account", () => {

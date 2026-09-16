@@ -35,13 +35,12 @@ export function determineSetupState(snapshot: SetupSnapshot): SetupState {
   if (!snapshot.configured) return "SETUP_REQUIRED";
   if (!snapshot.dataDirPersistent) return "FOLDER_REQUIRED";
   if (snapshot.loggedIn && snapshot.tokenUsable) return "READY";
-  if (snapshot.authMigrationRequired) return "LOGIN_START_REQUIRED";
-  if (snapshot.authReason?.startsWith("AUTH_CHECK_BLOCKED:")) return "BLOCKED";
-  if (snapshot.pendingLoginStateExists) return "LOGIN_COMPLETE_REQUIRED";
   const authFailure = classifyAuthFailure(snapshot.authReason);
   if (authFailure === "NETWORK_BLOCKED" || authFailure === "UNKNOWN_BLOCKED") {
     return "BLOCKED";
   }
+  if (snapshot.authMigrationRequired) return "BLOCKED";
+  if (snapshot.pendingLoginStateExists) return "LOGIN_COMPLETE_REQUIRED";
   return "LOGIN_START_REQUIRED";
 }
 
@@ -53,10 +52,9 @@ export type AuthFailureClass =
 
 export function classifyAuthFailure(reason: string | undefined): AuthFailureClass {
   if (reason?.startsWith("AUTH_CHECK_BLOCKED:")) return "NETWORK_BLOCKED";
-  if (!reason || reason === "NO_ACCOUNT_IN_CACHE" || reason === "NO_ACCESS_TOKEN") {
+  if (!reason || reason === "NO_ACCOUNT_IN_CACHE") {
     return reason ? "LOGIN_REQUIRED" : "NONE";
   }
-  if (reason === "AUTH_APP_CHANGED") return "LOGIN_REQUIRED";
   if (!reason.startsWith("TOKEN_ACQUISITION_FAILED:")) return "UNKNOWN_BLOCKED";
   if (
     /network_error|fetch failed|eacces|eperm|eai_again|etimedout|econnreset|econnrefused|enotfound|und_err_.*timeout|blocked-by-allowlist/i.test(
@@ -99,9 +97,7 @@ export function buildSetupContract(
         nextAction: "RUN_LOGIN_START",
         nextCommand: `${selfCommand} auth login-start`,
         stopAfterAction: true,
-        instruction: snapshot.authMigrationRequired
-          ? "Hare M365 Agent authentication permissions or application changed. Tell the user that one Microsoft sign-in is required, then run nextCommand unchanged once in the foreground, show the returned Microsoft URL and user code, and stop until the user finishes sign-in. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address. Never start a background or detached poller."
-          : "Run nextCommand unchanged once in the foreground, show the returned Microsoft URL and user code, then stop and wait for the user to finish sign-in. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address. Never start a background or detached poller."
+        instruction: "Run nextCommand unchanged once in the foreground, show the returned Microsoft URL and user code, then stop and wait for the user to finish sign-in. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address. Never start a background or detached poller."
       };
     case "LOGIN_COMPLETE_REQUIRED":
       return {

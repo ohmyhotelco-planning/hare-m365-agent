@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { AppConfig } from "./config.js";
-import { clearStoredFile, storedFileHasContent, writeStoredText } from "./persistent-storage.js";
+import { storedFileHasContent, writeStoredText } from "./persistent-storage.js";
 
 type AuthProfileState = {
   version: 1;
@@ -9,11 +9,16 @@ type AuthProfileState = {
   tenantId: string;
   scopes: string[];
   migrationRequired: boolean;
+  homeAccountId?: string;
 };
 
 export type AuthProfilePreparation = {
   migrationRequired: boolean;
   authStateCleared: boolean;
+  homeAccountId?: string;
+  scopesChanged?: boolean;
+  reason?: "AUTH_APP_CHANGED" | "AUTH_TENANT_CHANGED" | "AUTH_MIGRATION_REQUIRED"
+    | "AUTH_PROFILE_MISSING" | "AUTH_PROFILE_INVALID" | "AUTH_PROFILE_UNREADABLE";
 };
 
 function authProfilePath(config: AppConfig): string {
@@ -24,10 +29,6 @@ function msalCachePath(config: AppConfig): string {
   return path.join(config.cacheDir, "msal-cache.json");
 }
 
-function pendingLoginPath(config: AppConfig): string {
-  return path.join(config.cacheDir, "device-login-state.json");
-}
-
 function normalizedScopes(scopes: string[]): string[] {
   return [...new Set(scopes)].sort();
 }
@@ -35,129 +36,87 @@ function normalizedScopes(scopes: string[]): string[] {
 function currentProfile(
   config: AppConfig,
   scopes: string[],
-  migrationRequired: boolean
+  migrationRequired: boolean,
+  homeAccountId?: string
 ): AuthProfileState {
   return {
     version: 1,
     clientId: config.clientId,
     tenantId: config.tenantId,
     scopes: normalizedScopes(scopes),
-    migrationRequired
+    migrationRequired,
+    ...(homeAccountId ? { homeAccountId } : {})
   };
 }
 
-function readProfile(config: AppConfig): AuthProfileState | undefined {
-  const file = authProfilePath(config);
-  if (!storedFileHasContent(file)) return undefined;
-
+function readProfile(config: AppConfig): { profile?: AuthProfileState; reason?: AuthProfilePreparation["reason"] } {
+  let text: string;
   try {
-    const value = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<AuthProfileState>;
+    text = fs.readFileSync(authProfilePath(config), "utf8");
+  } catch (error) {
+    return { reason: (error as NodeJS.ErrnoException).code === "ENOENT"
+      ? "AUTH_PROFILE_MISSING" : "AUTH_PROFILE_UNREADABLE" };
+  }
+  try {
+    const value = JSON.parse(text) as Partial<AuthProfileState> | null;
     if (
+      !value ||
       value.version !== 1 ||
       typeof value.clientId !== "string" ||
       typeof value.tenantId !== "string" ||
       !Array.isArray(value.scopes) ||
       !value.scopes.every((scope) => typeof scope === "string") ||
-      typeof value.migrationRequired !== "boolean"
+      typeof value.migrationRequired !== "boolean" ||
+      (value.homeAccountId !== undefined && (typeof value.homeAccountId !== "string" || !value.homeAccountId))
     ) {
-      return undefined;
+      return { reason: "AUTH_PROFILE_INVALID" };
     }
-    return value as AuthProfileState;
+    return { profile: value as AuthProfileState };
   } catch {
-    return undefined;
+    return { reason: "AUTH_PROFILE_INVALID" };
   }
 }
 
-function profileMatches(
-  profile: AuthProfileState,
-  config: AppConfig,
-  scopes: string[]
-): boolean {
-  return (
-    profile.clientId === config.clientId &&
-    profile.tenantId === config.tenantId &&
-    profile.scopes.join("\n") === normalizedScopes(scopes).join("\n")
-  );
-}
-
-function writeProfile(config: AppConfig, scopes: string[], migrationRequired: boolean): void {
+function writeProfile(config: AppConfig, scopes: string[], migrationRequired: boolean, homeAccountId?: string): void {
   writeStoredText(
     authProfilePath(config),
-    `${JSON.stringify(currentProfile(config, scopes, migrationRequired), null, 2)}\n`
+    `${JSON.stringify(currentProfile(config, scopes, migrationRequired, homeAccountId), null, 2)}\n`
   );
 }
 
-function createProfileIfAbsent(
-  config: AppConfig,
-  scopes: string[],
-  migrationRequired: boolean
-): boolean {
-  const file = authProfilePath(config);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  try {
-    fs.writeFileSync(
-      file,
-      `${JSON.stringify(currentProfile(config, scopes, migrationRequired), null, 2)}\n`,
-      { encoding: "utf8", mode: 0o600, flag: "wx" }
-    );
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
-    throw error;
-  }
-}
-
-function clearAuthenticationState(config: AppConfig): void {
-  clearStoredFile(msalCachePath(config));
-  clearStoredFile(pendingLoginPath(config));
-}
-
+// Inspection never rewrites profile metadata or resets authentication state.
 export function prepareAuthProfile(
   config: AppConfig,
   scopes: string[]
 ): AuthProfilePreparation {
-  const profile = readProfile(config);
-  const hasExistingAuthState =
-    storedFileHasContent(msalCachePath(config)) || storedFileHasContent(pendingLoginPath(config));
-
+  const { profile, reason } = readProfile(config);
   if (!profile) {
-    if (hasExistingAuthState) {
-      createProfileIfAbsent(config, scopes, true);
-      clearAuthenticationState(config);
-      writeProfile(config, scopes, true);
-      return { migrationRequired: true, authStateCleared: true };
+    if (reason === "AUTH_PROFILE_MISSING") {
+      try {
+        if (!storedFileHasContent(msalCachePath(config))) {
+          return { migrationRequired: false, authStateCleared: false };
+        }
+      } catch {
+        return { migrationRequired: false, authStateCleared: false, reason: "AUTH_PROFILE_UNREADABLE" };
+      }
     }
-
-    if (createProfileIfAbsent(config, scopes, false)) {
-      return { migrationRequired: false, authStateCleared: false };
-    }
-
-    const concurrentlyCreatedProfile = readProfile(config);
-    if (concurrentlyCreatedProfile && profileMatches(concurrentlyCreatedProfile, config, scopes)) {
-      return {
-        migrationRequired: concurrentlyCreatedProfile.migrationRequired,
-        authStateCleared: false
-      };
-    }
-
-    writeProfile(config, scopes, false);
-    return { migrationRequired: false, authStateCleared: false };
+    return { migrationRequired: false, authStateCleared: false, reason };
   }
-
-  if (!profileMatches(profile, config, scopes)) {
-    clearAuthenticationState(config);
-    writeProfile(config, scopes, true);
-    return { migrationRequired: true, authStateCleared: hasExistingAuthState };
-  }
-
+  const mismatch = profile.clientId !== config.clientId ? "AUTH_APP_CHANGED"
+    : profile.tenantId !== config.tenantId ? "AUTH_TENANT_CHANGED"
+    : profile.migrationRequired ? "AUTH_MIGRATION_REQUIRED" : undefined;
+  if (mismatch) return { migrationRequired: true, authStateCleared: false, reason: mismatch };
   return {
-    migrationRequired: profile.migrationRequired,
-    authStateCleared: false
+    migrationRequired: false,
+    authStateCleared: false,
+    ...(profile.homeAccountId ? { homeAccountId: profile.homeAccountId } : {}),
+    ...(normalizedScopes(profile.scopes).join("\n") !== normalizedScopes(scopes).join("\n")
+      ? { scopesChanged: true } : {})
   };
 }
 
-export function markAuthProfileReady(config: AppConfig, scopes: string[]): void {
-  writeProfile(config, scopes, false);
+export function markAuthProfileReady(config: AppConfig, scopes: string[], homeAccountId?: string): void {
+  writeProfile(config, scopes, false, homeAccountId);
 }
 
 export function resetAuthProfileAfterLogout(config: AppConfig, scopes: string[]): void {

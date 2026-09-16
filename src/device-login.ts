@@ -52,7 +52,8 @@ export async function startDeviceLogin(
   networkClient: INetworkModule = new ProxyAwareNetworkClient()
 ): Promise<DeviceLoginStartResult> {
   requirePersistentDataDir(config);
-  prepareAuthProfile(config, scopes);
+  const profile = prepareAuthProfile(config, scopes);
+  if (profile.reason) throw new Error(profile.reason);
   const endpoint = `${config.authority}/oauth2/v2.0/devicecode`;
   const body = new URLSearchParams({
     client_id: config.clientId,

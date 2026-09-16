@@ -3,82 +3,81 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import {
-  getAuthProfilePath,
-  markAuthProfileReady,
-  prepareAuthProfile,
-  resetAuthProfileAfterLogout
-} from "../dist/auth-profile.js";
-
-function configFor(dataDir, clientId = "new-client") {
-  return {
-    clientId,
-    tenantId: "tenant",
-    authority: "https://login.microsoftonline.com/tenant",
-    dataDir,
-    dataDirSource: "environment",
-    dataDirPersistent: true,
-    cacheDir: path.join(dataDir, ".cache")
-  };
-}
+import { getAuthProfilePath, markAuthProfileReady, prepareAuthProfile,
+  resetAuthProfileAfterLogout } from "../dist/auth-profile.js";
 
 const scopes = ["User.Read", "Mail.ReadWrite"];
+function fixture(t) {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-auth-profile-"));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const config = { clientId: "client", tenantId: "tenant", dataDir,
+    cacheDir: path.join(dataDir, ".cache") };
+  fs.mkdirSync(config.cacheDir);
+  const cache = path.join(config.cacheDir, "msal-cache.json");
+  const pending = path.join(config.cacheDir, "device-login-state.json");
+  return { config, cache, pending, profile: getAuthProfilePath(config) };
+}
 
-test("legacy authentication state is cleared while user data is preserved", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-auth-profile-legacy-"));
-  const config = configFor(dataDir);
-  const cacheFile = path.join(config.cacheDir, "msal-cache.json");
-  const pendingFile = path.join(config.cacheDir, "device-login-state.json");
-  const downloadFile = path.join(dataDir, "downloads", "keep.txt");
-  const rulesFile = path.join(dataDir, "claude", "hare-m365-agent-rules.md");
-
-  fs.mkdirSync(config.cacheDir, { recursive: true });
-  fs.mkdirSync(path.dirname(downloadFile), { recursive: true });
-  fs.mkdirSync(path.dirname(rulesFile), { recursive: true });
-  fs.writeFileSync(cacheFile, "old-cache", "utf8");
-  fs.writeFileSync(pendingFile, "old-pending-login", "utf8");
-  fs.writeFileSync(downloadFile, "download", "utf8");
-  fs.writeFileSync(rulesFile, "rules", "utf8");
-
-  const preparation = prepareAuthProfile(config, scopes);
-
-  assert.deepEqual(preparation, { migrationRequired: true, authStateCleared: true });
-  assert.equal(fs.existsSync(cacheFile), false);
-  assert.equal(fs.existsSync(pendingFile), false);
-  assert.equal(fs.readFileSync(downloadFile, "utf8"), "download");
-  assert.equal(fs.readFileSync(rulesFile, "utf8"), "rules");
-  assert.equal(JSON.parse(fs.readFileSync(getAuthProfilePath(config), "utf8")).migrationRequired, true);
-});
-
-test("an application or scope change requires one migration login", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-auth-profile-change-"));
-  const oldConfig = configFor(dataDir, "old-client");
-  const newConfig = configFor(dataDir, "new-client");
-
-  prepareAuthProfile(oldConfig, ["User.Read", "Mail.Read"]);
-  markAuthProfileReady(oldConfig, ["User.Read", "Mail.Read"]);
-  fs.writeFileSync(path.join(oldConfig.cacheDir, "msal-cache.json"), "old-cache", "utf8");
-
-  const preparation = prepareAuthProfile(newConfig, scopes);
-  assert.equal(preparation.migrationRequired, true);
-  assert.equal(preparation.authStateCleared, true);
-
-  markAuthProfileReady(newConfig, scopes);
-  assert.deepEqual(prepareAuthProfile(newConfig, scopes), {
-    migrationRequired: false,
-    authStateCleared: false
-  });
-});
-
-test("fresh setup and logout do not report an application migration", () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-auth-profile-fresh-"));
-  const config = configFor(dataDir);
-
-  assert.deepEqual(prepareAuthProfile(config, scopes), {
-    migrationRequired: false,
-    authStateCleared: false
-  });
-
+test("fresh inspection is read-only and pending first login does not require a profile", (t) => {
+  const { config, pending, profile } = fixture(t);
+  const expected = { migrationRequired: false, authStateCleared: false };
+  assert.deepEqual(prepareAuthProfile(config, scopes), expected);
+  assert.equal(fs.existsSync(profile), false);
+  fs.writeFileSync(pending, "synthetic-pending");
+  assert.deepEqual(prepareAuthProfile(config, scopes), expected);
   resetAuthProfileAfterLogout(config, scopes);
-  assert.equal(JSON.parse(fs.readFileSync(getAuthProfilePath(config), "utf8")).migrationRequired, false);
+  assert.deepEqual(prepareAuthProfile(config, scopes), expected);
+});
+
+test("missing, invalid and unreadable profiles block without clearing existing state", (t) => {
+  const { config, cache, pending, profile } = fixture(t);
+  fs.writeFileSync(cache, "synthetic-cache");
+  fs.writeFileSync(pending, "synthetic-pending");
+  assert.equal(prepareAuthProfile(config, scopes).reason, "AUTH_PROFILE_MISSING");
+  assert.equal(fs.existsSync(profile), false);
+  for (const value of ["broken-json", "null", "{}", ""]) {
+    fs.writeFileSync(profile, value);
+    assert.equal(prepareAuthProfile(config, scopes).reason, "AUTH_PROFILE_INVALID");
+    assert.equal(fs.readFileSync(profile, "utf8"), value);
+  }
+  fs.rmSync(profile);
+  fs.mkdirSync(profile);
+  assert.equal(prepareAuthProfile(config, scopes).reason, "AUTH_PROFILE_UNREADABLE");
+  assert.equal(fs.readFileSync(cache, "utf8"), "synthetic-cache");
+  assert.equal(fs.readFileSync(pending, "utf8"), "synthetic-pending");
+});
+
+test("client, tenant and explicit migration mismatches preserve all authentication files", (t) => {
+  const { config, cache, pending, profile } = fixture(t);
+  markAuthProfileReady(config, scopes, "account");
+  fs.writeFileSync(cache, "synthetic-cache");
+  fs.writeFileSync(pending, "synthetic-pending");
+  const original = fs.readFileSync(profile, "utf8");
+  for (const [field, reason] of [["clientId", "AUTH_APP_CHANGED"], ["tenantId", "AUTH_TENANT_CHANGED"]]) {
+    assert.deepEqual(prepareAuthProfile({ ...config, [field]: "other" }, scopes), {
+      migrationRequired: true, authStateCleared: false, reason
+    });
+    assert.equal(fs.readFileSync(profile, "utf8"), original);
+  }
+  const migration = JSON.stringify({ ...JSON.parse(original), migrationRequired: true });
+  fs.writeFileSync(profile, migration);
+  assert.equal(prepareAuthProfile(config, scopes).reason, "AUTH_MIGRATION_REQUIRED");
+  assert.equal(fs.readFileSync(profile, "utf8"), migration);
+  assert.equal(fs.readFileSync(cache, "utf8"), "synthetic-cache");
+  assert.equal(fs.readFileSync(pending, "utf8"), "synthetic-pending");
+});
+
+test("scope changes retain identity for silent validation without rewriting metadata", (t) => {
+  const { config, profile } = fixture(t);
+  markAuthProfileReady(config, scopes, "account");
+  const original = fs.readFileSync(profile, "utf8");
+  for (const requested of [[...scopes, "Chat.Read"], ["User.Read"], ["User.Read", "Mail.Read"]]) {
+    assert.deepEqual(prepareAuthProfile(config, requested), {
+      migrationRequired: false, authStateCleared: false, homeAccountId: "account", scopesChanged: true
+    });
+    assert.equal(fs.readFileSync(profile, "utf8"), original);
+  }
+  assert.deepEqual(prepareAuthProfile(config, ["Mail.ReadWrite", "User.Read", "Mail.ReadWrite"]), {
+    migrationRequired: false, authStateCleared: false, homeAccountId: "account"
+  });
 });

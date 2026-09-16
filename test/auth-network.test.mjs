@@ -6,9 +6,9 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { PublicClientApplication } from "@azure/msal-node";
-import { completeLogin, getAuthStatus, getAccessToken, getScopeList } from "../dist/auth.js";
+import { completeLogin, getAccount, getAuthStatus, getAccessToken, getScopeList, logout } from "../dist/auth.js";
 import { hasPendingDeviceLoginState, startDeviceLogin } from "../dist/device-login.js";
-import { markAuthProfileReady } from "../dist/auth-profile.js";
+import { getAuthProfilePath, markAuthProfileReady } from "../dist/auth-profile.js";
 import { ProxyAwareNetworkClient } from "../dist/msal-network.js";
 import { buildSetupContract } from "../dist/setup-state.js";
 
@@ -215,7 +215,7 @@ test("transport timeout, body failure, sanitization and diagnostic reset", async
 });
 
 test("startup, doctor and auth status expose blocked diagnostics without leaking raw errors", async (t) => {
-  const { config, cacheFile } = await fixture(t);
+  const { config, cacheFile, assertPreserved } = await scopeFixture(t);
   const before = fs.readFileSync(cacheFile, "utf8");
   const preload = `
     import undici from ${JSON.stringify(pathToFileURL(path.resolve("node_modules/undici/index.js")).href)};
@@ -257,5 +257,222 @@ test("startup, doctor and auth status expose blocked diagnostics without leaking
     assert.equal(output.setup.nextCommand, undefined);
     assert.doesNotMatch(result.stdout + result.stderr, new RegExp(marker));
     assert.equal(fs.readFileSync(cacheFile, "utf8"), before);
+    assertPreserved();
   }
+});
+
+async function scopeFixture(t, storedScopes = scopes.filter((scope) => scope !== "Mail.Read.Shared")) {
+  const fixtureData = await fixture(t);
+  const { config } = fixtureData;
+  const homeAccountId = `33333333-3333-3333-3333-333333333333.${config.tenantId}`;
+  markAuthProfileReady(config, storedScopes, homeAccountId);
+  const profileFile = getAuthProfilePath(config);
+  const files = [profileFile, fixtureData.cacheFile, fixtureData.pendingFile];
+  const before = files.map((file) => fs.readFileSync(file, "utf8"));
+  return { ...fixtureData, homeAccountId, profileFile, assertPreserved() {
+    assert.deepEqual(files.map((file) => fs.readFileSync(file, "utf8")), before);
+  } };
+}
+
+for (const [label, storedScopes] of [
+  ["added", scopes.filter((scope) => scope !== "Mail.Read.Shared")],
+  ["removed", [...scopes, "Calendars.Read"]],
+  ["replaced", scopes.map((scope) => scope === "Mail.ReadWrite" ? "Mail.Read" : scope)],
+  ["reordered", [...scopes].reverse().concat(scopes[0])]
+]) {
+  test(`scope ${label}: all read APIs silently validate the bound account with current scopes`, async (t) => {
+    const { config, homeAccountId, profileFile } = await scopeFixture(t, storedScopes);
+    const profileBefore = fs.readFileSync(profileFile, "utf8");
+    const ok = successfulFetch(config);
+    let refreshes = 0;
+    const network = new ProxyAwareNetworkClient(async (url, options) => {
+      if (options.method === "POST") {
+        assert.ok(new URL(url).pathname.endsWith("/token"), "must never start device login");
+        const body = new URLSearchParams(options.body);
+        assert.equal(body.get("grant_type"), "refresh_token");
+        const requested = new Set(body.get("scope").split(" "));
+        for (const scope of scopes) assert.ok(requested.has(scope), scope);
+        refreshes++;
+      }
+      return ok(url, options);
+    });
+    const status = await getAuthStatus(config, network);
+    assert.equal(status.tokenUsable, true, status.reason);
+    assert.equal(status.migrationRequired, false);
+    assert.equal(status.account.homeAccountId, homeAccountId);
+    assert.equal((await getAccount(config, network)).homeAccountId, homeAccountId);
+    assert.equal(await getAccessToken(config, network), "synthetic-access");
+    assert.equal(refreshes, 1, "a successful refresh is persisted and reused");
+    assert.equal(fs.readFileSync(profileFile, "utf8"), profileBefore);
+  });
+}
+
+for (const [label, response, reason] of [
+  ["consent", { error: "consent_required", error_description: marker }, "TOKEN_ACQUISITION_FAILED: consent_required"],
+  ["revoked refresh", { error: "interaction_required", suberror: "bad_token", error_description: marker }, "TOKEN_ACQUISITION_FAILED: interaction_required"],
+  ["unknown", { error: "server_error", error_description: `${marker} consent_required` }, "TOKEN_ACQUISITION_FAILED: unclassified_error"],
+  ["network", null, "AUTH_CHECK_BLOCKED:"]
+]) {
+  test(`scope drift + ${label} preserves profile/cache/pending state and classifies safely`, async (t) => {
+    const { config, assertPreserved } = await scopeFixture(t);
+    const ok = successfulFetch(config);
+    const network = new ProxyAwareNetworkClient(async (url, options) => {
+      if (options.method !== "POST") return ok(url, options);
+      assert.ok(new URL(url).pathname.endsWith("/token"));
+      if (!response) throw Object.assign(new Error(marker), { code: "EACCES" });
+      return jsonResponse(response, 400);
+    });
+    const status = await getAuthStatus(config, network);
+    assert.ok(status.reason.startsWith(reason), status.reason);
+    assert.equal(status.tokenUsable, label === "network" ? null : false);
+    const setup = buildSetupContract({ configured: true, dataDirPersistent: true,
+      loggedIn: status.loggedIn, tokenUsable: status.tokenUsable, authReason: status.reason,
+      authMigrationRequired: status.migrationRequired, pendingLoginStateExists: false }, "hare");
+    assert.equal(setup.state, ["consent", "revoked refresh"].includes(label) ? "LOGIN_START_REQUIRED" : "BLOCKED");
+    assertPreserved();
+    await assert.rejects(getAccessToken(config, network), (error) => {
+      assert.ok(error.message.startsWith(reason), error.message);
+      assert.doesNotMatch(error.message, new RegExp(marker));
+      return true;
+    });
+    assert.equal(await getAccount(config, network), null);
+    assertPreserved();
+  });
+}
+
+for (const kind of ["insufficient-scopes", "different-account"]) {
+  test(`silent response with ${kind} cannot become READY or persist new tokens`, async (t) => {
+    const { config, assertPreserved } = await scopeFixture(t);
+    const ok = successfulFetch(config);
+    const network = new ProxyAwareNetworkClient(async (url, options) => {
+      if (options.method !== "POST") return ok(url, options);
+      const token = tokenBody(config);
+      if (kind === "insufficient-scopes") token.scope = "User.Read";
+      else token.client_info = Buffer.from(JSON.stringify({ uid: "other-user", utid: config.tenantId })).toString("base64url");
+      return jsonResponse(token);
+    });
+    const expected = kind === "insufficient-scopes" ? "AUTH_SCOPES_INSUFFICIENT" : "AUTH_ACCOUNT_MISMATCH";
+    const status = await getAuthStatus(config, network);
+    assert.equal(status.reason, expected);
+    assertPreserved();
+    await assert.rejects(getAccessToken(config, network), new RegExp(expected));
+    assertPreserved();
+  });
+}
+
+test("hard profile blockers prevent reads and explicit login without touching credentials", async (t) => {
+  const { config, profileFile, assertPreserved } = await scopeFixture(t);
+  const blockedNetwork = new ProxyAwareNetworkClient(async () => assert.fail("no network on identity mismatch"));
+  for (const [field, reason] of [["clientId", "AUTH_APP_CHANGED"], ["tenantId", "AUTH_TENANT_CHANGED"]]) {
+    const changed = { ...config, [field]: "other" };
+    assert.equal((await getAuthStatus(changed, blockedNetwork)).reason, reason);
+    assert.equal(await getAccount(changed, blockedNetwork), null);
+    await assert.rejects(getAccessToken(changed, blockedNetwork), new RegExp(reason));
+    await assert.rejects(startDeviceLogin(changed, scopes, blockedNetwork), new RegExp(reason));
+    await assert.rejects(completeLogin(changed, blockedNetwork), new RegExp(reason));
+    assertPreserved();
+  }
+  const saved = fs.readFileSync(profileFile, "utf8");
+  for (const value of ["bad-json", JSON.stringify({ ...JSON.parse(saved), migrationRequired: true })]) {
+    fs.writeFileSync(profileFile, value);
+    const reason = value === "bad-json" ? "AUTH_PROFILE_INVALID" : "AUTH_MIGRATION_REQUIRED";
+    assert.equal((await getAuthStatus(config, blockedNetwork)).reason, reason);
+    await assert.rejects(startDeviceLogin(config, scopes, blockedNetwork), new RegExp(reason));
+    assert.equal(fs.readFileSync(profileFile, "utf8"), value);
+  }
+  fs.writeFileSync(profileFile, saved);
+  assertPreserved();
+});
+
+test("bound account never falls back and ambiguous unbound accounts do not pick the first", async (t) => {
+  const { config, cacheFile, profileFile } = await scopeFixture(t);
+  const cache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+  const account = Object.values(cache.Account)[0];
+  const otherHome = `44444444-4444-4444-4444-444444444444.${config.tenantId}`;
+  cache.Account[`${otherHome}-${host}-${config.tenantId}`] = {
+    ...account, home_account_id: otherHome, local_account_id: "44444444-4444-4444-4444-444444444444",
+    username: "other@example.com"
+  };
+  fs.writeFileSync(cacheFile, JSON.stringify(cache));
+  const blocked = new ProxyAwareNetworkClient(async () => assert.fail("ambiguous accounts must not request tokens"));
+  markAuthProfileReady(config, scopes.slice(1), "missing-bound-account");
+  assert.equal((await getAuthStatus(config, blocked)).reason, "AUTH_ACCOUNT_MISMATCH");
+  await assert.rejects(getAccessToken(config, blocked), /AUTH_ACCOUNT_MISMATCH/);
+  markAuthProfileReady(config, scopes.slice(1));
+  const profileBefore = fs.readFileSync(profileFile, "utf8");
+  assert.equal((await getAuthStatus(config, blocked)).reason, "AUTH_ACCOUNT_SELECTION_REQUIRED");
+  assert.equal(await getAccount(config, blocked), null);
+  assert.equal(fs.readFileSync(profileFile, "utf8"), profileBefore);
+});
+
+test("a concurrent cache change is not overwritten by a successful silent refresh", async (t) => {
+  const { config, cacheFile } = await scopeFixture(t);
+  const ok = successfulFetch(config);
+  const network = new ProxyAwareNetworkClient(async (url, options) => {
+    if (options.method === "POST") fs.writeFileSync(cacheFile, "{}");
+    return ok(url, options);
+  });
+  const status = await getAuthStatus(config, network);
+  assert.equal(status.reason, "AUTH_CACHE_CHANGED");
+  assert.equal(status.tokenUsable, false);
+  assert.equal(fs.readFileSync(cacheFile, "utf8"), "{}");
+});
+
+test("a missing token result remains blocked rather than proving another login is needed", async (t) => {
+  const { config, assertPreserved } = await scopeFixture(t);
+  t.mock.method(PublicClientApplication.prototype, "acquireTokenSilent", async () => null);
+  const network = new ProxyAwareNetworkClient(async () => assert.fail("no live network"));
+  const status = await getAuthStatus(config, network);
+  assert.equal(status.reason, "NO_ACCESS_TOKEN");
+  assert.equal(buildSetupContract({ configured: true, dataDirPersistent: true,
+    loggedIn: status.loggedIn, tokenUsable: status.tokenUsable, authReason: status.reason,
+    authMigrationRequired: false, pendingLoginStateExists: false }, "hare").state, "BLOCKED");
+  await assert.rejects(getAccessToken(config, network), /NO_ACCESS_TOKEN/);
+  assertPreserved();
+});
+
+test("explicit login cannot switch a bound account or persist its returned credentials", async (t) => {
+  const { config, cacheFile, profileFile } = await scopeFixture(t);
+  const ok = successfulFetch(config);
+  await startDeviceLogin(config, scopes, new ProxyAwareNetworkClient(ok));
+  const before = [cacheFile, profileFile].map((file) => fs.readFileSync(file, "utf8"));
+  const network = new ProxyAwareNetworkClient(async (url, options) => options.method !== "POST"
+    ? ok(url, options) : jsonResponse({ ...tokenBody(config),
+      client_info: Buffer.from(JSON.stringify({ uid: "other-user", utid: config.tenantId })).toString("base64url") }));
+  await assert.rejects(completeLogin(config, network), /AUTH_ACCOUNT_MISMATCH/);
+  assert.deepEqual([cacheFile, profileFile].map((file) => fs.readFileSync(file, "utf8")), before);
+  assert.equal(hasPendingDeviceLoginState(config), false, "a redeemed device code is retired even on validation failure");
+});
+
+for (const change of ["cache-and-profile", "profile-only"]) {
+  test(`login completion preserves a concurrent ${change} update during the token request`, async (t) => {
+    const { config, cacheFile, profileFile } = await scopeFixture(t);
+    const ok = successfulFetch(config);
+    await startDeviceLogin(config, scopes, new ProxyAwareNetworkClient(ok));
+    let newerCache;
+    let newerProfile;
+    const network = new ProxyAwareNetworkClient(async (url, options) => {
+      if (options.method !== "POST") return ok(url, options);
+      if (change === "cache-and-profile") await logout(config);
+      markAuthProfileReady(config, scopes, "newer-account");
+      newerCache = fs.existsSync(cacheFile) ? fs.readFileSync(cacheFile, "utf8") : null;
+      newerProfile = fs.readFileSync(profileFile, "utf8");
+      return ok(url, options);
+    });
+    await assert.rejects(completeLogin(config, network), /AUTH_(CACHE|PROFILE)_CHANGED/);
+    assert.equal(fs.existsSync(cacheFile) ? fs.readFileSync(cacheFile, "utf8") : null, newerCache);
+    assert.equal(fs.readFileSync(profileFile, "utf8"), newerProfile);
+  });
+}
+
+test("logout remains explicit and allows a fresh login without leaving a lock", async (t) => {
+  const { config, cacheFile } = await scopeFixture(t);
+  await logout(config);
+  assert.equal(fs.existsSync(cacheFile), false);
+  assert.equal(fs.existsSync(`${cacheFile}.lock`), false);
+  const network = new ProxyAwareNetworkClient(successfulFetch(config));
+  assert.equal((await getAuthStatus(config, network)).reason, "NO_ACCOUNT_IN_CACHE");
+  await startDeviceLogin(config, scopes, network);
+  await completeLogin(config, network);
+  assert.equal((await getAuthStatus(config, network)).tokenUsable, true);
 });
