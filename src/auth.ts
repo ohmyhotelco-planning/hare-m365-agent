@@ -9,6 +9,7 @@ import {
 } from "@azure/msal-node";
 import type { AppConfig } from "./config.js";
 import {
+  getAuthProfilePath,
   markAuthProfileReady,
   prepareAuthProfile,
   resetAuthProfileAfterLogout
@@ -56,8 +57,27 @@ function cachePath(config: AppConfig): string {
 async function buildPca(
   config: AppConfig,
   networkClient: INetworkModule = new ProxyAwareNetworkClient()
-): Promise<PublicClientApplication> {
+): Promise<{ pca: PublicClientApplication; commit: (homeAccountId?: string) => Promise<void> }> {
   let releaseCacheLock: (() => void) | undefined;
+  let pendingCache: string | undefined;
+  const readCache = () => storedFileHasContent(cachePath(config))
+    ? fs.readFileSync(cachePath(config), "utf8") : "";
+  const readProfile = () => {
+    try {
+      return fs.readFileSync(getAuthProfilePath(config), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw new Error("AUTH_PROFILE_UNREADABLE");
+    }
+  };
+  // Device-code MSAL hooks run after the response; capture state before the request.
+  let initialCache: string;
+  try {
+    initialCache = readCache();
+  } catch {
+    throw new Error("AUTH_CACHE_UNREADABLE");
+  }
+  const initialProfile = readProfile();
   const msalConfig: Configuration = {
     auth: {
       clientId: config.clientId,
@@ -71,20 +91,19 @@ async function buildPca(
           releaseCacheLock = usesDeleteRestrictedStorage(file)
             ? undefined
             : await acquireFileLock(`${file}.lock`);
-          if (storedFileHasContent(file)) {
-            try {
-              cacheContext.tokenCache.deserialize(fs.readFileSync(file, "utf8"));
-            } catch (error) {
-              releaseCacheLock?.();
-              releaseCacheLock = undefined;
-              throw new Error(`Hare login cache is unreadable: ${errorMessage(error)}`);
-            }
+          try {
+            const text = pendingCache ?? initialCache;
+            if (text) cacheContext.tokenCache.deserialize(text);
+          } catch {
+            releaseCacheLock?.();
+            releaseCacheLock = undefined;
+            throw new Error("AUTH_CACHE_UNREADABLE");
           }
         },
         afterCacheAccess: async (cacheContext) => {
           try {
             if (cacheContext.cacheHasChanged) {
-              writeStoredText(cachePath(config), cacheContext.tokenCache.serialize());
+              pendingCache = cacheContext.tokenCache.serialize();
             }
           } finally {
             releaseCacheLock?.();
@@ -98,7 +117,22 @@ async function buildPca(
     }
   };
 
-  return new PublicClientApplication(msalConfig);
+  return {
+    pca: new PublicClientApplication(msalConfig),
+    commit: async (homeAccountId?: string) => {
+      const file = cachePath(config);
+      const release = usesDeleteRestrictedStorage(file) ? undefined : await acquireFileLock(`${file}.lock`);
+      try {
+        // Do not overwrite a login/logout or refresh performed by another process.
+        if (readCache() !== initialCache) throw new Error("AUTH_CACHE_CHANGED");
+        if (readProfile() !== initialProfile) throw new Error("AUTH_PROFILE_CHANGED");
+        if (pendingCache !== undefined) writeStoredText(file, pendingCache);
+        if (homeAccountId) markAuthProfileReady(config, scopes, homeAccountId);
+      } finally {
+        release?.();
+      }
+    }
+  };
 }
 
 async function acquireFileLock(lockPath: string): Promise<() => void> {
@@ -171,13 +205,13 @@ export async function completeLogin(
   config: AppConfig,
   networkClient: INetworkModule = new ProxyAwareNetworkClient()
 ): Promise<AuthenticationResult> {
-  prepareAuthProfile(config, scopes);
+  const profile = prepareAuthProfile(config, scopes);
+  if (profile.reason) throw new Error(profile.reason);
   const state = readDeviceLoginState(config);
   if ([...state.scopes].sort().join(" ") !== [...scopes].sort().join(" ")) {
-    clearDeviceLoginState(config);
     throw new Error("Pending login scopes changed. Run auth login-start again.");
   }
-  const pca = await buildPca(config, new ResumeDeviceCodeNetworkClient(state, networkClient));
+  const { pca, commit } = await buildPca(config, new ResumeDeviceCodeNetworkClient(state, networkClient));
   let result: AuthenticationResult | null;
   try {
     result = await pca.acquireTokenByDeviceCode({
@@ -208,9 +242,14 @@ export async function completeLogin(
     );
   }
 
-  markAuthProfileReady(config, scopes);
   // The code was redeemed successfully; token verification must never resume it again.
   clearDeviceLoginState(config);
+  if (result.account.tenantId !== config.tenantId ||
+      (profile.homeAccountId && result.account.homeAccountId !== profile.homeAccountId)) {
+    throw new Error("AUTH_ACCOUNT_MISMATCH");
+  }
+  verifySilentResult(result, result.account);
+  await commit(result.account.homeAccountId);
   const verifiedStatus = await getAuthStatus(config, networkClient);
   if (verifiedStatus.reason?.startsWith("AUTH_CHECK_BLOCKED:")) {
     throw new Error(verifiedStatus.reason);
@@ -223,11 +262,34 @@ export async function completeLogin(
   return result;
 }
 
-export async function getAccount(config: AppConfig): Promise<AccountInfo | null> {
-  if (prepareAuthProfile(config, scopes).migrationRequired) return null;
-  const pca = await buildPca(config);
-  const accounts = await pca.getTokenCache().getAllAccounts();
-  return accounts[0] ?? null;
+export async function getAccount(
+  config: AppConfig,
+  networkClient: INetworkModule = new ProxyAwareNetworkClient()
+): Promise<AccountInfo | null> {
+  const status = await getAuthStatus(config, networkClient);
+  return status.tokenUsable ? status.account : null;
+}
+
+function selectAccount(accounts: AccountInfo[], config: AppConfig, homeAccountId?: string): AccountInfo {
+  if (!homeAccountId && accounts.length > 1) throw new Error("AUTH_ACCOUNT_SELECTION_REQUIRED");
+  const account = homeAccountId
+    ? accounts.find((candidate) => candidate.homeAccountId === homeAccountId)
+    : accounts[0];
+  if (!account) throw new Error(homeAccountId ? "AUTH_ACCOUNT_MISMATCH" : "NO_ACCOUNT_IN_CACHE");
+  if (account.tenantId !== config.tenantId) throw new Error("AUTH_ACCOUNT_MISMATCH");
+  return account;
+}
+
+function verifySilentResult(result: AuthenticationResult | null, account: AccountInfo): string {
+  if (!result?.accessToken) throw new Error("NO_ACCESS_TOKEN");
+  if (result.account?.homeAccountId !== account.homeAccountId || result.account.tenantId !== account.tenantId) {
+    throw new Error("AUTH_ACCOUNT_MISMATCH");
+  }
+  const granted = new Set(result.scopes.map((scope) => scope.toLowerCase()));
+  const missing = scopes.some((scope) => !["openid", "profile", "offline_access"].includes(scope)
+    && !granted.has(scope.toLowerCase()));
+  if (missing) throw new Error("AUTH_SCOPES_INSUFFICIENT");
+  return result.accessToken;
 }
 
 export type AuthStatus = {
@@ -253,9 +315,13 @@ function networkBlockedReason(error: unknown, failure?: AuthNetworkFailure): str
 }
 
 function tokenFailureReason(error: unknown): string {
+  const message = errorMessage(error);
+  if (/^(AUTH_ACCOUNT_MISMATCH|AUTH_ACCOUNT_SELECTION_REQUIRED|AUTH_CACHE_UNREADABLE|AUTH_CACHE_CHANGED|AUTH_PROFILE_UNREADABLE|AUTH_PROFILE_CHANGED|AUTH_SCOPES_INSUFFICIENT|NO_ACCOUNT_IN_CACHE|NO_ACCESS_TOKEN)$/.test(message)) {
+    return message;
+  }
   const code = (error as { errorCode?: unknown } | null)?.errorCode;
-  const diagnostic = `${typeof code === "string" ? code : ""} ${errorMessage(error)}`;
-  const knownCode = diagnostic.match(/\b(interaction_required|invalid_grant|login_required|consent_required)\b/i)?.[1];
+  const knownCode = typeof code === "string"
+    ? code.match(/^(interaction_required|invalid_grant|login_required|consent_required)$/i)?.[1] : undefined;
   return `TOKEN_ACQUISITION_FAILED: ${knownCode?.toLowerCase() ?? "unclassified_error"}`;
 }
 
@@ -265,38 +331,29 @@ export async function getAuthStatus(
 ): Promise<AuthStatus> {
   if (networkClient instanceof ProxyAwareNetworkClient) networkClient.takeNetworkFailure();
   const profile = prepareAuthProfile(config, scopes);
-  if (profile.migrationRequired) {
+  if (profile.migrationRequired || profile.reason) {
     return {
       account: null,
       loggedIn: false,
       tokenUsable: false,
-      migrationRequired: true,
-      reason: "AUTH_APP_CHANGED"
+      migrationRequired: profile.migrationRequired,
+      reason: profile.reason ?? "AUTH_MIGRATION_REQUIRED"
     };
   }
 
-  const pca = await buildPca(config, networkClient);
-  const accounts = await pca.getTokenCache().getAllAccounts();
-  const account = accounts[0] ?? null;
-  if (!account) {
-    return {
-      account: null,
-      loggedIn: false,
-      tokenUsable: false,
-      migrationRequired: false,
-      reason: "NO_ACCOUNT_IN_CACHE"
-    };
-  }
-
+  let account: AccountInfo | null = null;
   try {
+    const { pca, commit } = await buildPca(config, networkClient);
+    const accounts = await pca.getTokenCache().getAllAccounts();
+    account = selectAccount(accounts, config, profile.homeAccountId);
     const result = await pca.acquireTokenSilent({ account, scopes });
-    const tokenUsable = Boolean(result?.accessToken);
+    verifySilentResult(result, account);
+    await commit();
     return {
       account,
-      loggedIn: tokenUsable,
-      tokenUsable,
-      migrationRequired: false,
-      reason: tokenUsable ? undefined : "NO_ACCESS_TOKEN"
+      loggedIn: true,
+      tokenUsable: true,
+      migrationRequired: false
     };
   } catch (error) {
     const networkFailure = networkClient instanceof ProxyAwareNetworkClient
@@ -318,40 +375,40 @@ export async function getAccessToken(
   networkClient: INetworkModule = new ProxyAwareNetworkClient()
 ): Promise<string> {
   if (networkClient instanceof ProxyAwareNetworkClient) networkClient.takeNetworkFailure();
-  if (prepareAuthProfile(config, scopes).migrationRequired) {
+  const profile = prepareAuthProfile(config, scopes);
+  if (profile.migrationRequired || profile.reason) {
     throw new Error(
-      "Hare M365 Agent authentication permissions or application changed. Complete Microsoft sign-in once, then retry."
+      `${profile.reason ?? "AUTH_MIGRATION_REQUIRED"}: Authentication profile validation failed. Existing authentication files were preserved.`
     );
   }
-  const pca = await buildPca(config, networkClient);
-  const accounts = await pca.getTokenCache().getAllAccounts();
-  const account = accounts[0] ?? null;
-  if (!account) {
-    throw new Error(
-      "Not logged in for this Hare dataDir/cacheFile. Run auth login-start, let the user finish Microsoft sign-in, then run auth login-complete and retry in the same dataDir."
-    );
-  }
-
-  let result: AuthenticationResult | null;
   try {
-    result = await pca.acquireTokenSilent({ account, scopes });
+    const { pca, commit } = await buildPca(config, networkClient);
+    const accounts = await pca.getTokenCache().getAllAccounts();
+    const account = selectAccount(accounts, config, profile.homeAccountId);
+    const result = await pca.acquireTokenSilent({ account, scopes });
+    const token = verifySilentResult(result, account);
+    await commit();
+    return token;
   } catch (error) {
     const failure = networkClient instanceof ProxyAwareNetworkClient
       ? networkClient.takeNetworkFailure() : undefined;
     const reason = networkBlockedReason(error, failure);
     if (reason) throw new Error(reason);
-    throw error;
+    throw new Error(tokenFailureReason(error));
   }
-
-  if (!result?.accessToken) throw new Error("Could not acquire access token.");
-  return result.accessToken;
 }
 
-export function logout(config: AppConfig): void {
+export async function logout(config: AppConfig): Promise<void> {
   const file = cachePath(config);
-  clearStoredFile(file);
-  clearDeviceLoginState(config);
-  resetAuthProfileAfterLogout(config, scopes);
+  fs.mkdirSync(config.cacheDir, { recursive: true });
+  const release = usesDeleteRestrictedStorage(file) ? undefined : await acquireFileLock(`${file}.lock`);
+  try {
+    clearStoredFile(file);
+    clearDeviceLoginState(config);
+    resetAuthProfileAfterLogout(config, scopes);
+  } finally {
+    release?.();
+  }
 }
 
 export function getScopeList(): string[] {

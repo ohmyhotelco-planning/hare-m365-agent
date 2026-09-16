@@ -197,6 +197,9 @@ test("login-complete resumes the saved device flow and writes an MSAL cache quic
   };
 
   const startedAt = Date.now();
+  const pendingStatus = await getAuthStatus(config);
+  assert.equal(pendingStatus.reason, "NO_ACCOUNT_IN_CACHE");
+  assert.equal(fs.existsSync(path.join(config.cacheDir, "auth-profile.json")), false);
   const result = await completeLogin(config, completeNetwork);
   assert.ok(Date.now() - startedAt < 1000);
   assert.equal(result.account?.username, "test@example.com");
@@ -205,6 +208,8 @@ test("login-complete resumes the saved device flow and writes an MSAL cache quic
   const status = await getAuthStatus(config);
   assert.equal(status.loggedIn, true, status.reason);
   assert.equal(status.tokenUsable, true, status.reason);
+  const profile = JSON.parse(fs.readFileSync(path.join(config.cacheDir, "auth-profile.json"), "utf8"));
+  assert.equal(profile.homeAccountId, result.account.homeAccountId);
 });
 
 function unsignedJwt(payload) {

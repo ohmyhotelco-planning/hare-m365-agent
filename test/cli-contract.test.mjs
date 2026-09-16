@@ -51,7 +51,7 @@ function runAsync(args, dataDir) {
   });
 }
 
-test("startup migrates a legacy cache and requests one sign-in for the new application", () => {
+test("startup preserves a legacy cache and blocks until identity metadata is resolved", () => {
   const dataDir = makeDataDir("hare-status-");
   fs.mkdirSync(path.join(dataDir, ".cache"), { recursive: true });
   fs.writeFileSync(path.join(dataDir, ".cache", "msal-cache.json"), "{}", "utf8");
@@ -59,14 +59,15 @@ test("startup migrates a legacy cache and requests one sign-in for the new appli
   const result = run([], dataDir);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status.cacheFileExists, false);
+  assert.equal(output.status.cacheFileExists, true);
   assert.equal(output.status.loggedIn, false);
   assert.equal(output.status.tokenUsable, false);
-  assert.equal(output.status.authMigrationRequired, true);
-  assert.equal(output.status.authReason, "AUTH_APP_CHANGED");
-  assert.equal(output.setup.state, "LOGIN_START_REQUIRED");
-  assert.equal(output.setup.nextAction, "RUN_LOGIN_START");
-  assert.match(output.setup.instruction, /authentication permissions or application changed/);
+  assert.equal(output.status.authMigrationRequired, false);
+  assert.equal(output.status.authReason, "AUTH_PROFILE_MISSING");
+  assert.equal(output.setup.state, "BLOCKED");
+  assert.equal(output.setup.nextAction, "REPORT_BLOCKER");
+  assert.equal(output.setup.nextCommand, undefined);
+  assert.equal(fs.readFileSync(path.join(dataDir, ".cache", "msal-cache.json"), "utf8"), "{}");
   assert.deepEqual(output.requiredDomains, [
     "github.com",
     "registry.npmjs.org",
@@ -89,10 +90,8 @@ test("startup migrates a legacy cache and requests one sign-in for the new appli
   assert.match(output.setupCommand, new RegExp(escapeRegExp(dataDir)));
   assert.doesNotMatch(output.setupCommand, /rm -rf "\$HARE_DATA_DIR"|\/tmp\/hare-m365-agent|\/dev\/shm|\/home\/claude/);
   assert.doesNotMatch(JSON.stringify(output), /required only if npm ci/);
-  assert.match(output.setup.nextCommand, /auth login-start/);
-  assert.match(output.setup.nextCommand, /--data-dir/);
-  assert.match(output.setup.nextCommand, new RegExp(escapeRegExp(dataDir)));
-  assert.match(output.setup.instruction, /Never start a background or detached poller/);
+  assert.doesNotMatch(JSON.stringify(output.setup), /auth login-start|auth login-complete/);
+  assert.match(output.setup.instruction, /Do not start a new Microsoft sign-in/);
   assert.equal(output.nextCommand, undefined);
   assert.equal(output.llmAction, undefined);
 });
@@ -358,7 +357,7 @@ test("startup, doctor, and auth status expose the same setup state", () => {
   ]);
 });
 
-test("parallel status checks serialize cache access without leaving a lock", async () => {
+test("parallel legacy status checks preserve state without creating a profile or lock", async () => {
   const dataDir = makeDataDir("hare-lock-");
   const cacheDir = path.join(dataDir, ".cache");
   fs.mkdirSync(cacheDir, { recursive: true });
@@ -369,10 +368,12 @@ test("parallel status checks serialize cache access without leaving a lock", asy
     assert.equal(result.status, 0, result.stderr);
     const output = JSON.parse(result.stdout);
     assert.equal(output.loggedIn, false);
-    assert.equal(output.authReason, "AUTH_APP_CHANGED");
-    assert.equal(output.authMigrationRequired, true);
+    assert.equal(output.authReason, "AUTH_PROFILE_MISSING");
+    assert.equal(output.authMigrationRequired, false);
   }
   assert.equal(fs.existsSync(path.join(cacheDir, "msal-cache.json.lock")), false);
+  assert.equal(fs.existsSync(path.join(cacheDir, "auth-profile.json")), false);
+  assert.equal(fs.readFileSync(path.join(cacheDir, "msal-cache.json"), "utf8"), "{}");
 });
 
 test("list commands reject invalid limits before making Graph calls", () => {
