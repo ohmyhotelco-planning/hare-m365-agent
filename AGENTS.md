@@ -34,6 +34,7 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 ## 조회 기준
 
 - 일반·최근 메일은 `outlook recent --folder all`을 사용하고, `outlook inbox`는 받은편지함이 명시된 경우에만 사용합니다.
+- 삭제된 항목은 기본 제외합니다. 사용자가 삭제된 메일만 요청하면 `--folder deleted`, 삭제된 메일 포함을 명시하면 `--folder all-with-deleted`를 recent/flagged/search/count에 사용합니다. 빈 결과를 이유로 자동 확장하지 않습니다. `deleted`는 삭제된 항목 폴더 직속 메일만 대상으로 하며 하위 폴더 재귀 조회·영구 삭제 복구 영역 조회·복원은 지원하지 않습니다. 날짜는 삭제일이 아닌 수신일 기준이고, 커서를 이어갈 때도 같은 `--folder`와 `--mailbox`를 유지합니다.
 - 플래그된 메일은 `outlook flagged --folder all`을 사용하며 모든 메일 결과의 `flagStatus`를 확인합니다.
 - 공유 사서함이 명시된 요청은 `--mailbox <name-or-address>`를 사용합니다. 이름 후보가 모호하거나 접근이 거부되면 중단하며 본인 사서함으로 대체하지 않습니다. 공유 사서함 첨부파일 명령에도 같은 `--mailbox`를 유지합니다.
 - 기간 미지정 검색은 `Asia/Seoul` 기준 최근 90일이며 실제 범위를 답변에 포함합니다.

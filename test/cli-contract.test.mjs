@@ -153,6 +153,10 @@ test("startup writes persistent Claude rules with the exact Hare paths", () => {
   assert.match(rules, /outlook attachments list/);
   assert.match(rules, /outlook attachments download/);
   assert.match(rules, /Without --mailbox.*signed-in user's mailbox/);
+  assert.match(rules, /Only on an explicit user request, use --folder deleted/);
+  assert.match(rules, /--folder all-with-deleted/);
+  assert.match(rules, /Never expand to deleted mail merely because a search is empty/);
+  assert.match(rules, /Date ranges use received time, not deletion time/);
   assert.match(rules, /Never fall back to the signed-in user's mailbox/);
   assert.match(rules, /teams attachments list/);
   assert.match(rules, /teams attachments download/);
@@ -226,6 +230,9 @@ test("LLM guide follows the explicit setup state contract", () => {
   assert.match(result.stdout, /npm ci --prefer-offline --no-audit --no-fund/);
   assert.match(result.stdout, /outlook recent --folder all/);
   assert.match(result.stdout, /outlook flagged --folder all/);
+  assert.match(result.stdout, /--folder deleted/);
+  assert.match(result.stdout, /--folder all-with-deleted/);
+  assert.match(result.stdout, /결과가 없다는 이유로 범위를 자동 확장하지 않는다/);
   assert.match(result.stdout, /outlook attachments list/);
   assert.match(result.stdout, /outlook attachments download/);
   assert.match(result.stdout, /--mailbox/);
@@ -285,6 +292,9 @@ test("LLM connection prompt stops workspace startup failures with a local Deskto
   assert.match(result.stdout, /가상화 진단이나 다른 명령을 반복하지 말고/);
   assert.match(result.stdout, /조회와 Outlook 초안 작성에는 Hare CLI만 사용해/);
   assert.match(result.stdout, /검색하거나 호출하거나 대체 수단으로 사용하지 마/);
+  assert.match(result.stdout, /--folder deleted/);
+  assert.match(result.stdout, /--folder all-with-deleted/);
+  assert.match(result.stdout, /결과가 없다고 자동 확장하지 마/);
 });
 
 test("startup blocks login when the default data directory is a hosted-session path", () => {
@@ -438,6 +448,29 @@ test("Outlook shared mailbox targeting is optional on reads and absent from draf
   const draft = run(["outlook", "draft", "new", "--help"], dataDir);
   assert.equal(draft.status, 0, draft.stderr);
   assert.doesNotMatch(draft.stdout, /--mailbox/);
+});
+
+test("Outlook read commands expose opt-in deleted scopes and reject invalid scopes before mailbox lookup", () => {
+  const dataDir = makeDataDir("hare-outlook-deleted-");
+  for (const command of ["recent", "flagged", "search", "count"]) {
+    const help = run(["outlook", command, "--help"], dataDir);
+    assert.equal(help.status, 0, help.stderr);
+    assert.match(help.stdout, /all \(excludes deleted\)/);
+    assert.match(help.stdout, /deleted/);
+    assert.match(help.stdout, /all-with-deleted/);
+    assert.match(help.stdout, /default:\s+"all"/);
+    const args = ["outlook", command];
+    if (command === "search") args.push("--query", "fixture");
+    const invalid = run([...args, "--folder", "recoverableitemsdeletions", "--mailbox", "shared@example.com"], dataDir);
+    assert.equal(invalid.status, 1);
+    assert.match(JSON.parse(invalid.stderr).error, /folder must be one of: all, inbox, sent, deleted, all-with-deleted/);
+    for (const folder of ["deleted", "all-with-deleted"]) {
+      const accepted = run([...args, "--folder", folder], dataDir);
+      assert.equal(accepted.status, 1);
+      // Empty fixture data cannot authenticate: reaching this gate proves CLI scope acceptance without a real lookup.
+      assert.match(JSON.parse(accepted.stderr).error, /NO_ACCOUNT_IN_CACHE/);
+    }
+  }
 });
 
 test("Outlook exposes attachment list and download commands", () => {

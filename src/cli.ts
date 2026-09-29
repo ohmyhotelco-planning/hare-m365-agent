@@ -194,6 +194,7 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용한다. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI 또는 브라우저 자동화를 검색하거나 호출하거나 대체 수단으로 사용하지 않는다.
 - 연결 오류는 위 실행 환경 사전 확인 절차를 적용한다. 그 외에 Hare가 지원하지 않거나 실행에 실패하면 실패한 Hare 단계와 오류만 보고하고 멈춘다. 다른 도구나 데이터 소스로 우회하지 않는다.
 - 일반적인 메일 조회와 최근 메일 요청은 outlook recent --folder all을 사용해 삭제된 항목을 제외한 전체 메일함을 대상으로 한다. outlook inbox는 사용자가 받은편지함을 명시한 경우에만 사용한다.
+- 사용자가 삭제된 메일만 요청하면 recent/flagged/search/count에 --folder deleted를 사용하고, 삭제된 메일까지 포함하라고 명시한 경우에만 --folder all-with-deleted를 사용한다. 결과가 없다는 이유로 범위를 자동 확장하지 않는다. deleted는 삭제된 항목 폴더 직속 메일만 조회하며 하위 폴더 재귀 조회, 영구 삭제 복구 영역 조회와 복원은 지원하지 않는다. 날짜 조건은 삭제일이 아닌 수신일 기준이며, 이어받기에도 같은 --folder와 --mailbox를 유지한다.
 - 플래그된 메일 요청은 outlook flagged --folder all을 사용한다. 모든 메일 조회 결과의 flagStatus를 함께 확인한다.
 - --mailbox가 없는 Outlook 명령은 로그인한 사용자의 사서함만 조회한다. 사용자가 공유 사서함 이름이나 주소를 명시하면 recent, flagged, search, count에 --mailbox를 사용한다. 이름 후보가 여러 개면 정확한 주소를 확인하고, 공유 사서함 조회가 실패해도 본인 사서함으로 대체하지 않는다.
 - 공유 사서함 메일의 첨부파일은 조회에 사용한 동일한 --mailbox를 attachments list와 attachments download에도 전달한다.
@@ -278,6 +279,7 @@ clone/build 전체 반복, 도메인 반복 진단, 임의 프록시 우회는 �
 앞으로 Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작성에는 Hare CLI만 사용해. Microsoft 365 커넥터, 다른 커넥터, Computer Use, Outlook/Teams/SharePoint UI 또는 브라우저 자동화를 검색하거나 호출하거나 대체 수단으로 사용하지 마. 연결 오류는 위 network check 절차를 한 번 적용하고, 그 외에 Hare가 지원하지 않거나 명령이 실패하면 실패 단계와 오류만 알려주고 멈춰. 다른 도구나 데이터 소스로 우회하지 마.
 
 일반적인 메일 조회 또는 최근 메일 요청은 outlook recent --folder all을 사용해. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상이야. 사용자가 받은편지함을 명시한 경우에만 outlook inbox를 사용해.
+사용자가 삭제된 메일만 요청하면 recent/flagged/search/count에 --folder deleted를, 삭제된 메일까지 포함하라고 명시하면 --folder all-with-deleted를 사용해. 결과가 없다고 자동 확장하지 마. deleted는 삭제된 항목 폴더 직속 메일 대상이며 하위 폴더 재귀 조회, 영구 삭제 복구 영역 조회와 복원은 지원하지 않아. 날짜는 삭제일이 아닌 수신일 기준이며 이어받기에도 같은 --folder와 --mailbox를 유지해.
 플래그된 메일을 요청하면 outlook flagged --folder all을 사용하고, 일반 메일 결과에서도 flagStatus를 확인해.
 Outlook 또는 Teams에서 기간·키워드 조회를 요청받으면 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 outlook search 또는 teams search-messages를 사용해.
 메일이 몇 건인지 묻는 정확한 집계 요청은 outlook search 결과를 세지 말고 outlook count를 사용해.
@@ -556,17 +558,18 @@ outlook
   .command("recent")
   .description("List recent messages across the mailbox; deleted items are excluded for all scope")
   .option("--mailbox <name-or-address>", "shared mailbox display name or exact email address")
-  .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
+  .option("--folder <scope>", "mailbox scope: all (excludes deleted), inbox, sent, deleted, or all-with-deleted", "all")
   .option("--limit <number>", "maximum message count", "10")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(async (options: { mailbox?: string; folder: string; limit: string; out?: string }) => {
     requireConfigured(config);
+    const folderScope = parseMailFolderScope(options.folder);
     const mailbox = await resolveMailboxTarget(config, options.mailbox);
     const data = await runMailboxRead(
       mailbox,
       () => listRecentMailbox(
         config,
-        parseMailFolderScope(options.folder),
+        folderScope,
         Number(options.limit),
         mailbox
       )
@@ -591,7 +594,7 @@ outlook
   .option("--mailbox <name-or-address>", "shared mailbox display name or exact email address")
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
-  .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
+  .option("--folder <scope>", "mailbox scope: all (excludes deleted), inbox, sent, deleted, or all-with-deleted", "all")
   .option("--limit <number>", "maximum flagged message count", "1000")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(
@@ -604,6 +607,7 @@ outlook
       out?: string;
     }) => {
       requireConfigured(config);
+      const folderScope = parseMailFolderScope(options.folder);
       const mailbox = await resolveMailboxTarget(config, options.mailbox);
       const data = await runMailboxRead(
         mailbox,
@@ -611,7 +615,7 @@ outlook
           config,
           options.since,
           options.until,
-          parseMailFolderScope(options.folder),
+          folderScope,
           Number(options.limit),
           mailbox
         )
@@ -627,7 +631,7 @@ outlook
   .option("--mailbox <name-or-address>", "shared mailbox display name or exact email address")
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
-  .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
+  .option("--folder <scope>", "mailbox scope: all (excludes deleted), inbox, sent, deleted, or all-with-deleted", "all")
   .option("--limit <number>", "maximum matching message count per page", "100")
   .option("--cursor <cursor>", "opaque continuation cursor from search.nextCursor")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
@@ -643,6 +647,7 @@ outlook
       out?: string;
     }) => {
       requireConfigured(config);
+      const folderScope = parseMailFolderScope(options.folder);
       const mailbox = await resolveMailboxTarget(config, options.mailbox);
       const data = await runMailboxRead(
         mailbox,
@@ -651,7 +656,7 @@ outlook
           options.query,
           options.since,
           options.until,
-          parseMailFolderScope(options.folder),
+          folderScope,
           Number(options.limit),
           { cursor: options.cursor, mailbox }
         )
@@ -668,7 +673,7 @@ outlook
   .option("--from <text>", "text that must appear in the sender name or address")
   .option("--since <YYYY-MM-DD>", "inclusive start date; defaults to the last 90 days")
   .option("--until <YYYY-MM-DD>", "inclusive end date; defaults to today")
-  .option("--folder <scope>", "mailbox scope: all, inbox, or sent", "all")
+  .option("--folder <scope>", "mailbox scope: all (excludes deleted), inbox, sent, deleted, or all-with-deleted", "all")
   .option("--cursor <cursor>", "opaque continuation cursor from count.nextCursor")
   .option("--out <path>", "write JSON result to a file; relative paths are saved under Hare resultsDir")
   .action(
@@ -683,6 +688,7 @@ outlook
       out?: string;
     }) => {
       requireConfigured(config);
+      const folderScope = parseMailFolderScope(options.folder);
       const mailbox = await resolveMailboxTarget(config, options.mailbox);
       const data = await runMailboxRead(
         mailbox,
@@ -692,7 +698,7 @@ outlook
           options.from,
           options.since,
           options.until,
-          parseMailFolderScope(options.folder),
+          folderScope,
           { cursor: options.cursor, mailbox }
         )
       );
@@ -1098,8 +1104,8 @@ program.parseAsync(process.argv).catch((error: unknown) => {
 });
 
 function parseMailFolderScope(value: string): MailFolderScope {
-  if (value === "all" || value === "inbox" || value === "sent") return value;
-  throw new Error("folder must be one of: all, inbox, sent.");
+  if (value === "all" || value === "inbox" || value === "sent" || value === "deleted" || value === "all-with-deleted") return value;
+  throw new Error("folder must be one of: all, inbox, sent, deleted, all-with-deleted.");
 }
 
 function addDraftCommonOptions(command: Command): Command {
