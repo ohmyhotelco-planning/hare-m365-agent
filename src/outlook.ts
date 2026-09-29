@@ -49,13 +49,14 @@ type GraphMail = {
 
 type GraphMailFolder = { id: string };
 
-export type MailFolderScope = "all" | "inbox" | "sent";
+export type MailFolderScope = "all" | "inbox" | "sent" | "deleted" | "all-with-deleted";
 
 export type MailSearchResult = {
   search: {
     mailbox: MailboxReference;
     query: string;
     folderScope: MailFolderScope;
+    excludedDeletedItems: boolean;
     range: SearchRange;
     returnedCount: number;
     maxResults: number;
@@ -333,6 +334,7 @@ export async function searchMailbox(
       mailbox: mailboxReference(mailbox),
       query: trimmedQuery,
       folderScope,
+      excludedDeletedItems: folderScope === "all",
       range,
       returnedCount: summaries.length,
       maxResults,
@@ -598,6 +600,7 @@ function formatRecipients(recipients: GraphMail["toRecipients"]): string[] | und
 function getFolderPath(folderScope: MailFolderScope, mailbox: MailboxTarget): string {
   if (folderScope === "inbox") return mailboxPath(mailbox, "/mailFolders/inbox/messages");
   if (folderScope === "sent") return mailboxPath(mailbox, "/mailFolders/sentitems/messages");
+  if (folderScope === "deleted") return mailboxPath(mailbox, "/mailFolders/deleteditems/messages");
   return mailboxPath(mailbox, "/messages");
 }
 

@@ -128,6 +128,15 @@ Outlook, Teams, SharePoint, OneDrive, Microsoft 365 조회와 Outlook 초안 작
 
 일반적인 메일 조회와 최근 메일 조회는 `outlook recent --folder all`을 사용합니다. 삭제된 항목을 제외한 받은편지함, 보낸편지함, 보관함, 사용자 폴더 전체가 기본 대상입니다. `outlook inbox`는 받은편지함이 명시된 요청에만 사용합니다. 플래그된 메일은 `outlook flagged --folder all`로 조회하며 모든 메일 결과에는 `flagStatus`가 포함됩니다.
 
+삭제된 메일은 사용자가 명시적으로 요청한 경우에만 조회합니다. `recent`, `flagged`, `search`, `count` 모두 `--folder deleted`(삭제된 항목 폴더 직속 메일만)와 `--folder all-with-deleted`(삭제된 항목을 포함한 전체 메일함)를 지원합니다. 기본 `all` 동작은 바뀌지 않으며 빈 결과를 이유로 자동 확장하지 않습니다. 공유 사서함은 기존 `--mailbox`를 함께 사용합니다. 결과의 `folderScope`와 `excludedDeletedItems`로 적용 범위를 확인하고, 커서를 이어갈 때도 동일 범위를 유지합니다.
+
+```powershell
+node dist/cli.js outlook search --query "reservation" --folder deleted --since 2026-09-01 --until 2026-09-29
+node dist/cli.js outlook count --subject-contains "reservation" --folder all-with-deleted --since 2026-09-01 --until 2026-09-29
+```
+
+날짜 조건은 삭제일이 아니라 **수신일** 기준입니다. 삭제된 항목 폴더 하위의 재귀 조회, 영구 삭제 복구 영역 조회, 메일 복원은 이번 기능에 포함하지 않습니다. [Microsoft Graph 메일 조회 API](https://learn.microsoft.com/en-us/graph/api/user-list-messages?view=graph-rest-1.0)의 전체 사서함 및 폴더별 읽기 경로를 사용하며 별도 쓰기 작업은 수행하지 않습니다.
+
 `--mailbox <name-or-address>`가 없으면 Outlook 명령은 로그인한 사용자의 사서함만 조회합니다. 사용자가 `CTO 공유 사서함`처럼 대상을 명시하면 `recent`, `flagged`, `search`, `count`, 첨부파일 목록·다운로드에 `--mailbox`를 사용합니다. 이름은 기본 디렉터리 정보로 주소를 해석하며, 후보가 여러 개면 정확한 주소를 확인하기 전까지 중단합니다. 공유 사서함 오류가 발생해도 본인 사서함으로 자동 대체하지 않습니다.
 
 메일 첨부파일은 메일 조회 결과의 `id`를 `outlook attachments list --message-id`에 전달해 목록을 확인하고, 반환된 첨부파일 `id`를 `outlook attachments download --attachment-id`에 전달해 내려받습니다. 공유 사서함 메일이면 조회에 사용한 동일한 `--mailbox`를 두 첨부파일 명령에도 전달합니다. 파일은 Hare의 `downloadsDir`에 저장되며 SharePoint/Teams/OneDrive 파일과 동일한 다운로드 정책이 적용됩니다. Excel 등 내려받은 파일의 내용 분석은 다운로드 완료 후 로컬 파일 처리 도구로 수행합니다.
