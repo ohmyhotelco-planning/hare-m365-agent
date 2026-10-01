@@ -4,7 +4,9 @@ Hare M365 Agent는 LLM이 Microsoft Graph delegated 권한으로 Outlook, Teams,
 
 Cowork에서는 작업을 열 때 선택한 프로젝트 폴더를 Hare의 영구 `dataDir`로 사용합니다. 앱 코드는 Cowork 세션 런타임에서 clone·build하고, 선택 프로젝트에는 인증 캐시와 사용자 결과만 저장합니다. GitHub API나 GitHub Release asset은 사용하지 않습니다.
 
-사람이 읽는 안내는 아래 한 장만 사용합니다.
+Claude Code Desktop의 **Local** 모드에서는 [Windows·Mac 로컬 실행 가이드](docs/claude-code-local-guide.md)를 사용합니다. 한·영·일 HTML 가이드는 `release-templates/claude-code/`에 있습니다. 기존 Hare 데이터 폴더를 작업 폴더로 열면 같은 인증 캐시를 재검증하며, 호스트가 바뀌었다는 이유만으로 재로그인하지 않습니다. MCP 서버나 별도 Azure 앱을 새로 만들 필요는 없습니다.
+
+Cowork용 안내는 다음 파일을 사용합니다.
 
 ```text
 release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드.html
@@ -51,7 +53,7 @@ Cowork의 도메인 허용 기준은 `설정 > 기능 > 도메인 허용 목록`
 
 ## 로그인과 저장 위치
 
-새 실행 환경에서는 startup/auth status나 첫 업무 조회 전에 같은 실행 파일과 `--data-dir`로 `network check --environment codex`를 실행합니다. Cowork에서는 `cowork`, 호스트가 불명확하면 `unknown`을 지정합니다. 이 옵션은 실행 권한을 부여하지 않습니다. 공개 Microsoft 로그인 주소를 최대 3초간 확인하며 인증 캐시·프로젝트 파일에 접근하지 않습니다. 같은 승인 환경에서는 매 페이지마다 반복하지 않습니다.
+새 실행 환경에서는 startup/auth status나 첫 업무 조회 전에 같은 실행 파일과 `--data-dir`로 `network check --environment codex`를 실행합니다. Cowork에서는 `cowork`, Claude Code Local에서는 `claude-code`, 호스트가 불명확하면 `unknown`을 지정합니다. 이 옵션은 실행 권한을 부여하지 않습니다. 공개 Microsoft 로그인 주소를 최대 3초간 확인하며 인증 캐시·프로젝트 파일에 접근하지 않습니다. 같은 승인 환경에서는 매 페이지마다 반복하지 않습니다.
 
 - `REACHABLE`: 같은 실행 환경에서 인증을 확인하고, `READY`일 때만 원래 요청한 조회를 진행합니다. 연결 성공은 로그인 또는 Graph/SharePoint 권한 성공이 아닙니다.
 - `EXECUTION_PERMISSION_REQUIRED`: Codex의 연결 권한 오류입니다. AI는 사용자가 재시도를 재촉할 때까지 기다리지 말고 호스트의 표준 실행 권한 요청을 사용합니다. 승인된 경우에만 같은 검사 1회 → 같은 캐시 인증 확인 → 원래 요청한 읽기 순으로 진행합니다. 거부·권한 요청 도구 없음·재실패이면 중단합니다.

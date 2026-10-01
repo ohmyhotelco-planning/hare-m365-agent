@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hare M365 Agent 연결 가이드 | Claude Code Local</title>
+  <style>
+    :root { --brand: #FF6000; --text: #1f2328; --muted: #59636e; --line: #d8dee4; --code: #f6f8fa; }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; color: var(--text); background: #fff; font: 16px/1.6 "Segoe UI", Arial, sans-serif; overflow-wrap: anywhere; }
+    header { border-top: 6px solid var(--brand); border-bottom: 1px solid var(--line); }
+    header > div, main { max-width: 980px; margin: auto; padding: 24px 32px; }
+    main { padding-bottom: 48px; }
+    h1 { font-size: 28px; line-height: 1.3; margin: 0 0 8px; }
+    h2 { font-size: 21px; line-height: 1.4; margin: 0 0 16px; border-left: 4px solid var(--brand); padding-left: 12px; }
+    h3 { font-size: 17px; margin: 14px 0 8px; }
+    p { margin: 10px 0; }
+    section { padding: 26px 0; border-bottom: 1px solid var(--line); }
+    .muted { color: var(--muted); }
+    .notice { border-left: 4px solid var(--brand); padding: 8px 16px; margin: 0 0 12px; background: var(--code); }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    select, button { font: inherit; border-radius: 6px; min-height: 44px; padding: 8px 14px; max-width: 100%; }
+    select { background: #fff; color: var(--text); border: 1px solid var(--muted); min-width: 180px; }
+    button { background: var(--brand); color: #1f2328; border: 1px solid var(--brand); font-weight: 700; cursor: pointer; }
+    :focus-visible { outline: 3px solid #0969da; outline-offset: 3px; }
+    textarea { display: block; width: 100%; height: 360px; resize: vertical; padding: 14px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--code); font: 13px/1.6 Consolas, "Courier New", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    [hidden] { display: none !important; }
+    .controls { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .copy-status { min-height: 26px; flex: 1 1 220px; }
+    details { margin: 18px 0; padding: 12px 0; border-top: 1px solid var(--line); }
+    summary { cursor: pointer; font-weight: 600; }
+    li { margin: 10px 0; }
+    a { color: #0969da; text-underline-offset: 3px; }
+    footer { padding-top: 24px; font-size: 14px; }
+    footer ul { margin: 8px 0; padding-left: 20px; }
+    @media (max-width: 600px) { header > div, main { padding-left: 18px; padding-right: 18px; } h1 { font-size: 25px; } textarea { height: 330px; } }
+  </style>
+</head>
+<body>
+  <header><div><h1>Hare M365 Agent 연결 가이드</h1><p class="muted">Claude Desktop · Code · Local | Windows / Mac</p></div></header>
+  <main>
+    <aside class="notice"><p>환경 준비 → Hare 폴더 선택 → 연결 → Microsoft 로그인 순서로 진행합니다. 이미 준비된 프로그램과 기존 Hare 로그인은 가능한 한 그대로 사용합니다.</p><p>HTML 파일을 내려받아 브라우저에서 여세요. Teams/OneDrive 미리보기에서는 복사가 제한될 수 있습니다.</p></aside>
+    <label for="platform">사용 중인 운영체제</label>
+    <select id="platform"><option value="windows">Windows · PowerShell</option><option value="mac">Mac · POSIX</option></select>
+    <section aria-labelledby="prepare"><h2 id="prepare">1. Claude Code Local 열기</h2><p>Claude Desktop의 Code 탭에서 진행합니다. Claude CLI를 따로 설치할 필요는 없습니다. Hare 실행에 필요한 Node.js와 Git은 다음 단계에서 Claude가 확인합니다. npm은 Node.js와 함께 설치됩니다.</p>
+      <details id="manual-setup"><summary>Code가 열리지 않거나 직접 설치해야 하나요?</summary>
+        <p>이미 설치했거나 방금 설치한 프로그램이라면 다시 설치하지 마세요. 먼저 Claude를 완전히 종료하고 다시 여세요. 계속 오류가 나거나 설치 여부를 모르겠으면 사내 IT 담당자에게 확인하세요. 아래 설치 절차는 미설치 또는 승인된 업그레이드가 확인된 경우에만 진행합니다. 새로 내려받은 설치 파일은 실행 전 공식 출처·유효한 디지털 서명·공식 배포자를 확인하세요. 확인이 어렵다면 실행 전에 IT 담당자의 도움을 받으세요. 기존 도구에는 이 검사를 요구하지 않습니다.</p>
+        <div data-platform="windows"><h3>Windows</h3><ol><li>Git 또는 Git Bash가 필요하다는 오류가 나올 때: Git for Windows 공식 페이지에서 PC에 맞는 설치 파일을 내려받아 실행하세요. 시스템 종류는 Windows 설정 &gt; 시스템 &gt; 정보에서 확인할 수 있습니다. Git Bash는 Git for Windows에 포함됩니다. PATH 선택 화면에서는 Git from the command line and also from 3rd-party software (권장)를 선택하세요. 다른 실행 오류를 Git 누락으로 단정하지 마세요.</li><li>Node.js가 필요하거나 최소 버전보다 오래된 경우: 공식 다운로드 페이지에서 Windows와 LTS를 선택하고 Windows Installer (.msi)를 내려받아 실행하세요. npm은 함께 설치됩니다. Tools for Native Modules의 추가 도구 자동 설치는 체크하지 마세요. 이 옵션은 Chocolatey·Python·Visual Studio Build Tools 등을 추가로 설치합니다.</li></ol><p><a href="https://git-scm.com/install/windows">Git for Windows</a> · <a href="https://nodejs.org/en/download">Node.js LTS</a></p></div>
+<div data-platform="mac"><h3>Mac</h3><ol><li>Git이 필요한 경우: Spotlight에서 터미널을 찾아 열고 xcode-select --install 을 입력한 뒤 Enter를 누르세요. Apple 설치창에서 Command Line Tools 설치를 진행합니다. 전체 Xcode나 Homebrew를 따로 설치할 필요는 없습니다.</li><li>Node.js가 필요한 경우: 공식 다운로드 페이지에서 macOS와 LTS를 선택하고 macOS Installer (.pkg)를 내려받아 실행하세요. npm도 함께 설치됩니다.</li></ol><p><a href="https://git-scm.com/install/mac">Git / Apple Command Line Tools</a> · <a href="https://nodejs.org/en/download">Node.js LTS</a></p></div>
+        <p>공식 Node.js·Git 설치 프로그램, Mac의 Apple Command Line Tools, 기존 winget 사용은 사내에서 허용되어 있습니다. 설치 전 Claude의 설명을 확인하고 승인하세요. 관리자 승인창은 직접 처리하며 암호는 Claude 채팅에 입력하지 마세요. 설치가 실제로 차단되면 우회하지 말고 IT 담당자에게 요청하세요. 설치 후 Claude를 완전히 종료하고 Local로 한 번 다시 여세요. 선택한 폴더가 있다면 유지하세요. 계속 프로그램을 인식하지 못하면 환경 준비 미완료이므로 Hare 연결을 진행하지 말고 IT 담당자에게 문의하세요.</p>
+      </details>
+    </section>
+    <section aria-labelledby="environment"><h2 id="environment">2. Claude에게 환경 준비 맡기기</h2><p>아래 환경 준비 프롬프트를 Claude Code Local 채팅에 붙여넣으세요. Claude가 필요한 프로그램을 확인하고, 없는 항목은 설치 방법을 설명한 뒤 승인을 요청합니다. 모두 준비됐다는 안내를 받으면 3번으로 넘어가세요.</p>
+      <div data-platform="windows"><h3 id="environment-label-windows">Windows</h3><textarea id="environment-windows" aria-label="환경 준비 프롬프트 (windows)" aria-describedby="environment-label-windows" readonly spellcheck="false">이 PC의 Hare 실행 환경을 지금 점검해 줘. 이 프롬프트는 검토가 아닌 실제 환경 준비 요청이야. 읽기 전용 점검부터 시작하고, 설치·업그레이드는 대상과 방법을 설명한 뒤 별도 사용자 승인을 받아.
+
+사내 허용 정책: 이 Hare 환경 준비에 한해 nodejs.org의 공식 Node.js 설치 프로그램, git-scm.com에서 연결하는 공식 Git 설치 프로그램, Mac의 Apple Command Line Tools, Windows에 이미 있는 winget 사용이 허용돼 있어. 직원에게 회사 허용 여부를 다시 확인하도록 요구하지 마. 개별 설치·업그레이드 전 설명과 사용자 승인은 별개로 필요해. 이 허용은 관리자 권한 부여나 실제 OS·보안 정책 차단의 우회 허가가 아니야.
+
+Hare 연결 전에 이 PC의 필수 실행 환경만 준비해 줘. 제공된 호스트·실행 환경 정보로 Claude Desktop &gt; Code &gt; Local과 실제 OS를 확인해. 구분할 정보가 없을 때만 사용자에게 Local인지 한 번 물어보고, OS나 경로만으로 추정하지 마. Cloud/SSH/WSL이면 멈춰. 이 환경 준비 단계는 Hare 작업 폴더 선택 없이 진행할 수 있어. 폴더 확인·생성은 다음 Hare 연결 단계에서 하고, 앱 자체가 작업 폴더를 요구할 때만 사용자가 로컬 폴더를 선택하도록 안내해. Hare 설치, git clone, npm ci, 빌드, Microsoft 로그인, 업무 조회는 이 단계에서 하지 마. 기존 Hare 데이터 파일·인증 캐시를 읽거나 변경하지 마.
+
+기존 도구는 Get-Command로 실제 실행 경로와 링크 대상을 확인하고 버전 명령이 성공하는지 점검해. 표준 설치 위치, OS 설치 기록, nvm-windows 등 기존 버전 관리자 위치를 모두 인정해. 기존 도구의 서명 확인은 선택적 진단이며 서명 유무·조회 실패·서명자 차이만으로 정상 작동하는 도구를 차단하지 마. 이 PC에서 확인한 서명자는 Node.js의 OpenJS Foundation, Git for Windows의 Johannes Schindelin이지만 고정 허용 목록은 아니야. Node와 같은 설치 폴더의 npm.cmd는 그대로 사용해. 전역 업데이트 등으로 다른 위치의 npm이 선택되면 위치 차이만 보고하고 정상 실행을 막지 마. npm 스크립트 체인 분석, 패키지 재다운로드·압축 해제·해시 대조는 하지 마. 새 설치 파일은 별개로 공식 다운로드 출처, Get-AuthenticodeSignature -LiteralPath의 Valid, 공식 배포자 일치를 확인한 후 사용자 승인을 받아 실행해. 새 설치 파일의 서명·출처 확인이 실패하거나 OS가 실제 차단하면 실행하지 마.
+
+같은 세션에서 node --version, npm --version, git --version을 읽기 전용으로 확인하고 준비됨/설치 필요/업그레이드 필요/설치됨·PATH 미반영/확인 불가를 구분해. Node.js &gt;=20.18.1은 Hare의 최소 조건이야. 최소 버전 미만은 업그레이드 필요로 분류하고 설치와 같은 승인 절차를 따라. 새 설치·업그레이드는 공식 사이트의 현재 지원되는 LTS를 사용해. Node 20.x는 지원 종료 상태이므로 기능상 실행 가능과 별개로 지원되는 LTS 업그레이드를 권고하고 승인을 받아. 거절하면 지원 종료 경고를 남기되 기술적 최소 조건을 충족하는 실행 자체를 차단하지 마. 요구 버전을 충족하고 이미 사용할 수 있는 도구는 사용자 승인 없이 다시 설치·업데이트하지 마. Git은 git --version과 git branch -h 도움말의 --show-current 지원을 확인해. 도움말 출력의 종료 코드만으로 설치 실패라고 하지 마. 필요한 옵션이 없을 때만 업그레이드를 제안해. 권한 거부나 네트워크 오류를 미설치로 판정하지 마. Mac에서 git 호출이 설치창을 띄우면 자동 승인하지 말고 사용자에게 알려줘.
+
+명령을 찾지 못해도 즉시 설치를 제안하지 마. 새 세션에서도 표준 설치 위치와 OS의 설치 기록, 기존 버전 관리자 위치를 필요한 범위만 읽기 전용으로 확인해. 실행 파일의 존재만으로 준비 완료라 하지 말고 발견한 도구를 절대 경로로 버전 확인해. 절대 경로 실행은 되지만 일반 명령이 안 되면 설치됨·PATH 미반영으로 분류하고 재설치하지 마. 표준 위치에 없다는 이유만으로 미설치로 단정하지 마. 설치 여부나 이전 설치 시도가 불명확하면 사용자에게 최근 설치 여부·별도 설치 위치를 확인하고 멈춰. 디스크 전체를 탐색하거나 인증 캐시를 읽지 마.
+
+설치·업그레이드가 필요한 항목만 이름·이유·공식 출처·설치 방법·변경 범위·관리자 권한 필요 여부를 먼저 보여주고 명시적 승인을 기다려. 위 사내 허용 정책에 명시한 설치 방법을 사용해. 설치 방법이나 대상이 바뀌면 다시 확인받아. npm은 Node.js와 함께 설치하며 독립적으로 최신화하지 마. 기존 버전 관리 도구가 있으면 다른 방식의 설치를 겹치지 말고 현재 관리 방식을 먼저 확인해.
+
+승인 후에만 허용된 표준 도구로 해당 설치를 실행해. 사용자 설치창·관리자 승인이 필요하거나 도구로 처리할 수 없으면 필요한 클릭만 안내하고 기다려. 암호를 요청하거나 읽지 마. 권한 거부·정책 차단이면 멈추고 사내 IT 담당자 확인을 안내해. 보안 설정·실행 정책·PATH를 임의로 바꾸거나 권한을 일괄 우회하지 마. Claude CLI, WSL, Docker, 별도 패키지 관리자는 이 준비를 이유로 새로 설치하지 마.
+
+설치했다면 Claude를 완전히 종료하고 Local로 다시 열도록 안내해. 기존 선택 폴더가 있으면 그대로 유지해. 재시작 후 같은 프롬프트로 버전을 재확인하고 모두 사용할 수 있을 때만 환경 준비 완료, 다음 Hare 연결 단계로 진행하라고 말해. 재시작 후에도 도구가 안 보이면 재설치 반복 없이 오류만 보고하고 멈춰. 환경 준비 성공을 Hare 로그인 성공으로 표현하지 마.
+
+대상 OS: Windows 네이티브 Local. 공식 출처는 https://nodejs.org/en/download 및 https://git-scm.com/install/windows 이야. npm 확인에는 npm.cmd --version을 사용해. npm.ps1 정책 오류는 미설치가 아니야. 명령이 안 보이면 실제 ProgramFiles 아래 nodejs와 Git/cmd (일반적으로 C:\Program Files\nodejs, C:\Program Files\Git\cmd), LocalAppData 아래 Programs/Git, OS 설치 기록과 이미 확인된 버전 관리자 위치만 읽기 전용으로 확인해. 기존 winget 사용은 이 준비 작업에 대해 사내 허용이 확인돼 있어. 패키지는 Node LTS=OpenJS.NodeJS.LTS, Git=Git.Git으로 고정하고 --exact --source winget으로 조회해. 승인 후 설치에는 --interactive를 지정해 사용자가 설치 옵션을 확인하게 하고 --silent나 임의 --override는 사용하지 마. Node는 npm 포함 MSI 설치를 선택하고 portable ZIP은 사용하지 마. 설치 전 패키지 ID·배포자·출처·설치 버전·변경 범위를 보여주고 명시적 승인을 받아. winget이 없거나 차단돼 있으면 새로 설치·복구하거나 우회하지 말고 허용된 공식 설치 프로그램의 수동 절차를 안내해. 그 설치도 실제로 차단되면 중단해. 전체 패키지 일괄 업데이트나 소스 추가·변경은 하지 마. UAC는 사용자가 직접 처리해. Node 설치의 Tools for Native Modules 추가 도구는 선택하지 마. Git PATH 옵션은 Git from the command line and also from 3rd-party software를 선택하고 해당 PATH 변경도 승인 전 설명에 포함해. 임의의 별도 PATH 편집은 하지 마. Git Bash에 PowerShell 구문을 직접 전달하지 마.
+
+설치됨·PATH 미반영은 ENVIRONMENT_INCOMPLETE(환경 준비 미완료)이며 Hare 연결 단계로 진행하지 마. 아직 재시작하지 않았다면 Claude를 완전히 종료하고 Local로 한 번만 다시 열도록 안내해. 새 세션에서는 이번 문제로 이미 재시작했는지 먼저 물어보고, 했다면 또 재시작을 요청하지 마. 재시작 후 세션에서 일반 명령으로 버전을 재확인해(Windows npm은 npm.cmd --version). 계속 인식되지 않으면 ENVIRONMENT_INCOMPLETE와 해당 도구·오류를 보고하고 IT 확인을 안내해. 재설치·수동 PATH 편집·절대 경로로 Hare 연결 우회는 하지 마. 버전 요건을 만족하고 일반 명령이 모두 동작할 때만 환경 준비 완료라고 해.</textarea></div>
+<div data-platform="mac"><h3 id="environment-label-mac">Mac</h3><textarea id="environment-mac" aria-label="환경 준비 프롬프트 (mac)" aria-describedby="environment-label-mac" readonly spellcheck="false">이 PC의 Hare 실행 환경을 지금 점검해 줘. 이 프롬프트는 검토가 아닌 실제 환경 준비 요청이야. 읽기 전용 점검부터 시작하고, 설치·업그레이드는 대상과 방법을 설명한 뒤 별도 사용자 승인을 받아.
+
+사내 허용 정책: 이 Hare 환경 준비에 한해 nodejs.org의 공식 Node.js 설치 프로그램, git-scm.com에서 연결하는 공식 Git 설치 프로그램, Mac의 Apple Command Line Tools, Windows에 이미 있는 winget 사용이 허용돼 있어. 직원에게 회사 허용 여부를 다시 확인하도록 요구하지 마. 개별 설치·업그레이드 전 설명과 사용자 승인은 별개로 필요해. 이 허용은 관리자 권한 부여나 실제 OS·보안 정책 차단의 우회 허가가 아니야.
+
+Hare 연결 전에 이 PC의 필수 실행 환경만 준비해 줘. 제공된 호스트·실행 환경 정보로 Claude Desktop &gt; Code &gt; Local과 실제 OS를 확인해. 구분할 정보가 없을 때만 사용자에게 Local인지 한 번 물어보고, OS나 경로만으로 추정하지 마. Cloud/SSH/WSL이면 멈춰. 이 환경 준비 단계는 Hare 작업 폴더 선택 없이 진행할 수 있어. 폴더 확인·생성은 다음 Hare 연결 단계에서 하고, 앱 자체가 작업 폴더를 요구할 때만 사용자가 로컬 폴더를 선택하도록 안내해. Hare 설치, git clone, npm ci, 빌드, Microsoft 로그인, 업무 조회는 이 단계에서 하지 마. 기존 Hare 데이터 파일·인증 캐시를 읽거나 변경하지 마.
+
+기존 도구는 command -v로 실제 실행 경로와 링크 대상을 확인하고 버전 명령이 성공하는지 점검해. 표준 설치 위치, 설치 기록, 기존 버전 관리자 위치를 모두 인정해. 기존 도구의 codesign 검증은 필수가 아니며 서명·설치 기록 부족만으로 정상 작동하는 도구를 차단하지 마. Node와 같은 설치의 npm은 그대로 사용하고, 전역 업데이트 등으로 다른 위치의 npm이 선택되면 위치 차이만 보고해. npm 스크립트 체인 분석, 패키지 재다운로드·압축 해제·해시 대조는 하지 마. 새 .pkg는 별개로 공식 출처와 pkgutil --check-signature의 유효한 서명·공식 배포자를 확인한 뒤 사용자 승인을 받아 실행해. 확인 실패나 실제 OS 차단 시 실행하지 마. Gatekeeper를 해제하지 마.
+
+같은 세션에서 node --version, npm --version, git --version을 읽기 전용으로 확인하고 준비됨/설치 필요/업그레이드 필요/설치됨·PATH 미반영/확인 불가를 구분해. Node.js &gt;=20.18.1은 Hare의 최소 조건이야. 최소 버전 미만은 업그레이드 필요로 분류하고 설치와 같은 승인 절차를 따라. 새 설치·업그레이드는 공식 사이트의 현재 지원되는 LTS를 사용해. Node 20.x는 지원 종료 상태이므로 기능상 실행 가능과 별개로 지원되는 LTS 업그레이드를 권고하고 승인을 받아. 거절하면 지원 종료 경고를 남기되 기술적 최소 조건을 충족하는 실행 자체를 차단하지 마. 요구 버전을 충족하고 이미 사용할 수 있는 도구는 사용자 승인 없이 다시 설치·업데이트하지 마. Git은 git --version과 git branch -h 도움말의 --show-current 지원을 확인해. 도움말 출력의 종료 코드만으로 설치 실패라고 하지 마. 필요한 옵션이 없을 때만 업그레이드를 제안해. 권한 거부나 네트워크 오류를 미설치로 판정하지 마. Mac에서 git 호출이 설치창을 띄우면 자동 승인하지 말고 사용자에게 알려줘.
+
+명령을 찾지 못해도 즉시 설치를 제안하지 마. 새 세션에서도 표준 설치 위치와 OS의 설치 기록, 기존 버전 관리자 위치를 필요한 범위만 읽기 전용으로 확인해. 실행 파일의 존재만으로 준비 완료라 하지 말고 발견한 도구를 절대 경로로 버전 확인해. 절대 경로 실행은 되지만 일반 명령이 안 되면 설치됨·PATH 미반영으로 분류하고 재설치하지 마. 표준 위치에 없다는 이유만으로 미설치로 단정하지 마. 설치 여부나 이전 설치 시도가 불명확하면 사용자에게 최근 설치 여부·별도 설치 위치를 확인하고 멈춰. 디스크 전체를 탐색하거나 인증 캐시를 읽지 마.
+
+설치·업그레이드가 필요한 항목만 이름·이유·공식 출처·설치 방법·변경 범위·관리자 권한 필요 여부를 먼저 보여주고 명시적 승인을 기다려. 위 사내 허용 정책에 명시한 설치 방법을 사용해. 설치 방법이나 대상이 바뀌면 다시 확인받아. npm은 Node.js와 함께 설치하며 독립적으로 최신화하지 마. 기존 버전 관리 도구가 있으면 다른 방식의 설치를 겹치지 말고 현재 관리 방식을 먼저 확인해.
+
+승인 후에만 허용된 표준 도구로 해당 설치를 실행해. 사용자 설치창·관리자 승인이 필요하거나 도구로 처리할 수 없으면 필요한 클릭만 안내하고 기다려. 암호를 요청하거나 읽지 마. 권한 거부·정책 차단이면 멈추고 사내 IT 담당자 확인을 안내해. 보안 설정·실행 정책·PATH를 임의로 바꾸거나 권한을 일괄 우회하지 마. Claude CLI, WSL, Docker, 별도 패키지 관리자는 이 준비를 이유로 새로 설치하지 마.
+
+설치했다면 Claude를 완전히 종료하고 Local로 다시 열도록 안내해. 기존 선택 폴더가 있으면 그대로 유지해. 재시작 후 같은 프롬프트로 버전을 재확인하고 모두 사용할 수 있을 때만 환경 준비 완료, 다음 Hare 연결 단계로 진행하라고 말해. 재시작 후에도 도구가 안 보이면 재설치 반복 없이 오류만 보고하고 멈춰. 환경 준비 성공을 Hare 로그인 성공으로 표현하지 마.
+
+대상 OS: Mac Local, POSIX 셸. 공식 출처는 https://nodejs.org/en/download 및 https://git-scm.com/install/mac 이야. 명령이 없으면 /usr/local/bin/node, /usr/local/bin/npm, /usr/bin/git과 Apple 설치 기록, 이미 확인된 기존 버전 관리자 위치만 읽기 전용으로 확인해. Git용 Apple Command Line Tools는 xcode-select --install 로 설치창을 요청할 수 있지만 사용자 승인 전에 실행하지 마.
+
+설치됨·PATH 미반영은 ENVIRONMENT_INCOMPLETE(환경 준비 미완료)이며 Hare 연결 단계로 진행하지 마. 아직 재시작하지 않았다면 Claude를 완전히 종료하고 Local로 한 번만 다시 열도록 안내해. 새 세션에서는 이번 문제로 이미 재시작했는지 먼저 물어보고, 했다면 또 재시작을 요청하지 마. 재시작 후 세션에서 일반 명령으로 버전을 재확인해(Windows npm은 npm.cmd --version). 계속 인식되지 않으면 ENVIRONMENT_INCOMPLETE와 해당 도구·오류를 보고하고 IT 확인을 안내해. 재설치·수동 PATH 편집·절대 경로로 Hare 연결 우회는 하지 마. 버전 요건을 만족하고 일반 명령이 모두 동작할 때만 환경 준비 완료라고 해.</textarea></div>
+      <div class="controls"><button type="button" id="copy-environment" hidden>환경 준비 프롬프트 복사</button><span class="copy-status" id="environment-status" role="status" aria-live="polite" data-success="프롬프트를 복사했습니다." data-fallback="자동 복사가 제한되었습니다. 선택된 프롬프트를 직접 복사하세요."></span></div>
+      <p>요구 버전을 충족하는 프로그램은 다시 설치하지 않습니다. 구버전은 Claude가 업그레이드 필요 여부를 설명하고 승인을 요청합니다. 설치 후 Claude를 완전히 종료하고 Local로 다시 여세요. 이미 선택한 폴더가 있다면 유지하세요. 새 채팅에서는 방금 설치했다는 사실도 함께 알려주세요.</p><noscript><p>JavaScript가 꺼져 있습니다. 해당 운영체제의 프롬프트를 직접 선택해 복사하세요.</p></noscript>
+    </section>
+    <section aria-labelledby="setup"><h2 id="setup">3. Hare 연결</h2><p>Code 탭에서 Local을 선택하고 기존 Hare 데이터 폴더를 작업 폴더로 여세요. 처음 사용하는 경우에만 저장소 밖의 OneDrive가 아닌 전용 로컬 폴더를 선택하세요. 클라우드/샌드박스 경로, Git worktree, 임의로 추정한 새 폴더를 사용하지 마세요.</p><p>아래 내용은 터미널 명령이 아닌 AI용 프롬프트입니다. 현재 선택한 절대 경로를 AI가 확인하고 자리표시자를 안전하게 치환한 뒤 실행해야 합니다.</p>
+      <div data-platform="windows"><h3 id="label-windows">Windows · PowerShell</h3><textarea id="prompt-windows" aria-label="Claude Code Local에 붙여넣을 프롬프트 (windows)" aria-describedby="label-windows" readonly spellcheck="false">이 PC에서 Hare M365 Agent 연결을 진행해 줘. 아래 준비 명령의 clone·의존성 설치·빌드·규칙 생성을 요청하는 것이며, Microsoft 로그인은 사용자 확인을 받아 진행해. 이 요청은 메일 발송이나 업무 데이터 변경 승인이 아니야.
+
+현재 Claude Desktop의 Code &gt; Local 세션에서 Hare를 준비해. 제공된 호스트·실행 환경 정보로 확인하고, 구분할 정보가 없을 때만 사용자에게 Local인지 한 번 물어봐. OS나 경로만으로 Local이라고 추정하지 마. Cloud/SSH/WSL이면 실행하지 말고 중단해.
+
+현재 선택한 작업 폴더의 정확한 절대 경로를 확인해. 기존 Hare 사용자라면 기존 데이터 폴더여야 해. 처음 사용하는 경우에만 사용자가 선택한 OneDrive 밖, Git 저장소 밖 전용 로컬 폴더를 사용해. 폴더가 없거나 불명확하면 FOLDER_REQUIRED를 알리고 멈춰. 경로를 추측하거나 새 폴더·Git worktree·클라우드/샌드박스 경로로 바꾸지 마.
+
+아래 명령의 &lt;SELECTED_LOCAL_FOLDER&gt;만 현재 선택한 정확한 절대 Local 작업 폴더로 치환해. 해당 셸의 인용 규칙에 맞게 경로 안의 따옴표 등 특수 문자를 이스케이프하되 경로 값 자체를 바꾸지 마. 다른 명령 내용은 변경하지 마. 치환하지 않은 자리표시자나 리터럴 꺾쇠 경로를 절대 실행하지 마. 안전하게 치환할 수 없으면 멈춰.
+
+같은 실행 세션에서 node --version, npm --version, git --version을 확인해. Hare는 Node.js &gt;=20.18.1이 필요하며 Claude의 네이티브 설치와 무관한 요건이야. 실제 세션 PATH에 도구가 없거나 버전이 부족하면 멈추고 필요한 준비만 안내해. 임의로 설치하거나 PATH를 추측하지 마. Desktop 때문에 Claude CLI를 따로 설치하지 마.
+
+필요한 작업에 대해서만 호스트의 표준 도구 권한 승인을 요청해. 승인 거부·요청 도구 없음·정책 차단이면 중단해. 일괄 권한 우회나 Cowork 네트워크 정책 가정, 프록시/다른 환경 우회를 하지 마. 기존 인증 폴더와 캐시를 보존하고 원시 캐시·비밀값은 읽거나 출력하지 마.
+
+Windows: npm 버전 확인은 PowerShell에서 npm.cmd --version을 사용해. npm.ps1 정책 오류를 해결하려고 실행 정책을 변경하지 마. 아래 PowerShell 명령과 이후 PowerShell nextCommand는 PowerShell에서 실행해. &amp; 호출 연산자가 있는 PowerShell을 Bash에 직접 전달하지 마. 네이티브 PowerShell 도구를 사용하거나 PowerShell 실행 파일에 스크립트를 안전한 인수로 전달해. Bash의 변수 확장·인용 해석으로 스크립트가 바뀌지 않게 하고, 안전한 전달이 불가능하면 중단해. --host claude-code와 --command-shell powershell을 유지해.
+
+준비 명령 (startup 포함, 전체 반복 금지):
+
+```powershell
+&amp; {
+$ErrorActionPreference = &#39;Stop&#39;
+Set-StrictMode -Version Latest
+function Invoke-HareNative {
+  param([string]$File, [string[]]$Arguments)
+  &amp; $File @Arguments
+  if ($LASTEXITCODE -ne 0) { throw &quot;$File failed (exit code $LASTEXITCODE).&quot; }
+}
+try {
+  $HARE_DATA_DIR = [IO.Path]::GetFullPath(&#39;&lt;SELECTED_LOCAL_FOLDER&gt;&#39;)
+  $HARE_REPO = &#39;https://github.com/ohmyhotelco-planning/hare-m365-agent.git&#39;
+  $HARE_BRANCH = &#39;master&#39;
+  $HARE_REF = &quot;refs/heads/$HARE_BRANCH&quot;
+  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $HARE_RUNTIME_ROOT = Join-Path $HOME &#39;.cache/HareM365Agent/runtime&#39;
+  } else {
+    $HARE_RUNTIME_ROOT = Join-Path $env:LOCALAPPDATA &#39;HareM365Agent/runtime&#39;
+  }
+  $HARE_RUNTIME_ROOT = [IO.Path]::GetFullPath($HARE_RUNTIME_ROOT)
+  Invoke-HareNative &#39;node&#39; @(&#39;-e&#39;, &#39;const fs = require(&#39;&#39;node:fs&#39;&#39;);
+const path = require(&#39;&#39;node:path&#39;&#39;);
+function canonical(value) {
+  try { return fs.realpathSync.native(value); }
+  catch (error) {
+    if (error.code !== &#39;&#39;ENOENT&#39;&#39;) throw error;
+    const parent = path.dirname(value);
+    if (parent === value) throw error;
+    return path.join(canonical(parent), path.basename(value));
+  }
+}
+function contains(parent, child) {
+  const relative = path.relative(parent, child);
+  return relative === &#39;&#39;&#39;&#39; || (relative !== &#39;&#39;..&#39;&#39; &amp;&amp; !relative.startsWith(&#39;&#39;..&#39;&#39; + path.sep) &amp;&amp; !path.isAbsolute(relative));
+}
+const dataDir = path.resolve(process.argv[1]);
+const runtime = path.resolve(process.argv[2]);
+const data = canonical(dataDir);
+for (const candidate of [runtime, path.join(runtime, &#39;&#39;app&#39;&#39;)]) {
+  const target = canonical(candidate);
+  if (contains(data, target) || contains(target, data)) {
+    throw new Error(&#39;&#39;Hare data directory and runtime/app must not overlap.&#39;&#39;);
+  }
+}
+process.stdout.write(dataDir.split(path.sep).join(&#39;&#39;/&#39;&#39;));&#39;, $HARE_DATA_DIR, $HARE_RUNTIME_ROOT) | Out-Null
+  $HARE_APP = Join-Path $HARE_RUNTIME_ROOT &#39;app&#39;
+  $HARE_BUILD_HEAD = Join-Path $HARE_RUNTIME_ROOT &#39;.hare-app-build-head&#39;
+  Invoke-HareNative &#39;git&#39; @(&#39;check-ref-format&#39;, &#39;--branch&#39;, $HARE_BRANCH) | Out-Null
+  if ((Test-Path -LiteralPath $HARE_APP) -and !(Test-Path -LiteralPath (Join-Path $HARE_APP &#39;.git&#39;))) {
+    throw &#39;Existing Hare app folder is not a Git repository; it was left unchanged.&#39;
+  }
+  [IO.Directory]::CreateDirectory($HARE_RUNTIME_ROOT) | Out-Null
+  [IO.Directory]::CreateDirectory($HARE_DATA_DIR) | Out-Null
+  $REMOTE_LINES = @(Invoke-HareNative &#39;git&#39; @(&#39;ls-remote&#39;, &#39;--exit-code&#39;, &#39;--refs&#39;, $HARE_REPO, $HARE_REF))
+  if ($REMOTE_LINES.Count -ne 1) { throw &#39;Remote branch did not resolve exactly.&#39; }
+  $REMOTE_PARTS = $REMOTE_LINES[0] -split &quot;`t&quot;
+  if ($REMOTE_PARTS.Count -ne 2 -or $REMOTE_PARTS[0] -notmatch &#39;^(?:[0-9a-f]{40}|[0-9a-f]{64})$&#39; -or $REMOTE_PARTS[1] -cne $HARE_REF) {
+    throw &#39;Invalid remote branch HEAD.&#39;
+  }
+  $REMOTE_HEAD = $REMOTE_PARTS[0]
+  if (!(Test-Path -LiteralPath (Join-Path $HARE_APP &#39;.git&#39;))) {
+    Invoke-HareNative &#39;git&#39; @(&#39;clone&#39;, &#39;--branch&#39;, $HARE_BRANCH, &#39;--single-branch&#39;, &#39;--no-tags&#39;, &#39;--&#39;, $HARE_REPO, $HARE_APP)
+  } else {
+    $ORIGIN = Invoke-HareNative &#39;git&#39; @(&#39;-C&#39;, $HARE_APP, &#39;remote&#39;, &#39;get-url&#39;, &#39;origin&#39;)
+    if ($ORIGIN -cne $HARE_REPO) { throw &#39;Hare app remote does not match the requested repository.&#39; }
+    $CURRENT_BRANCH = Invoke-HareNative &#39;git&#39; @(&#39;-C&#39;, $HARE_APP, &#39;branch&#39;, &#39;--show-current&#39;)
+    if ($CURRENT_BRANCH -cne $HARE_BRANCH) { throw &#39;Hare app branch does not match the requested branch.&#39; }
+    $WORKTREE_STATUS = @(Invoke-HareNative &#39;git&#39; @(&#39;-C&#39;, $HARE_APP, &#39;status&#39;, &#39;--porcelain&#39;, &#39;--untracked-files=all&#39;))
+    if ($WORKTREE_STATUS.Count -ne 0) { throw &#39;Hare app repository is dirty; changes were left unchanged.&#39; }
+    Invoke-HareNative &#39;git&#39; @(&#39;-C&#39;, $HARE_APP, &#39;fetch&#39;, &#39;origin&#39;, $HARE_REF)
+    Invoke-HareNative &#39;git&#39; @(&#39;-C&#39;, $HARE_APP, &#39;pull&#39;, &#39;--ff-only&#39;, &#39;origin&#39;, $HARE_REF)
+  }
+  $LOCAL_HEAD = Invoke-HareNative &#39;git&#39; @(&#39;-C&#39;, $HARE_APP, &#39;rev-parse&#39;, &#39;HEAD&#39;)
+  if ($LOCAL_HEAD -cne $REMOTE_HEAD) { throw &#39;Hare app HEAD does not match the remote branch.&#39; }
+  $BUILT_HEAD = &#39;&#39;
+  if (Test-Path -LiteralPath $HARE_BUILD_HEAD -PathType Leaf) { $BUILT_HEAD = [IO.File]::ReadAllText($HARE_BUILD_HEAD).Trim() }
+  $BUILD_COMPLETE = (Test-Path -LiteralPath (Join-Path $HARE_APP &#39;node_modules&#39;) -PathType Container)
+  foreach ($output in @(&#39;dist/cli.js&#39;, &#39;dist/proxy.js&#39;, &#39;dist/msal-network.js&#39;)) {
+    $BUILD_COMPLETE = $BUILD_COMPLETE -and (Test-Path -LiteralPath (Join-Path $HARE_APP $output) -PathType Leaf)
+  }
+  if ($BUILT_HEAD -cne $LOCAL_HEAD -or !$BUILD_COMPLETE) {
+    Push-Location -LiteralPath $HARE_APP
+    try {
+      Invoke-HareNative &#39;npm.cmd&#39; @(&#39;ci&#39;, &#39;--prefer-offline&#39;, &#39;--no-audit&#39;, &#39;--no-fund&#39;)
+      Invoke-HareNative &#39;npm.cmd&#39; @(&#39;run&#39;, &#39;build&#39;)
+    } finally { Pop-Location }
+    if (!(Test-Path -LiteralPath (Join-Path $HARE_APP &#39;node_modules&#39;) -PathType Container)) { throw &#39;Hare build output is incomplete.&#39; }
+    foreach ($output in @(&#39;dist/cli.js&#39;, &#39;dist/proxy.js&#39;, &#39;dist/msal-network.js&#39;)) {
+      if (!(Test-Path -LiteralPath (Join-Path $HARE_APP $output) -PathType Leaf)) { throw &#39;Hare build output is incomplete.&#39; }
+    }
+    [IO.File]::WriteAllText($HARE_BUILD_HEAD, &quot;$LOCAL_HEAD`n&quot;)
+  }
+  $HARE_ARGS = @((Join-Path $HARE_APP &#39;dist/cli.js&#39;), &#39;--data-dir&#39;, $HARE_DATA_DIR, &#39;--host&#39;, &#39;claude-code&#39;, &#39;--command-shell&#39;, &#39;powershell&#39;)
+  Invoke-HareNative &#39;node&#39; ($HARE_ARGS + @(&#39;network&#39;, &#39;check&#39;, &#39;--environment&#39;, &#39;claude-code&#39;))
+  Invoke-HareNative &#39;node&#39; $HARE_ARGS
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+}
+}
+```
+
+준비 명령이 startup을 이미 처리하므로 startup을 중복 실행하지 마. 명령이 반환되면 추가 인증 명령이나 업무 조회 전에 선택 폴더의 CLAUDE.md와 claude/hare-m365-agent-rules.md를 읽어. 원시 인증 캐시를 읽지 마. 규칙이 없거나 호스트·셸·경로가 맞지 않으면 중단해. 이후에도 생성된 정확한 명령 접두사, --data-dir, --host claude-code, --command-shell을 유지해.
+
+startup 출력의 setup.state와 setup.nextCommand만 따라 한 단계씩 진행해. SETUP_REQUIRED/FOLDER_REQUIRED 또는 알 수 없는 상태는 이유를 알리고 중단해. LOGIN_START_REQUIRED일 때만 nextCommand를 변경 없이 포그라운드에서 한 번 실행하고 반환된 Microsoft 주소와 userCode를 보여준 뒤 사용자 본인의 회사 계정으로 로그인하도록 안내하고 멈춰. 특정 이메일 계정을 지정하지 마.
+
+LOGIN_COMPLETE_REQUIRED이면 기존 대기 로그인과 코드를 유지해. 사용자가 로그인을 완료했다고 확인하기 전에는 완료 명령을 실행하지 마. 확인 후 setup.nextCommand를 변경 없이 정확히 한 번 포그라운드 실행해. 폴링·백그라운드·중복 login-start를 하지 마. READY이면 준비 완료를 알리고 멈춰. 실제 조회는 별도 사용자 요청과 loggedIn=true 및 tokenUsable=true 확인 후에만 해.
+
+BLOCKED 또는 AUTH_CHECK_BLOCKED의 loggedIn=null/tokenUsable=null은 인증 확인 불가이지 로그아웃이나 만료가 아니야. 기존 인증 폴더와 캐시를 보존해. 생성된 규칙의 제한된 network check --environment claude-code 절차만 따르고 이미 실패·거부된 검사는 반복하지 마. 재로그인·캐시 초기화·다른 dataDir·커넥터·GUI 우회를 하지 마. 그 밖의 실패는 실패 단계와 비밀값 없는 오류 한 줄만 알리고 중단해.
+
+향후 M365 조회와 Outlook 초안에는 Hare CLI만 사용해. 커넥터·Computer Use·브라우저 자동화·Outlook/Teams/SharePoint GUI를 대체 경로로 사용하지 마. 기본은 읽기 전용이며 Outlook 초안은 수신자, 제목, 본문, 첨부 전체 미리보기와 명시적 승인 후에만 생성해. 발송하지 마. 다운로드·export의 조건부 AWAITING_USER_APPROVAL, 전체 계획, 승인 토큰, 제한·재개 규칙은 생성된 규칙을 그대로 따르고 무조건 승인 면제로 바꾸지 마.
+
+다음 채팅도 같은 폴더에서 시작해 CLAUDE.md의 규칙 연결이 적용됐는지 확인하고 생성된 상태 확인 명령을 사용해. 새 채팅만을 이유로 재설치하거나 재로그인하지 마. Local 실행이어도 반환된 업무 내용은 모델에 전달된다는 점을 사용자에게 알려줘.</textarea></div>
+      <div data-platform="mac"><h3 id="label-mac">Mac · POSIX</h3><textarea id="prompt-mac" aria-label="Claude Code Local에 붙여넣을 프롬프트 (mac)" aria-describedby="label-mac" readonly spellcheck="false">이 PC에서 Hare M365 Agent 연결을 진행해 줘. 아래 준비 명령의 clone·의존성 설치·빌드·규칙 생성을 요청하는 것이며, Microsoft 로그인은 사용자 확인을 받아 진행해. 이 요청은 메일 발송이나 업무 데이터 변경 승인이 아니야.
+
+현재 Claude Desktop의 Code &gt; Local 세션에서 Hare를 준비해. 제공된 호스트·실행 환경 정보로 확인하고, 구분할 정보가 없을 때만 사용자에게 Local인지 한 번 물어봐. OS나 경로만으로 Local이라고 추정하지 마. Cloud/SSH/WSL이면 실행하지 말고 중단해.
+
+현재 선택한 작업 폴더의 정확한 절대 경로를 확인해. 기존 Hare 사용자라면 기존 데이터 폴더여야 해. 처음 사용하는 경우에만 사용자가 선택한 OneDrive 밖, Git 저장소 밖 전용 로컬 폴더를 사용해. 폴더가 없거나 불명확하면 FOLDER_REQUIRED를 알리고 멈춰. 경로를 추측하거나 새 폴더·Git worktree·클라우드/샌드박스 경로로 바꾸지 마.
+
+아래 명령의 &lt;SELECTED_LOCAL_FOLDER&gt;만 현재 선택한 정확한 절대 Local 작업 폴더로 치환해. 해당 셸의 인용 규칙에 맞게 경로 안의 따옴표 등 특수 문자를 이스케이프하되 경로 값 자체를 바꾸지 마. 다른 명령 내용은 변경하지 마. 치환하지 않은 자리표시자나 리터럴 꺾쇠 경로를 절대 실행하지 마. 안전하게 치환할 수 없으면 멈춰.
+
+같은 실행 세션에서 node --version, npm --version, git --version을 확인해. Hare는 Node.js &gt;=20.18.1이 필요하며 Claude의 네이티브 설치와 무관한 요건이야. 실제 세션 PATH에 도구가 없거나 버전이 부족하면 멈추고 필요한 준비만 안내해. 임의로 설치하거나 PATH를 추측하지 마. Desktop 때문에 Claude CLI를 따로 설치하지 마.
+
+필요한 작업에 대해서만 호스트의 표준 도구 권한 승인을 요청해. 승인 거부·요청 도구 없음·정책 차단이면 중단해. 일괄 권한 우회나 Cowork 네트워크 정책 가정, 프록시/다른 환경 우회를 하지 마. 기존 인증 폴더와 캐시를 보존하고 원시 캐시·비밀값은 읽거나 출력하지 마.
+
+Mac: 아래 명령과 이후 POSIX nextCommand는 POSIX 셸에서 실행해. --host claude-code와 --command-shell posix를 유지해.
+
+준비 명령 (startup 포함, 전체 반복 금지):
+
+```posix
+sh -eu &lt;&lt;&#39;HARE_LOCAL_SETUP&#39;
+hare_fail() { printf &#39;%s\n&#39; &quot;$1&quot; &gt;&amp;2; exit 1; }
+HARE_DATA_DIR=&#39;&lt;SELECTED_LOCAL_FOLDER&gt;&#39;
+HARE_RUNTIME_ROOT=&quot;${XDG_CACHE_HOME:-$HOME/.cache}/hare-m365-agent-runtime&quot;
+case &quot;$HARE_RUNTIME_ROOT&quot; in [A-Za-z]:*) HARE_RUNTIME_ROOT=$(node -e &#39;process.stdout.write(process.argv[1].replaceAll(String.fromCharCode(92), String.fromCharCode(47)))&#39; &quot;$HARE_RUNTIME_ROOT&quot;) ;; esac
+case &quot;$HARE_RUNTIME_ROOT&quot; in /*|[A-Za-z]:/*) ;; *) HARE_RUNTIME_ROOT=&quot;$PWD/$HARE_RUNTIME_ROOT&quot; ;; esac
+HARE_DATA_DIR=$(node -e &#39;const fs = require(&#39;&quot;&#39;&quot;&#39;node:fs&#39;&quot;&#39;&quot;&#39;);
+const path = require(&#39;&quot;&#39;&quot;&#39;node:path&#39;&quot;&#39;&quot;&#39;);
+function canonical(value) {
+  try { return fs.realpathSync.native(value); }
+  catch (error) {
+    if (error.code !== &#39;&quot;&#39;&quot;&#39;ENOENT&#39;&quot;&#39;&quot;&#39;) throw error;
+    const parent = path.dirname(value);
+    if (parent === value) throw error;
+    return path.join(canonical(parent), path.basename(value));
+  }
+}
+function contains(parent, child) {
+  const relative = path.relative(parent, child);
+  return relative === &#39;&quot;&#39;&quot;&#39;&#39;&quot;&#39;&quot;&#39; || (relative !== &#39;&quot;&#39;&quot;&#39;..&#39;&quot;&#39;&quot;&#39; &amp;&amp; !relative.startsWith(&#39;&quot;&#39;&quot;&#39;..&#39;&quot;&#39;&quot;&#39; + path.sep) &amp;&amp; !path.isAbsolute(relative));
+}
+const dataDir = path.resolve(process.argv[1]);
+const runtime = path.resolve(process.argv[2]);
+const data = canonical(dataDir);
+for (const candidate of [runtime, path.join(runtime, &#39;&quot;&#39;&quot;&#39;app&#39;&quot;&#39;&quot;&#39;)]) {
+  const target = canonical(candidate);
+  if (contains(data, target) || contains(target, data)) {
+    throw new Error(&#39;&quot;&#39;&quot;&#39;Hare data directory and runtime/app must not overlap.&#39;&quot;&#39;&quot;&#39;);
+  }
+}
+process.stdout.write(dataDir.split(path.sep).join(&#39;&quot;&#39;&quot;&#39;/&#39;&quot;&#39;&quot;&#39;));&#39; &quot;$HARE_DATA_DIR&quot; &quot;$HARE_RUNTIME_ROOT&quot;)
+HARE_APP=&quot;$HARE_RUNTIME_ROOT/app&quot;
+HARE_BUILD_HEAD=&quot;$HARE_RUNTIME_ROOT/.hare-app-build-head&quot;
+HARE_REPO=&#39;https://github.com/ohmyhotelco-planning/hare-m365-agent.git&#39;
+HARE_BRANCH=&#39;master&#39;
+HARE_REF=&quot;refs/heads/$HARE_BRANCH&quot;
+git check-ref-format --branch &quot;$HARE_BRANCH&quot; &gt;/dev/null
+if [ -e &quot;$HARE_APP&quot; ] || [ -L &quot;$HARE_APP&quot; ]; then
+  [ -d &quot;$HARE_APP/.git&quot; ] || [ -f &quot;$HARE_APP/.git&quot; ] || hare_fail &#39;Existing Hare app folder is not a Git repository; it was left unchanged.&#39;
+fi
+mkdir -p &quot;$HARE_RUNTIME_ROOT&quot; &quot;$HARE_DATA_DIR&quot;
+REMOTE_LINE=$(git ls-remote --exit-code --refs &quot;$HARE_REPO&quot; &quot;$HARE_REF&quot;)
+REMOTE_HEAD=${REMOTE_LINE%%[[:space:]]*}
+case &quot;$REMOTE_HEAD&quot; in &#39;&#39;|*[!0-9a-f]*) hare_fail &#39;Invalid remote branch HEAD.&#39; ;; esac
+[ &quot;$REMOTE_LINE&quot; = &quot;$(printf &#39;%s\t%s&#39; &quot;$REMOTE_HEAD&quot; &quot;$HARE_REF&quot;)&quot; ] || hare_fail &#39;Remote branch did not resolve exactly.&#39;
+if [ ! -e &quot;$HARE_APP/.git&quot; ]; then
+  git clone --branch &quot;$HARE_BRANCH&quot; --single-branch --no-tags -- &quot;$HARE_REPO&quot; &quot;$HARE_APP&quot;
+else
+  ORIGIN=$(git -C &quot;$HARE_APP&quot; remote get-url origin)
+  [ &quot;$ORIGIN&quot; = &quot;$HARE_REPO&quot; ] || hare_fail &#39;Hare app remote does not match the requested repository.&#39;
+  CURRENT_BRANCH=$(git -C &quot;$HARE_APP&quot; branch --show-current)
+  [ &quot;$CURRENT_BRANCH&quot; = &quot;$HARE_BRANCH&quot; ] || hare_fail &#39;Hare app branch does not match the requested branch.&#39;
+  WORKTREE_STATUS=$(git -C &quot;$HARE_APP&quot; status --porcelain --untracked-files=all)
+  [ -z &quot;$WORKTREE_STATUS&quot; ] || hare_fail &#39;Hare app repository is dirty; changes were left unchanged.&#39;
+  git -C &quot;$HARE_APP&quot; fetch origin &quot;$HARE_REF&quot;
+  git -C &quot;$HARE_APP&quot; pull --ff-only origin &quot;$HARE_REF&quot;
+fi
+LOCAL_HEAD=$(git -C &quot;$HARE_APP&quot; rev-parse HEAD)
+[ &quot;$LOCAL_HEAD&quot; = &quot;$REMOTE_HEAD&quot; ] || hare_fail &#39;Hare app HEAD does not match the remote branch.&#39;
+BUILT_HEAD=&#39;&#39;
+if [ -f &quot;$HARE_BUILD_HEAD&quot; ]; then BUILT_HEAD=$(cat &quot;$HARE_BUILD_HEAD&quot;); fi
+if [ &quot;$BUILT_HEAD&quot; != &quot;$LOCAL_HEAD&quot; ] || [ ! -d &quot;$HARE_APP/node_modules&quot; ] || [ ! -f &quot;$HARE_APP/dist/cli.js&quot; ] || [ ! -f &quot;$HARE_APP/dist/proxy.js&quot; ] || [ ! -f &quot;$HARE_APP/dist/msal-network.js&quot; ]; then
+  cd &quot;$HARE_APP&quot;
+  npm ci --prefer-offline --no-audit --no-fund
+  npm run build
+  [ -d &quot;$HARE_APP/node_modules&quot; ] &amp;&amp; [ -f &quot;$HARE_APP/dist/cli.js&quot; ] &amp;&amp; [ -f &quot;$HARE_APP/dist/proxy.js&quot; ] &amp;&amp; [ -f &quot;$HARE_APP/dist/msal-network.js&quot; ] || hare_fail &#39;Hare build output is incomplete.&#39;
+  printf &#39;%s\n&#39; &quot;$LOCAL_HEAD&quot; &gt; &quot;$HARE_BUILD_HEAD&quot;
+fi
+node &quot;$HARE_APP/dist/cli.js&quot; --data-dir &quot;$HARE_DATA_DIR&quot; --host claude-code --command-shell posix network check --environment claude-code &amp;&amp;
+node &quot;$HARE_APP/dist/cli.js&quot; --data-dir &quot;$HARE_DATA_DIR&quot; --host claude-code --command-shell posix
+HARE_LOCAL_SETUP
+```
+
+준비 명령이 startup을 이미 처리하므로 startup을 중복 실행하지 마. 명령이 반환되면 추가 인증 명령이나 업무 조회 전에 선택 폴더의 CLAUDE.md와 claude/hare-m365-agent-rules.md를 읽어. 원시 인증 캐시를 읽지 마. 규칙이 없거나 호스트·셸·경로가 맞지 않으면 중단해. 이후에도 생성된 정확한 명령 접두사, --data-dir, --host claude-code, --command-shell을 유지해.
+
+startup 출력의 setup.state와 setup.nextCommand만 따라 한 단계씩 진행해. SETUP_REQUIRED/FOLDER_REQUIRED 또는 알 수 없는 상태는 이유를 알리고 중단해. LOGIN_START_REQUIRED일 때만 nextCommand를 변경 없이 포그라운드에서 한 번 실행하고 반환된 Microsoft 주소와 userCode를 보여준 뒤 사용자 본인의 회사 계정으로 로그인하도록 안내하고 멈춰. 특정 이메일 계정을 지정하지 마.
+
+LOGIN_COMPLETE_REQUIRED이면 기존 대기 로그인과 코드를 유지해. 사용자가 로그인을 완료했다고 확인하기 전에는 완료 명령을 실행하지 마. 확인 후 setup.nextCommand를 변경 없이 정확히 한 번 포그라운드 실행해. 폴링·백그라운드·중복 login-start를 하지 마. READY이면 준비 완료를 알리고 멈춰. 실제 조회는 별도 사용자 요청과 loggedIn=true 및 tokenUsable=true 확인 후에만 해.
+
+BLOCKED 또는 AUTH_CHECK_BLOCKED의 loggedIn=null/tokenUsable=null은 인증 확인 불가이지 로그아웃이나 만료가 아니야. 기존 인증 폴더와 캐시를 보존해. 생성된 규칙의 제한된 network check --environment claude-code 절차만 따르고 이미 실패·거부된 검사는 반복하지 마. 재로그인·캐시 초기화·다른 dataDir·커넥터·GUI 우회를 하지 마. 그 밖의 실패는 실패 단계와 비밀값 없는 오류 한 줄만 알리고 중단해.
+
+향후 M365 조회와 Outlook 초안에는 Hare CLI만 사용해. 커넥터·Computer Use·브라우저 자동화·Outlook/Teams/SharePoint GUI를 대체 경로로 사용하지 마. 기본은 읽기 전용이며 Outlook 초안은 수신자, 제목, 본문, 첨부 전체 미리보기와 명시적 승인 후에만 생성해. 발송하지 마. 다운로드·export의 조건부 AWAITING_USER_APPROVAL, 전체 계획, 승인 토큰, 제한·재개 규칙은 생성된 규칙을 그대로 따르고 무조건 승인 면제로 바꾸지 마.
+
+다음 채팅도 같은 폴더에서 시작해 CLAUDE.md의 규칙 연결이 적용됐는지 확인하고 생성된 상태 확인 명령을 사용해. 새 채팅만을 이유로 재설치하거나 재로그인하지 마. Local 실행이어도 반환된 업무 내용은 모델에 전달된다는 점을 사용자에게 알려줘.</textarea></div>
+      <div class="controls"><button type="button" id="copy" hidden>Hare 연결 프롬프트 복사</button><span class="copy-status" id="copy-status" role="status" aria-live="polite" data-success="프롬프트를 복사했습니다." data-fallback="자동 복사가 제한되었습니다. 선택된 프롬프트를 직접 복사하세요."></span></div>
+      <noscript><p>JavaScript가 꺼져 있습니다. 해당 운영체제의 프롬프트를 직접 선택해 복사하세요.</p></noscript>
+    </section>
+    <section aria-labelledby="next"><h2 id="next">4. 로그인과 다음 대화</h2><p>준비 명령이 startup까지 처리합니다. 이후 생성된 CLAUDE.md와 claude/hare-m365-agent-rules.md를 읽고 setup.state의 다음 단계만 따릅니다. 로그인 대기 중에는 사용자의 완료 확인 후 명령을 한 번만 실행합니다. READY이면 멈추고 업무 요청을 기다립니다.</p><p>다음 채팅에서도 반드시 같은 Hare 폴더를 Code Local 작업 폴더로 여세요. 기본 설정에서는 CLAUDE.md가 자동으로 로드되어 생성된 규칙으로 안내합니다. 적용 여부를 확인하고 규칙의 상태 확인 명령을 사용하세요. 새 채팅이라는 이유만으로 다시 로그인하지 마세요.</p></section>
+    <section aria-labelledby="security"><h2 id="security">보안 및 권한</h2><p>Local은 실행 위치를 뜻합니다. Hare가 반환하여 Claude가 읽는 업무 내용은 모델에 전달됩니다. 원시 인증 캐시나 비밀값을 읽거나 대화에 붙여넣지 마세요.</p><p>필요한 도구 권한만 표준 승인 절차로 요청합니다. 일괄 권한 우회는 사용하지 않으며 거부되면 중단합니다. Local의 네트워크 정책을 Cowork 허용 목록과 같다고 가정하지 않습니다. 네트워크로 인증 상태를 확인할 수 없으면 캐시를 보존하며 재로그인하지 않습니다.</p><p>조회와 Outlook 초안은 Hare만 사용하며 커넥터나 GUI로 우회하지 않습니다. 초안은 수신자·제목·본문·첨부 전체 미리보기를 보여주고 명시적 승인 후 생성합니다. 발송은 지원하지 않습니다. 다운로드와 내보내기는 생성된 규칙의 조건부 승인 절차를 그대로 따릅니다.</p></section>
+    <footer><strong>공식 참고 문서</strong><ul>
+      <li><a href="https://code.claude.com/docs/en/desktop">Claude Code Desktop</a></li>
+      <li><a href="https://code.claude.com/docs/en/setup">Setup</a></li>
+      <li><a href="https://code.claude.com/docs/en/memory">CLAUDE.md / Memory</a></li>
+      <li><a href="https://code.claude.com/docs/en/permissions">Permissions</a></li>
+      <li><a href="https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/">Node.js / npm</a></li>
+    </ul></footer>
+  </main>
+  <script>
+    const platform = document.getElementById("platform");
+    const controls = [
+      { button: document.getElementById("copy"), status: document.getElementById("copy-status"), prefix: "prompt-" },
+      { button: document.getElementById("copy-environment"), status: document.getElementById("environment-status"), prefix: "environment-" }
+    ];
+    function updatePlatform() {
+      document.querySelectorAll("[data-platform]").forEach((panel) => { panel.hidden = panel.dataset.platform !== platform.value; });
+      controls.forEach(({ status }) => { status.textContent = ""; });
+    }
+    platform.addEventListener("change", updatePlatform);
+    updatePlatform();
+    controls.forEach(({ button, status, prefix }) => {
+      button.hidden = false;
+      button.addEventListener("click", async () => {
+      const prompt = document.getElementById(prefix + platform.value);
+      controls.forEach(({ button }) => { button.disabled = true; });
+      platform.disabled = true;
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(prompt.value);
+          copied = true;
+        }
+      } catch { /* Local-file clipboard restrictions use the selection fallback. */ }
+      if (!copied) {
+        prompt.focus();
+        prompt.select();
+        try { copied = document.execCommand("copy"); } catch { copied = false; }
+      }
+      status.textContent = copied ? status.dataset.success : status.dataset.fallback;
+      controls.forEach(({ button }) => { button.disabled = false; });
+      platform.disabled = false;
+      });
+    });
+  </script>
+</body>
+</html>
