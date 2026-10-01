@@ -4,7 +4,17 @@
 
 Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDrive를 조회하는 읽기 전용 CLI입니다.
 
-## Cowork 실행 모델
+## Claude Code Desktop Local 실행 모델
+
+- `--host claude-code`는 Windows·Mac의 Desktop Local 실행용입니다. Cloud/원격/WSL 실행이나 권한 우회를 뜻하지 않습니다.
+- 사용자가 선택한 기존 Hare 데이터 폴더를 작업 폴더로 열고, 모든 명령에 그 절대 경로를 `--data-dir`로 유지합니다. 새 세션에서도 같은 폴더의 `CLAUDE.md`와 `claude/hare-m365-agent-rules.md`를 읽습니다. Git worktree나 비슷한 이름의 새 폴더로 바꾸지 않습니다.
+- 신규 사용자는 Git 저장소·OneDrive 등 동기화 폴더 밖의 로컬 폴더를 선택합니다. 기존 인증이 있다는 이유로 캐시 원문을 읽거나 출력하지 않습니다.
+- 앱 clone·build는 데이터 폴더 밖의 로컬 런타임에서 수행합니다. Windows는 PowerShell, Mac은 POSIX 셸 기준이며 `--command-shell powershell|posix`와 반환된 명령 구문을 일치시킵니다.
+- Git과 Node.js 20.18.1 이상이 실제 Claude Code 세션의 PATH에서 실행 가능해야 합니다. 설치·업데이트 실패 시 중단하고 기존 인증 데이터를 유지합니다.
+- 연결 확인은 같은 접두사로 `network check --environment claude-code`를 사용합니다. Claude Code 표준 권한 UI로 필요한 범위만 승인받으며 전체 권한 우회 모드를 사용하지 않습니다. Cowork 허용 목록이 Local 실행 권한을 부여하지 않습니다.
+- 호스트 변경만으로 재로그인하지 않습니다. startup의 상태를 따르며 앱·테넌트·계정 불일치나 네트워크 실패는 기존 캐시를 보존하고 중단합니다.
+
+## Cowork 실행 모델 (Cowork에서만 적용)
 
 - 사용자가 Cowork 작업을 열 때 선택한 프로젝트 마운트만 Hare의 영구 `dataDir`로 사용합니다.
 - 선택 프로젝트에는 `.cache`, `claude`, `downloads`, `results`, `logs`만 저장합니다.
@@ -18,7 +28,7 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 
 ## 로그인 하드게이트
 
-- 새 실행 환경에서 startup/auth status 또는 첫 업무 조회 전, 같은 명령 접두사와 `--data-dir`로 `network check --environment <codex|cowork|unknown>`을 실행합니다. 실제 호스트를 지정하며 이 옵션 자체가 권한을 부여하지는 않습니다. 인증 캐시 접근·파일 변경 없이 최대 3초 연결 검사만 수행합니다.
+- 새 실행 환경에서 startup/auth status 또는 첫 업무 조회 전, 같은 명령 접두사와 `--data-dir`로 `network check --environment <codex|cowork|claude-code|unknown>`을 실행합니다. 실제 호스트를 지정하며 이 옵션 자체가 권한을 부여하지는 않습니다. 인증 캐시 접근·파일 변경 없이 최대 3초 연결 검사만 수행합니다.
 - Codex에서 `EXECUTION_PERMISSION_REQUIRED`이면 일반적인 실패 안내만 하고 끝내지 말고 호스트의 표준 실행 권한 요청 도구를 사용합니다. 승인된 경우에만 같은 검사를 1회 재실행하고, 같은 실행 파일·dataDir로 인증 확인 후 원래 요청한 읽기를 진행합니다. 거부·도구 없음·재실패 시 중단합니다. 쓰기 작업은 자동 재시도하지 않습니다.
 - `NETWORK_PERMISSION_REQUIRED`인 허용 목록 차단은 Codex에서도 실행 권한 요청으로 우회하지 않습니다. Cowork의 `EACCES`도 로컬 셸로 우회하지 않으며 정책이 바뀌면 같은 프로젝트로 새 Cowork 작업을 엽니다. 그 외 오류는 `NETWORK_CHECK_BLOCKED`로 보고합니다.
 - `REACHABLE`은 로그인 서버의 공개 주소 연결만 확인한 것입니다. 인증이나 Graph/SharePoint 권한 성공을 뜻하지 않습니다. 승인 유효 범위 안에서 같은 실행 환경을 유지하고 매 페이지마다 사전 검사를 반복하지 않습니다.

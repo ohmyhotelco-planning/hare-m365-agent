@@ -1,7 +1,7 @@
 import { ProxyAwareNetworkClient } from "./msal-network.js";
 import { fetchWithProxy } from "./proxy.js";
 
-export type ExecutionEnvironment = "codex" | "cowork" | "unknown";
+export type ExecutionEnvironment = "codex" | "cowork" | "claude-code" | "unknown";
 
 const endpoint = "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration";
 const timeoutMs = 3_000;
@@ -54,6 +54,8 @@ export async function checkMicrosoftConnectivity(
     nextAction: permissionRequired ? "REQUEST_EXECUTION_PERMISSION" : "REPORT_BLOCKER",
     instruction: permissionRequired
       ? "In Codex only, use the host's standard execution-permission request for this exact network check instead of asking the user to force a retry. Do not run outside the sandbox until permission is granted. After approval, repeat the check once with the same Hare executable and exact dataDir; if REACHABLE, check auth and perform the requested read in that approved environment. If denied, unavailable, or still blocked, stop. Never change dataDir, reset the cache, restart login, or automatically retry a write."
+      : environment === "claude-code"
+        ? "Report the blocked hostname and safe error code. Preserve the existing dataDir and cache; connectivity failure does not prove token expiry. Use Claude Code's normal permission process for the required command and network access, never bypass permissions or organization policy. Stop on denial. Explicit allowlist blocks require a policy change, not elevation. Do not reset the cache, restart login, switch environments, or automatically retry writes."
       : "Report the blocked hostname and safe error code. Keep the existing dataDir and cache; do not restart login or infer token expiry. In Cowork, stay in the session shell governed by its domain allowlist; never move to a local shell to bypass it. For an explicit allowlist block, request the domain policy change and use a new Cowork task with the same project after it is applied. Otherwise ask for network/environment diagnosis, not automatic allowlisting or repeated retries."
   };
 }

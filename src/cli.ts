@@ -38,14 +38,21 @@ import {
   listTeamsInlineImages
 } from "./teams-inline-images.js";
 import { cleanupExpiredResults, resolveResultPath } from "./results.js";
-import { writeSessionRules } from "./session-rules.js";
+import { buildSessionRules, sessionRulesPath, writeSessionRules } from "./session-rules.js";
 import { buildSetupContract } from "./setup-state.js";
 import { buildLocalSetupCommand } from "./local-install.js";
 import { checkMicrosoftConnectivity, networkExecutionGuidance, type ExecutionEnvironment } from "./network-check.js";
+import { commandPath, quoteCommandArgument as quoteForShell, claudeCodeFolderInstruction, type RuntimeHost, type CommandShell } from "./command-context.js";
 
 const program = new Command();
 program.option("--data-dir <path>", "Use this exact Hare data directory for every command in the session");
-const config = loadConfig({ dataDir: readDataDirArgument(process.argv.slice(2)) });
+program.addOption(new Option("--host <host>", "Instruction and setup mode; does not grant permissions").choices(["cowork", "claude-code"]).default("cowork"));
+program.addOption(new Option("--command-shell <shell>", "Shell syntax for returned commands").choices(["powershell", "posix"]));
+program.parseOptions(process.argv.slice(2));
+const runtimeHost = program.opts().host as RuntimeHost;
+const commandShell: CommandShell = program.opts().commandShell ?? (process.platform === "win32" ? "powershell" : "posix");
+const explicitDataDir = readDataDirArgument(process.argv.slice(2));
+const config = loadConfig({ dataDir: explicitDataDir });
 
 const preferredCommand = "hare-m365";
 const packageName = "@ohmyhotel/hare-m365-agent";
@@ -55,12 +62,15 @@ const repoUrl = "https://github.com/ohmyhotelco-planning/hare-m365-agent.git";
 const localSetupCommand = buildLocalSetupCommand({
   dataDir: config.dataDir,
   repository: repoUrl,
-  branch: "master"
+  branch: "master",
+  environment: runtimeHost,
+  shell: runtimeHost === "claude-code" ? commandShell : "posix"
 });
 const setupCommandForGuide = config.dataDirPersistent
   ? localSetupCommand
+  : runtimeHost === "claude-code" ? `# ${claudeCodeFolderInstruction}`
   : "# FOLDER_REQUIRED: start Cowork with the user's existing Hare project folder selected, then rerun this guide with that selected project root as the persistent store.";
-const defaultCliCommand = `${process.platform === "win32" ? "& " : ""}${quoteCommandArgument(process.execPath)} ${quoteCommandArgument(path.join(packageRoot, "dist", "cli.js"))}`;
+const defaultCliCommand = `${commandShell === "powershell" ? "& " : ""}${quoteCommandArgument(commandPath(process.execPath, commandShell))} ${quoteCommandArgument(commandPath(path.join(packageRoot, "dist", "cli.js"), commandShell))}`;
 
 const requiredDomains = [
   "github.com",
@@ -74,6 +84,9 @@ const requiredDomains = [
 
 let rulesFile: string | undefined;
 program.hook("preAction", (_command, actionCommand) => {
+  if (runtimeHost === "claude-code" && (!explicitDataDir || !path.isAbsolute(explicitDataDir))) {
+    program.error("FOLDER_REQUIRED: --host claude-code requires --data-dir with the absolute path of the selected Local Hare folder.");
+  }
   if (actionCommand.name() === "check" && actionCommand.parent?.name() === "network") return;
   ensureRuntimeDirs(config);
   try {
@@ -86,7 +99,9 @@ program.hook("preAction", (_command, actionCommand) => {
     repository: repoUrl,
     branch: "master",
     workDir: packageRoot,
-    requiredDomains
+    requiredDomains,
+    host: runtimeHost,
+    commandShell
   });
 });
 
@@ -300,14 +315,20 @@ function getSelfCommand(): string {
 
 function getExplicitSelfCommand(): string {
   const command = process.env.HARE_M365_COMMAND ?? defaultCliCommand;
-  return `${command} --data-dir ${quoteCommandArgument(config.dataDir)}`;
+  const context = runtimeHost === "claude-code" ? ` --host claude-code --command-shell ${commandShell}`
+    : program.opts().commandShell ? ` --command-shell ${commandShell}` : "";
+  return `${command}${context} --data-dir ${quoteCommandArgument(commandPath(config.dataDir, commandShell))}`;
 }
 
 function quoteCommandArgument(value: string): string {
-  if (/[\0\r\n]/.test(value)) throw new Error("Hare command arguments cannot contain null bytes or line breaks.");
-  return process.platform === "win32"
-    ? `'${value.replaceAll("'", "''")}'`
-    : `'${value.replaceAll("'", `'"'"'`)}'`;
+  return quoteForShell(value, commandShell);
+}
+
+function localCodeGuide(): string {
+  return `${buildSessionRules(config, {
+    commandPrefix: getExplicitSelfCommand(), repository: repoUrl, branch: "master",
+    workDir: packageRoot, requiredDomains, host: runtimeHost, commandShell
+  }, sessionRulesPath(config))}\n## Prepare or update the app\n\nRun this only for installation or an explicit update, not before every query. Stop on failure.\n\n\`\`\`${commandShell === "powershell" ? "powershell" : "bash"}\n${setupCommandForGuide}\n\`\`\`\n`;
 }
 
 function getLoginCommand(): string {
@@ -373,7 +394,7 @@ program
   .version(packageVersion)
   .action(async () => {
     const status = await getDoctorStatus();
-    const setup = buildSetupContract(status, getSelfCommand());
+    const setup = buildSetupContract(status, getSelfCommand(), runtimeHost);
     console.log(
       JSON.stringify(
         {
@@ -381,6 +402,8 @@ program
           package: packageName,
           version: packageVersion,
           mode: "startup",
+          host: runtimeHost,
+          commandShell,
           repository: repoUrl,
           appDir: config.dataDirPersistent ? packageRoot : undefined,
           setupCommand: config.dataDirPersistent ? localSetupCommand : undefined,
@@ -400,6 +423,7 @@ program
             exists: Boolean(rulesFile && fs.existsSync(rulesFile)),
             instruction: rulesFile
               ? "Read this file before login or Microsoft 365 lookup, and keep using the exact data directory and command prefix recorded there."
+              : runtimeHost === "claude-code" ? claudeCodeFolderInstruction
               : "Open a Cowork task with the user's existing Hare project selected; the session rules file is created only in that selected persistent project."
           },
           storageRule:
@@ -415,7 +439,7 @@ program.command("network").description("Unauthenticated connection diagnostics")
   .command("check")
   .description("Check Microsoft connectivity without reading or changing the data directory")
   .addOption(new Option("--environment <host>", "Actual host; this option does not grant execution permission")
-    .choices(["codex", "cowork", "unknown"]).default("unknown"))
+    .choices(["codex", "cowork", "claude-code", "unknown"]).default(runtimeHost === "claude-code" ? "claude-code" : "unknown"))
   .action(async (options: { environment: ExecutionEnvironment }) => {
     const result = await checkMicrosoftConnectivity(options.environment);
     console.log(JSON.stringify(result, null, 2));
@@ -483,7 +507,7 @@ auth.command("status").description("Show current login and policy status").actio
       dataDirPersistent: config.dataDirPersistent,
       pendingLoginStateExists
     },
-    getSelfCommand()
+    getSelfCommand(), runtimeHost
   );
   console.log(
     JSON.stringify(
@@ -530,7 +554,7 @@ program
       JSON.stringify(
         {
           ...status,
-          setup: buildSetupContract(status, getSelfCommand())
+          setup: buildSetupContract(status, getSelfCommand(), runtimeHost)
         },
         null,
         2
@@ -542,14 +566,14 @@ program
   .command("llm-guide")
   .description("Print the LLM usage guide for Hare M365 Agent")
   .action(() => {
-    console.log(llmGuide);
+    console.log(runtimeHost === "claude-code" ? localCodeGuide() : llmGuide);
   });
 
 program
   .command("llm-prompt")
   .description("Print a short first prompt for an LLM session")
   .action(() => {
-    console.log(llmPrompt);
+    console.log(runtimeHost === "claude-code" ? localCodeGuide() : llmPrompt);
   });
 
 const outlook = program.command("outlook").description("Outlook read commands");

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { AppConfig } from "./config.js";
 import { writeStoredText } from "./persistent-storage.js";
 import { networkExecutionGuidance } from "./network-check.js";
+import { claudeCodeExecutionGuidance, claudeCodeFolderInstruction, type RuntimeHost, type CommandShell } from "./command-context.js";
 
 const managedClaudeRulesStart = "<!-- HARE_M365_AGENT_RULES_START -->";
 const managedClaudeRulesEnd = "<!-- HARE_M365_AGENT_RULES_END -->";
@@ -13,6 +14,8 @@ export type SessionRulesOptions = {
   branch: string;
   workDir: string;
   requiredDomains: string[];
+  host?: RuntimeHost;
+  commandShell?: CommandShell;
 };
 
 export function sessionRulesPath(config: AppConfig): string {
@@ -62,7 +65,7 @@ ${managedClaudeRulesEnd}`;
   if (existing !== nextContents) writeStoredText(claudeFile, nextContents);
 }
 
-function buildSessionRules(
+export function buildSessionRules(
   config: AppConfig,
   options: SessionRulesOptions,
   rulesFile: string
@@ -70,10 +73,13 @@ function buildSessionRules(
   const cacheFile = path.join(config.cacheDir, "msal-cache.json");
   const startupCommand = options.commandPrefix;
   const statusCommand = `${options.commandPrefix} auth status`;
+  const localCode = options.host === "claude-code";
 
   return `# Hare M365 Agent Session Rules
 
-The project folder selected when this Cowork task was opened is Hare's persistent data directory. Keep using that exact project root regardless of its folder name.
+${localCode
+  ? "The existing Hare data folder selected in Claude Code Desktop Local is the persistent data directory. Keep that exact folder for new sessions; do not use a Cloud session, Git worktree or a guessed replacement. New users must choose a non-synced local folder outside a Git repository before setup."
+  : "The project folder selected when this Cowork task was opened is Hare's persistent data directory. Keep using that exact project root regardless of its folder name."}
 
 ## Fixed locations
 
@@ -85,9 +91,13 @@ The project folder selected when this Cowork task was opened is Hare's persisten
 - Logs: ${config.logsDir}
 - Current session app directory: ${options.workDir}
 
-The selected project folder stores Hare data only. Do not clone the repository, run npm ci, or build inside it. Cowork mounts may allow create and overwrite while rejecting shell deletion, so Hare updates its own cache and rule files without requesting folder deletion permission.
+${localCode
+  ? "The selected folder stores Hare data and its managed CLAUDE.md only. Keep the app checkout and node_modules in the separate local runtime. Do not clone or build in the data folder, upload it, or commit it. Existing app/tenant/account and token validation still apply; switching tools alone is not a reason to clear authentication or sign in again."
+  : "The selected project folder stores Hare data only. Do not clone the repository, run npm ci, or build inside it. Cowork mounts may allow create and overwrite while rejecting shell deletion, so Hare updates its own cache and rule files without requesting folder deletion permission."}
 
-The application checkout belongs in the Cowork session runtime shown by the setup command. It can be recreated in a new Cowork task. Never replace the selected project data directory with a temporary or guessed path.
+${localCode
+  ? `The application checkout belongs in the local runtime shown by the setup command. Returned commands use ${options.commandShell ?? "the selected shell"} syntax. On Windows, do not paste PowerShell's & syntax into Bash. Keep the same shell and absolute data directory across commands.`
+  : "The application checkout belongs in the Cowork session runtime shown by the setup command. It can be recreated in a new Cowork task. Never replace the selected project data directory with a temporary or guessed path."}
 
 ## Code and commands
 
@@ -106,11 +116,13 @@ The application checkout belongs in the Cowork session runtime shown by the setu
 
     ${statusCommand}
 
-Every command must keep this exact --data-dir. A new Cowork task may recreate the session app, but a usable login in this selected project remains reusable.
+${localCode
+  ? "Every command must keep this exact --data-dir, --host claude-code, and --command-shell. Open the same data folder in each new Local session so CLAUDE.md is discovered. Read the session rules, run network preflight once, then startup; follow its state instead of starting a new login. Updating the app must not reset authentication."
+  : "Every command must keep this exact --data-dir. A new Cowork task may recreate the session app, but a usable login in this selected project remains reusable."}
 
 ## Execution environment preflight
 
-${networkExecutionGuidance}
+${localCode ? claudeCodeExecutionGuidance : networkExecutionGuidance}
 
 ## Startup state
 
@@ -118,15 +130,19 @@ ${networkExecutionGuidance}
 2. READY: Do not start a new login; wait for the user's Microsoft 365 request.
 3. LOGIN_START_REQUIRED: run setup.nextCommand once and show the Microsoft URL and user code. Tell the user to sign in with their own company Microsoft account that they will use with Hare. Never name, recommend, or preselect a specific email address from a cache, example, or prior conversation. A scope-list difference alone does not require sign-in: Hare first validates the current scopes silently for the existing account. App/tenant/profile/account mismatches are BLOCKED; preserve authentication files and do not start a replacement login automatically.
 4. LOGIN_COMPLETE_REQUIRED: wait until the user says the browser login is complete, then run setup.nextCommand once.
-5. FOLDER_REQUIRED: stop and tell the user to open a new Cowork task with the existing Hare project selected.
+5. FOLDER_REQUIRED: ${localCode ? claudeCodeFolderInstruction : "stop and tell the user to open a new Cowork task with the existing Hare project selected."}
 6. BLOCKED with AUTH_CHECK_BLOCKED means token validity is unknown: loggedIn=null and tokenUsable=null do not mean signed out or expired. Keep the existing cache and follow the bounded execution-environment preflight above. Do not start a new login, reset the cache, bypass network policy, or run M365 queries before authentication is verified. Other TOKEN_ACQUISITION_FAILED errors must follow setup.state; never substitute another cache.
-7. Do not request deletion permission for the selected project folder. Do not move dataDir to another path.
+7. ${localCode ? "Do not delete user files or reset authentication to resolve an error. Grant only the scoped permissions required for the Hare command; never move dataDir to another path." : "Do not request deletion permission for the selected project folder. Do not move dataDir to another path."}
 
-## Cowork network permission
+${localCode ? `## Local execution permission
+
+- Use the selected Local shell and the organization's network policy. Cowork domain settings do not grant Claude Code access.
+- Request only the required runtime/data/output paths and commands using the host permission UI. Never disable permissions or weaken the Hare policy to get past a failure.
+- Changes to PATH or installed Node/Git must be visible inside the actual Claude Code session, not only an unrelated terminal.` : `## Cowork network permission
 
 - Run git, npm, login, and Graph commands in the session sandbox shell where the Cowork domain allowlist applies.
 - If HTTP 403 includes X-Proxy-Error: blocked-by-allowlist, report NETWORK_PERMISSION_REQUIRED and stop after identifying the failed domain.
-- When the allowlist changes, open a new Cowork task with the same Hare project selected and retry only the failed step once.
+- When the allowlist changes, open a new Cowork task with the same Hare project selected and retry only the failed step once.`}
 
 ## Microsoft 365 operation
 

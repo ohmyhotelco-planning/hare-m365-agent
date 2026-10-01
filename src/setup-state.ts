@@ -1,3 +1,5 @@
+import { claudeCodeExecutionGuidance, claudeCodeFolderInstruction, type RuntimeHost } from "./command-context.js";
+
 export type SetupState =
   | "SETUP_REQUIRED"
   | "FOLDER_REQUIRED"
@@ -71,7 +73,8 @@ export function classifyAuthFailure(reason: string | undefined): AuthFailureClas
 
 export function buildSetupContract(
   snapshot: SetupSnapshot,
-  selfCommand: string
+  selfCommand: string,
+  host: RuntimeHost = "cowork"
 ): SetupContract {
   const state = determineSetupState(snapshot);
 
@@ -88,7 +91,7 @@ export function buildSetupContract(
         state,
         nextAction: "SELECT_PROJECT_FOLDER",
         stopAfterAction: true,
-        instruction:
+        instruction: host === "claude-code" ? claudeCodeFolderInstruction :
           "This Cowork task was not started with a project folder. Report FOLDER_REQUIRED and stop. Tell the user to open a new Cowork task with their existing Hare project or folder selected, then paste the same prompt there."
       };
     case "LOGIN_START_REQUIRED":
@@ -117,18 +120,20 @@ export function buildSetupContract(
       };
     case "BLOCKED":
       return buildBlockedSetupContract(
-        snapshot.authReason ?? "Microsoft token validation failed. Do not start a new login flow."
+        snapshot.authReason ?? "Microsoft token validation failed. Do not start a new login flow.", host
       );
   }
 }
 
-export function buildBlockedSetupContract(reason: string): SetupContract {
+export function buildBlockedSetupContract(reason: string, host: RuntimeHost = "cowork"): SetupContract {
   if (reason.startsWith("AUTH_CHECK_BLOCKED:")) {
     return {
       state: "BLOCKED",
       nextAction: "CHECK_EXECUTION_ENVIRONMENT",
       stopAfterAction: true,
-      instruction: `Authentication is unverified, not expired. Run the same Hare runtime/app and exact --data-dir with network check --environment <actual-host> (codex, cowork, or unknown) once and follow its result. In Codex, EXECUTION_PERMISSION_REQUIRED calls for the host's standard permission request, not an automatic retry; continue only after approval. Cowork and explicit allowlist blocks must not bypass their policy. Keep the cache, do not start login or run M365 reads until verified. If the check/permission step already failed or was denied, report it and stop: ${reason}`
+      instruction: host === "claude-code"
+        ? `Authentication is unverified, not expired. ${claudeCodeExecutionGuidance}\nIf the check already failed, report it and stop: ${reason}`
+        : `Authentication is unverified, not expired. Run the same Hare runtime/app and exact --data-dir with network check --environment <actual-host> (codex, cowork, or unknown) once and follow its result. In Codex, EXECUTION_PERMISSION_REQUIRED calls for the host's standard permission request, not an automatic retry; continue only after approval. Cowork and explicit allowlist blocks must not bypass their policy. Keep the cache, do not start login or run M365 reads until verified. If the check/permission step already failed or was denied, report it and stop: ${reason}`
     };
   }
   return {

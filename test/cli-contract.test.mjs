@@ -79,12 +79,13 @@ test("startup preserves a legacy cache and blocks until identity metadata is res
   ]);
   assert.equal(output.appDir, path.resolve("."));
   assert.match(output.setupCommand, /npm ci --prefer-offline --no-audit --no-fund/);
-  assert.match(output.setupCommand, /refs\/heads\/master/);
+  assert.match(output.setupCommand, /HARE_BRANCH='master'/);
+  assert.match(output.setupCommand, /HARE_REF="refs\/heads\/\$HARE_BRANCH"/);
   assert.match(output.setupCommand, /HARE_RUNTIME_ROOT=/);
   assert.match(output.setupCommand, /HARE_APP="\$HARE_RUNTIME_ROOT\/app"/);
   assert.match(output.setupCommand, /HARE_DATA_DIR=/);
   assert.doesNotMatch(output.setupCommand, /HARE_SNAPSHOT|\.hare-app-snapshot|tar -[ctx]zf/);
-  assert.match(output.setupCommand, /test "\$LOCAL_HEAD" = "\$REMOTE_HEAD"/);
+  assert.match(output.setupCommand, /\[ "\$LOCAL_HEAD" = "\$REMOTE_HEAD" \] \|\| hare_fail/);
   assert.match(output.setupCommand, /pull --ff-only/);
   assert.match(output.setupCommand, /--data-dir/);
   assert.match(output.setupCommand, new RegExp(escapeRegExp(dataDir)));
