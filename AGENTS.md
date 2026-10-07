@@ -30,6 +30,7 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 
 - 새 실행 환경에서 startup/auth status 또는 첫 업무 조회 전, 같은 명령 접두사와 `--data-dir`로 `network check --environment <codex|cowork|claude-code|unknown>`을 실행합니다. 실제 호스트를 지정하며 이 옵션 자체가 권한을 부여하지는 않습니다. 인증 캐시 접근·파일 변경 없이 최대 3초 연결 검사만 수행합니다.
 - Codex에서 `EXECUTION_PERMISSION_REQUIRED`이면 일반적인 실패 안내만 하고 끝내지 말고 호스트의 표준 실행 권한 요청 도구를 사용합니다. 승인된 경우에만 같은 검사를 1회 재실행하고, 같은 실행 파일·dataDir로 인증 확인 후 원래 요청한 읽기를 진행합니다. 거부·도구 없음·재실패 시 중단합니다. 쓰기 작업은 자동 재시도하지 않습니다.
+- Codex의 `NETWORK_CHECK_BLOCKED` + `ENOTFOUND`도 `nextAction=REQUEST_EXECUTION_PERMISSION`이면 위 승인 절차를 적용합니다. 샌드박스 제한 가능성과 실제 DNS 장애 가능성을 함께 안내하며 어느 쪽도 확정하지 않습니다. 이미 승인된 환경의 검사에서 실패했거나 권한 요청이 거절·불가했다면 추가 요청이나 재시도 없이 중단합니다. 승인 환경에서 성공해도 기본 샌드박스가 복구됐다고 말하지 않습니다. 다른 호스트나 명시적 허용 목록 차단에는 이 예외를 적용하지 않습니다.
 - `NETWORK_PERMISSION_REQUIRED`인 허용 목록 차단은 Codex에서도 실행 권한 요청으로 우회하지 않습니다. Cowork의 `EACCES`도 로컬 셸로 우회하지 않으며 정책이 바뀌면 같은 프로젝트로 새 Cowork 작업을 엽니다. 그 외 오류는 `NETWORK_CHECK_BLOCKED`로 보고합니다.
 - `REACHABLE`은 로그인 서버의 공개 주소 연결만 확인한 것입니다. 인증이나 Graph/SharePoint 권한 성공을 뜻하지 않습니다. 승인 유효 범위 안에서 같은 실행 환경을 유지하고 매 페이지마다 사전 검사를 반복하지 않습니다.
 - `startup.setup.state`와 `setup.nextCommand`만 따릅니다.

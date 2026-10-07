@@ -58,7 +58,8 @@ Cowork의 도메인 허용 기준은 `설정 > 기능 > 도메인 허용 목록`
 - `REACHABLE`: 같은 실행 환경에서 인증을 확인하고, `READY`일 때만 원래 요청한 조회를 진행합니다. 연결 성공은 로그인 또는 Graph/SharePoint 권한 성공이 아닙니다.
 - `EXECUTION_PERMISSION_REQUIRED`: Codex의 연결 권한 오류입니다. AI는 사용자가 재시도를 재촉할 때까지 기다리지 말고 호스트의 표준 실행 권한 요청을 사용합니다. 승인된 경우에만 같은 검사 1회 → 같은 캐시 인증 확인 → 원래 요청한 읽기 순으로 진행합니다. 거부·권한 요청 도구 없음·재실패이면 중단합니다.
 - `NETWORK_PERMISSION_REQUIRED`: 명시적인 도메인 허용 목록 차단입니다. 실행 권한 요청으로 우회하지 않습니다. Cowork는 설정 반영 후 같은 프로젝트로 새 작업을 엽니다.
-- `NETWORK_CHECK_BLOCKED`: 그 외 연결 오류입니다. 원인을 보고하되 로그인 만료나 허용 목록 문제로 단정하지 않습니다. Cowork 또는 알 수 없는 호스트에서 로컬 셸로 우회하지 않습니다.
+- `NETWORK_CHECK_BLOCKED` + `ENOTFOUND`: Codex에서는 샌드박스 제한 또는 실제 DNS/네트워크 문제 모두 가능하므로 원인을 단정하지 않습니다. `nextAction=REQUEST_EXECUTION_PERMISSION`에 따라 정식 실행 권한을 요청하고, 승인 후 같은 실행 파일·dataDir로 한 번만 검사합니다. 성공하면 같은 승인 환경에서 인증 확인과 원래 요청한 읽기를 이어갑니다. 이미 승인된 검사에서 실패했거나 권한 요청이 거절·불가했던 경우에는 다시 요청하거나 반복하지 않습니다. 승인 환경의 성공을 기본 샌드박스가 복구됐다는 뜻으로 해석하지 않습니다.
+- 그 밖의 `NETWORK_CHECK_BLOCKED`: 원인을 보고하되 로그인 만료나 허용 목록 문제로 단정하지 않습니다. Cowork, Claude Code 또는 알 수 없는 호스트의 `ENOTFOUND`에는 Codex용 권한 요청 절차를 적용하지 않습니다.
 
 Hare는 권한 상승이나 재시도를 직접 실행하지 않습니다. 승인 범위가 유지되는 동안 같은 실행 환경·앱·dataDir를 사용하고, 재로그인·캐시 초기화·쓰기 자동 재시도는 하지 않습니다. 이후 `AUTH_CHECK_BLOCKED`가 발생하면 `setup.nextAction=CHECK_EXECUTION_ENVIRONMENT`에 따라 위 검사를 한 번 적용합니다.
 
