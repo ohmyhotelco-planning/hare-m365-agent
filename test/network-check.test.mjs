@@ -32,8 +32,8 @@ test("public preflight uses one bounded unauthenticated request, not a login che
   assert.equal(result.cacheAccessed, false);
 });
 
-for (const environment of ["codex", "cowork", "unknown"]) {
-  for (const code of ["EACCES", "EPERM", "ENOTFOUND", "ETIMEDOUT"]) {
+for (const environment of ["codex", "cowork", "claude-code", "unknown"]) {
+  for (const code of ["EACCES", "EPERM", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNREFUSED", "CERT_HAS_EXPIRED"]) {
     test(`${environment} ${code} has bounded host-specific permission guidance`, async () => {
       let calls = 0;
       const network = new ProxyAwareNetworkClient(async () => {
@@ -41,18 +41,29 @@ for (const environment of ["codex", "cowork", "unknown"]) {
         throw new Error(marker, { cause: Object.assign(new Error(marker), { code }) });
       });
       const result = await checkMicrosoftConnectivity(environment, network);
-      const canRequest = environment === "codex" && ["EACCES", "EPERM"].includes(code);
-      assert.equal(result.state, canRequest ? "EXECUTION_PERMISSION_REQUIRED" : "NETWORK_CHECK_BLOCKED");
+      const permissionError = environment === "codex" && ["EACCES", "EPERM"].includes(code);
+      const dnsCheck = environment === "codex" && code === "ENOTFOUND";
+      const canRequest = permissionError || dnsCheck;
+      assert.equal(result.state, permissionError ? "EXECUTION_PERMISSION_REQUIRED" : "NETWORK_CHECK_BLOCKED");
       assert.equal(result.nextAction, canRequest ? "REQUEST_EXECUTION_PERMISSION" : "REPORT_BLOCKER");
       assert.equal(result.code, code);
       assert.equal(calls, 1);
       assert.equal(result.authenticationChecked, false);
+      assert.equal(result.cacheAccessed, false);
       assert.doesNotMatch(JSON.stringify(result), new RegExp(marker));
       if (canRequest) {
         assert.match(result.instruction, /until permission is granted/);
         assert.match(result.instruction, /denied, unavailable, or still blocked, stop/);
         assert.match(result.instruction, /same Hare executable and exact dataDir/);
         assert.match(result.instruction, /Never.*automatically retry a write/);
+        assert.match(result.instruction, /already ran in an approved context/);
+        assert.match(result.instruction, /stop without another request or retry/);
+        assert.match(result.instruction, /repeat the check once/);
+      }
+      if (dnsCheck) {
+        assert.match(result.instruction, /sandbox restriction is possible/);
+        assert.match(result.instruction, /real DNS\/network problem is also possible; neither cause is confirmed/);
+        assert.match(result.instruction, /does not mean the default sandbox has been repaired/);
       }
     });
   }
@@ -76,10 +87,11 @@ test("ordinary HTTP denial and server failure are not allowlist claims", async (
     assert.equal(result.state, "NETWORK_CHECK_BLOCKED");
     assert.equal(result.httpStatus, status);
     assert.equal(result.code, "HTTP_ERROR");
+    assert.equal(result.nextAction, "REPORT_BLOCKER");
   }
 });
 
-for (const code of ["EACCES", "EPERM", "ETIMEDOUT"]) {
+for (const code of ["EACCES", "EPERM", "ENOTFOUND", "ETIMEDOUT"]) {
   test(`allowlist headers cannot be overridden by body ${code}`, async () => {
     const result = await checkMicrosoftConnectivity("codex", new ProxyAwareNetworkClient(async () => ({
       status: 403, headers: new Headers({ "X-Proxy-Error": "blocked-by-allowlist" }),
@@ -112,6 +124,7 @@ function runCli(dataDir, args, mode) {
       path: '/common/v2.0/.well-known/openid-configuration', method: 'GET'
     });
     if (${JSON.stringify(mode)} === 'eacces') interceptor.replyWithError(Object.assign(new Error('${marker}'), {code:'EACCES'}));
+    else if (${JSON.stringify(mode)} === 'enotfound') interceptor.replyWithError(Object.assign(new Error('${marker}'), {code:'ENOTFOUND'}));
     else if (${JSON.stringify(mode)} === 'redirect') interceptor.reply(302, '', { headers: { location: 'https://example.com/not-allowed' } });
     else if (${JSON.stringify(mode)} === 'timeout') interceptor.reply(200, '{}').delay(10000);
     else interceptor.reply(200, '{}');
@@ -131,11 +144,17 @@ test("CLI preflight does not read or write the dataDir, even with existing inval
   const dataDir = path.join(root, "existing project with spaces");
   fs.mkdirSync(path.join(dataDir, ".cache"), { recursive: true });
   fs.writeFileSync(path.join(dataDir, ".cache", "msal-cache.json"), marker);
-  for (const [mode, status, state] of [["ok", 0, "REACHABLE"], ["eacces", 1, "EXECUTION_PERMISSION_REQUIRED"], ["redirect", 1, "NETWORK_CHECK_BLOCKED"]]) {
+  for (const [mode, status, state] of [["ok", 0, "REACHABLE"], ["eacces", 1, "EXECUTION_PERMISSION_REQUIRED"], ["enotfound", 1, "NETWORK_CHECK_BLOCKED"], ["redirect", 1, "NETWORK_CHECK_BLOCKED"]]) {
     const result = runCli(dataDir, ["--data-dir", dataDir, "network", "check", "--environment", "codex"], mode);
     assert.equal(result.status, status, result.stderr);
     const output = JSON.parse(result.stdout);
     assert.equal(output.state, state);
+    if (mode === "enotfound") {
+      assert.equal(output.code, "ENOTFOUND");
+      assert.equal(output.nextAction, "REQUEST_EXECUTION_PERMISSION");
+      assert.equal(output.authenticationChecked, false);
+      assert.equal(output.cacheAccessed, false);
+    }
     if (mode === "redirect") assert.equal(output.httpStatus, 302);
     assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE_NETWORK_TEST_MARKER|PROBE_TOUCHED_DATA_DIRECTORY/);
     assert.deepEqual(fs.readdirSync(dataDir), [".cache"]);
@@ -170,10 +189,19 @@ test("machine contract and installation chain preserve preflight order and appro
   assert.equal(contract.nextAction, "CHECK_EXECUTION_ENVIRONMENT");
   assert.equal(contract.nextCommand, undefined);
   assert.match(contract.instruction, /standard permission request, not an automatic retry/);
+  const dnsContract = buildBlockedSetupContract("AUTH_CHECK_BLOCKED: ENOTFOUND");
+  assert.equal(dnsContract.nextAction, "CHECK_EXECUTION_ENVIRONMENT");
+  assert.equal(dnsContract.nextCommand, undefined);
+  assert.match(dnsContract.instruction, /nextAction=REQUEST_EXECUTION_PERMISSION/);
+  assert.match(dnsContract.instruction, /real DNS\/network problem, not a confirmed cause/);
+  assert.match(dnsContract.instruction, /already ran in an approved context and failed/);
+  assert.match(dnsContract.instruction, /stop without another request or retry/);
   const command = buildLocalSetupCommand({ dataDir: "/selected/project", repository: "https://example.com/repo.git", branch: "master" });
   assert.match(command, /--data-dir "\$HARE_DATA_DIR" network check --environment cowork &&\r?\nnode/);
   assert.match(networkExecutionGuidance, /Unknown hosts must not be treated as Codex/);
   assert.match(networkExecutionGuidance, /same executable and dataDir/);
+  assert.match(networkExecutionGuidance, /NETWORK_CHECK_BLOCKED with ENOTFOUND in Codex and nextAction=REQUEST_EXECUTION_PERMISSION/);
+  assert.match(networkExecutionGuidance, /neither cause is confirmed/);
 });
 
 test("generated guidance retains the exact Node, app and explicit selected project", (t) => {

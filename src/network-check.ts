@@ -9,8 +9,9 @@ const timeoutMs = 3_000;
 export const networkExecutionGuidance = `Before startup/auth status or the first requested M365 read in a new execution environment, run the same Hare command prefix and exact --data-dir followed by network check --environment <actual-host> (codex, cowork, or unknown). This check does not read the authentication cache or modify the data directory. Do not repeat it before every page or Graph request while the approved execution context remains unchanged.
 - REACHABLE: check authentication in that same environment. Only loggedIn=true and tokenUsable=true permit reads; connectivity alone does not establish login, Graph permissions, or SharePoint access.
 - EXECUTION_PERMISSION_REQUIRED in Codex: invoke the host's standard execution-permission request for the exact check. Do not simply report that Hare cannot work or ask the user to force another attempt. Only after permission is granted, repeat the check once, then run startup/auth status and the originally requested read with the same executable and dataDir in that approved context. The --environment option does not grant permission. If denied, unavailable, or still blocked, stop. Never automatically retry a write.
+- NETWORK_CHECK_BLOCKED with ENOTFOUND in Codex and nextAction=REQUEST_EXECUTION_PERMISSION: DNS resolution failed, which can mean a sandbox restriction or a real DNS/network problem; neither cause is confirmed. Explain this uncertainty and use the same bounded standard permission request above, not a manual retry instruction to the user. If this check already ran in an approved context, or its permission request was already denied or unavailable, stop without another request or retry. If the approved check succeeds, check auth and continue the originally requested read in that same approved context; this does not mean the default sandbox has been repaired.
 - NETWORK_PERMISSION_REQUIRED: an explicit allowlist block is not an elevation/retry case, including in Codex. Report the blocked domain and request the policy change. In Cowork, open a new task with the same project after the change takes effect.
-- NETWORK_CHECK_BLOCKED: report the safe cause and stop; do not assume that all network failures are allowlist problems or token expiry. Cowork must remain in its allowlist-governed session shell, even for EACCES. Unknown hosts must not be treated as Codex.
+- Other NETWORK_CHECK_BLOCKED results: report the safe cause and stop; do not assume that all network failures are allowlist problems or token expiry. Cowork must remain in its allowlist-governed session shell, even for EACCES or ENOTFOUND. Unknown hosts must not be treated as Codex.
 - Never change the dataDir, use another authentication cache, restart sign-in, or bypass a denied permission/policy to solve a connectivity failure. When a later read returns AUTH_CHECK_BLOCKED, use this bounded check once; preserve genuine login-required and data-permission errors as distinct failures.`;
 
 export async function checkMicrosoftConnectivity(
@@ -46,14 +47,18 @@ export async function checkMicrosoftConnectivity(
 
   const allowlistBlocked = code === "PROXY_ALLOWLIST_BLOCKED";
   const permissionRequired = !allowlistBlocked && environment === "codex" && (code === "EACCES" || code === "EPERM");
+  // DNS failures can be sandbox-related, but do not establish a permission error.
+  const possibleDnsRestriction = environment === "codex" && code === "ENOTFOUND";
+  const requestPermission = permissionRequired || possibleDnsRestriction;
   return {
     ...base, ok: false,
     state: allowlistBlocked ? "NETWORK_PERMISSION_REQUIRED"
       : permissionRequired ? "EXECUTION_PERMISSION_REQUIRED" : "NETWORK_CHECK_BLOCKED",
     code, httpStatus,
-    nextAction: permissionRequired ? "REQUEST_EXECUTION_PERMISSION" : "REPORT_BLOCKER",
-    instruction: permissionRequired
-      ? "In Codex only, use the host's standard execution-permission request for this exact network check instead of asking the user to force a retry. Do not run outside the sandbox until permission is granted. After approval, repeat the check once with the same Hare executable and exact dataDir; if REACHABLE, check auth and perform the requested read in that approved environment. If denied, unavailable, or still blocked, stop. Never change dataDir, reset the cache, restart login, or automatically retry a write."
+    nextAction: requestPermission ? "REQUEST_EXECUTION_PERMISSION" : "REPORT_BLOCKER",
+    instruction: requestPermission
+      ? (possibleDnsRestriction ? "DNS resolution failed. A sandbox restriction is possible, but a real DNS/network problem is also possible; neither cause is confirmed. " : "")
+        + "In Codex only, use the host's standard execution-permission request for this exact network check instead of asking the user to force a retry. If this check already ran in an approved context, or its permission request was already denied or unavailable, stop without another request or retry. Do not run outside the sandbox until permission is granted. After approval, repeat the check once with the same Hare executable and exact dataDir; if REACHABLE, check auth and perform the requested read in that approved environment. Success there does not mean the default sandbox has been repaired. If denied, unavailable, or still blocked, stop. Never change dataDir, reset the cache, restart login, or automatically retry a write."
       : environment === "claude-code"
         ? "Report the blocked hostname and safe error code. Preserve the existing dataDir and cache; connectivity failure does not prove token expiry. Use Claude Code's normal permission process for the required command and network access, never bypass permissions or organization policy. Stop on denial. Explicit allowlist blocks require a policy change, not elevation. Do not reset the cache, restart login, switch environments, or automatically retry writes."
       : "Report the blocked hostname and safe error code. Keep the existing dataDir and cache; do not restart login or infer token expiry. In Cowork, stay in the session shell governed by its domain allowlist; never move to a local shell to bypass it. For an explicit allowlist block, request the domain policy change and use a new Cowork task with the same project after it is applied. Otherwise ask for network/environment diagnosis, not automatic allowlisting or repeated retries."

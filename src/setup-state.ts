@@ -133,7 +133,7 @@ export function buildBlockedSetupContract(reason: string, host: RuntimeHost = "c
       stopAfterAction: true,
       instruction: host === "claude-code"
         ? `Authentication is unverified, not expired. ${claudeCodeExecutionGuidance}\nIf the check already failed, report it and stop: ${reason}`
-        : `Authentication is unverified, not expired. Run the same Hare runtime/app and exact --data-dir with network check --environment <actual-host> (codex, cowork, or unknown) once and follow its result. In Codex, EXECUTION_PERMISSION_REQUIRED calls for the host's standard permission request, not an automatic retry; continue only after approval. Cowork and explicit allowlist blocks must not bypass their policy. Keep the cache, do not start login or run M365 reads until verified. If the check/permission step already failed or was denied, report it and stop: ${reason}`
+        : `Authentication is unverified, not expired. Run the same Hare runtime/app and exact --data-dir with network check --environment <actual-host> (codex, cowork, or unknown) once and follow its result. In Codex, nextAction=REQUEST_EXECUTION_PERMISSION calls for the host's standard permission request, not an automatic retry; continue only after approval. This includes EXECUTION_PERMISSION_REQUIRED and NETWORK_CHECK_BLOCKED with ENOTFOUND: DNS failure can be a sandbox restriction or a real DNS/network problem, not a confirmed cause. Cowork and explicit allowlist blocks must not bypass their policy. Keep the cache, do not start login or run M365 reads until verified. If the check already ran in an approved context and failed, or permission was already denied or unavailable, report it and stop without another request or retry: ${reason}`
     };
   }
   return {
