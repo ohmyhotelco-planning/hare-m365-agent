@@ -35,6 +35,7 @@ const scopes = [
   "User.ReadBasic.All",
   "Mail.ReadWrite",
   "Mail.Read.Shared",
+  "Group.Read.All",
   "Chat.Read",
   "Team.ReadBasic.All",
   "Channel.ReadBasic.All",
