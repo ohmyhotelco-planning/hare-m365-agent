@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { listGroupPosts } from "../dist/groups-posts.js";
 import { groupPageUrl, groupReadError } from "../dist/groups-common.js";
+import { encodeGroupCursor } from "../dist/groups-cursor.js";
+import { listGroupPostAttachments } from "../dist/groups-attachments.js";
 
 const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hare-group-posts-"));
 after(() => {
@@ -64,10 +66,13 @@ test("null conversationId retains the requested parent path and verifies the ret
   assert.equal(result.posts[0].conversationId, "c1");
   assert.equal(result.posts[0].threadId, "t1");
   assert.equal(result.posts[0].fullBodyAvailable, true);
-  await assert.rejects(listGroupPosts(config, group, 3, options,
-    clientFor(oneThread([post("p1", { conversationId: null, conversationThreadId: "other" })]))), /GROUP_ID_CHAIN_MISMATCH/);
-  await assert.rejects(listGroupPosts(config, group, 3, options,
-    clientFor(oneThread([post("p1", { conversationId: "other", conversationThreadId: "t1" })]))), /GROUP_ID_CHAIN_MISMATCH/);
+  for (const extra of [{ conversationId: null, conversationThreadId: "other" }, { conversationId: "other", conversationThreadId: "t1" }]) {
+    const rejected = await listGroupPosts(config, group, 3, options, clientFor(oneThread([post("p1", extra)])));
+    assert.equal(rejected.posts.length, 0);
+    assert.equal(rejected.page.complete, false);
+    assert.equal(rejected.page.continuationAvailable, false);
+    assert.ok(rejected.page.failure);
+  }
 });
 
 test("limit uses a resumable position without discarding overfull pages or serializing bodies", async () => {
@@ -169,7 +174,10 @@ test("first access denial is distinct, later failure returns partial stage evide
 });
 
 test("rejects cross-conversation response and cross-group/host continuation", async () => {
-  await assert.rejects(listGroupPosts(config, group, 20, options, clientFor(oneThread([post("p1", { conversationThreadId: "other" })]))), /GROUP_ID_CHAIN_MISMATCH/);
+  const rejected = await listGroupPosts(config, group, 20, options, clientFor(oneThread([post("p1", { conversationThreadId: "other" })])));
+  assert.equal(rejected.posts.length, 0);
+  assert.equal(rejected.page.continuationAvailable, false);
+  assert.ok(rejected.page.failure);
   for (const next of ["https://evil.example/v1.0/groups/group-one/conversations", "https://graph.microsoft.com/v1.0/users", "https://graph.microsoft.com/v1.0/groups/other/conversations"]) {
     await assert.rejects(listGroupPosts(config, group, 20, options, clientFor({ [base]: { value: [], "@odata.nextLink": next } })), /GROUP_INVALID_CONTINUATION/);
   }
@@ -262,4 +270,238 @@ test("a stricter existing search policy caps group results", async () => {
   assert.equal(result.posts.length, 1);
   assert.equal(result.page.limit, 1);
   assert.equal(result.page.continuationAvailable, true);
+});
+
+const verifiedPath = "/v1.0/groups/group-one/threads/returned-thread/posts";
+function mismatchedRoutes(extra = {}) {
+  return {
+    ...oneThread([post("p1", { conversationId: null, conversationThreadId: "returned-thread", ...extra })]),
+    [verifiedPath]: { value: [post("p1", { conversationId: null, conversationThreadId: "returned-thread" })] }
+  };
+}
+
+test("revalidates exact post membership and passes the verified thread to unchanged attachment guards", async () => {
+  const routes = mismatchedRoutes();
+  routes[verifiedPath].value[0].body.content = "verified body";
+  const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  const p = result.posts[0];
+  assert.equal(result.page.complete, true);
+  assert.equal(result.page.requests, 4);
+  assert.equal(p.threadId, "returned-thread");
+  assert.equal(p.traversalThreadId, "t1");
+  assert.equal(p.threadVerification, "POST_COLLECTION_REVALIDATED");
+  assert.equal(p.bodyContent, "verified body");
+  const client = clientFor({
+    [`${verifiedPath}/p1`]: { id: "p1", conversationThreadId: "returned-thread" },
+    [`${verifiedPath}/p1/attachments`]: { value: [{ id: "a1", name: "test.pdf", size: 20, "@odata.type": "#microsoft.graph.fileAttachment" }] }
+  });
+  const attachments = await listGroupPostAttachments(config, { groupId: p.groupId, threadId: p.threadId, postId: p.id }, 20, {}, client);
+  assert.equal(attachments.attachments[0].id, "a1");
+  assert.equal(client.calls.length, 2);
+});
+
+test("30-result first page, 82-result scan budget, then revalidated third page retain unique posts", async () => {
+  const routes = oneThread([...Array.from({ length: 112 }, (_, i) => post(`p${i}`)), post("p112", { conversationThreadId: "returned-thread" })]);
+  routes[verifiedPath] = { value: [post("p112", { conversationThreadId: "returned-thread" })] };
+  const client = clientFor(routes);
+  const first = await listGroupPosts(config, group, 30, options, client);
+  assert.equal(first.posts.length, 30);
+  assert.deepEqual(first.page.partialReasons, ["RESULT_LIMIT"]);
+  const second = await listGroupPosts(config, group, 100, { ...options, maxRecords: 82, cursor: first.page.nextCursor }, client);
+  assert.equal(second.posts.length, 82);
+  assert.deepEqual(second.page.partialReasons, ["SCAN_BUDGET"]);
+  const third = await listGroupPosts(config, group, 100, { ...options, cursor: second.page.nextCursor }, client);
+  assert.equal(third.page.complete, true);
+  assert.equal(third.posts[0].threadVerification, "POST_COLLECTION_REVALIDATED");
+  assert.equal(new Set([...first.posts, ...second.posts, ...third.posts].map(p => p.id)).size, 113);
+});
+
+test("deduplicates the same post across different traversal threads and cursor calls", async () => {
+  const routes = mismatchedRoutes();
+  routes[`${base}/c1/threads`].value.push({ id: "t2" });
+  routes[`${base}/c1/threads/t2/posts`] = { value: [post("p1"), post("p2")] };
+  const first = await listGroupPosts(config, group, 1, options, clientFor(routes));
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, clientFor(routes));
+  assert.deepEqual(second.posts.map(p => p.id), ["p2"]);
+  assert.equal(second.page.duplicatesRemoved, 1);
+  assert.equal(second.page.complete, true);
+});
+
+test("unverified thread, post, conversation and malformed evidence fail closed while retaining prior posts", async () => {
+  for (const value of [[], [post("different", { conversationThreadId: "returned-thread" })],
+    [post("p1", { conversationThreadId: "wrong" })], [post("p1", { conversationThreadId: null })],
+    [post("p1", { conversationThreadId: "returned-thread", conversationId: "other-conversation" })],
+    [post("p1", { conversationThreadId: "returned-thread" }), post("p1", { conversationThreadId: "returned-thread" })]]) {
+    const routes = mismatchedRoutes();
+    routes[`${base}/c1/threads/t1/posts`].value.unshift(post("safe"));
+    routes[verifiedPath] = { value };
+    const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+    assert.deepEqual(result.posts.map(p => p.id), ["safe"]);
+    assert.match(result.page.failure, /GROUP_ID_CHAIN_MISMATCH/);
+    assert.equal(result.page.complete, false);
+    assert.equal(result.page.continuationAvailable, false);
+  }
+});
+
+test("verification page continuations cannot change group, thread or host and have a three-page bound", async () => {
+  for (const next of ["https://evil.example/posts", "https://graph.microsoft.com/v1.0/groups/other/threads/returned-thread/posts", "https://graph.microsoft.com/v1.0/groups/group-one/threads/other/posts"]) {
+    const routes = mismatchedRoutes();
+    routes[verifiedPath] = { value: [], "@odata.nextLink": next };
+    const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+    assert.match(result.page.failure, /GROUP_INVALID_CONTINUATION/);
+    assert.equal(result.posts.length, 0);
+  }
+  const routes = mismatchedRoutes();
+  for (let i = 1; i <= 4; i++) routes[verifiedPath + (i === 1 ? "" : `?page=${i}`)] = { value: [], "@odata.nextLink": `https://graph.microsoft.com${verifiedPath}?page=${i + 1}` };
+  const client = clientFor(routes);
+  const result = await listGroupPosts(config, group, 20, options, client);
+  assert.match(result.page.failure, /GROUP_ID_CHAIN_MISMATCH/);
+  assert.equal(client.calls.length, 6);
+  assert.equal(result.page.continuationAvailable, false);
+});
+
+test("verification uses a bounded next page and accounts for requests and scanned records", async () => {
+  const routes = mismatchedRoutes();
+  routes[`${verifiedPath}?page=2`] = routes[verifiedPath];
+  routes[verifiedPath] = { value: [post("other", { conversationThreadId: "returned-thread" })], "@odata.nextLink": `https://graph.microsoft.com${verifiedPath}?page=2` };
+  const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(result.page.complete, true);
+  assert.equal(result.page.requests, 5);
+  assert.equal(result.page.scannedRecords, 5);
+});
+
+test("verification budget interruption resumes without skipping the unresolved post", async () => {
+  const routes = mismatchedRoutes();
+  const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 3 }, clientFor(routes));
+  assert.deepEqual(first.posts, []);
+  assert.deepEqual(first.page.partialReasons, ["SCAN_BUDGET"]);
+  assert.equal(first.page.continuationAvailable, true);
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, clientFor(routes));
+  assert.equal(second.posts[0].id, "p1");
+  assert.equal(second.page.complete, true);
+});
+
+test("null thread is not accepted and mismatched conversation does not trigger thread verification", async () => {
+  for (const extra of [{ conversationThreadId: null }, { conversationId: "other", conversationThreadId: "returned-thread" }]) {
+    const client = clientFor(mismatchedRoutes(extra));
+    const result = await listGroupPosts(config, group, 20, options, client);
+    assert.match(result.page.failure, /GROUP_ID_CHAIN_MISMATCH/);
+    assert.equal(client.calls.length, 3);
+    assert.equal(result.posts.length, 0);
+  }
+});
+
+test("hydration after revalidation stays in verified thread and rejects changed or missing chain evidence", async () => {
+  for (const detail of [post("wrong", { conversationThreadId: "returned-thread" }), post("p1", { conversationThreadId: "other" }), post("p1")]) {
+    const routes = mismatchedRoutes();
+    routes[verifiedPath].value[0].body = undefined;
+    routes[`${verifiedPath}/p1`] = detail;
+    const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+    assert.match(result.page.failure, /GROUP_ID_CHAIN_MISMATCH/);
+    assert.equal(result.posts.length, 0);
+  }
+  const routes = mismatchedRoutes();
+  routes[verifiedPath].value[0].body = undefined;
+  routes[`${verifiedPath}/p1`] = post("p1", { conversationThreadId: "returned-thread" });
+  const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(result.posts[0].fullBodyAvailable, true);
+});
+
+test("old cursor deduplication version is rejected before network access", async () => {
+  const first = await listGroupPosts(config, group, 1, options, clientFor(oneThread([post("p1"), post("p2")])));
+  const envelope = JSON.parse(Buffer.from(first.page.nextCursor.split(".")[1], "base64url").toString());
+  envelope.state.version = 1;
+  const cursor = encodeGroupCursor(config, "posts", envelope.state);
+  const client = clientFor({});
+  await assert.rejects(listGroupPosts(config, group, 20, { ...options, cursor }, client), /GROUP_INVALID_CURSOR/);
+  assert.equal(client.calls.length, 0);
+});
+
+test("a mismatch discovered only during hydration also requires collection membership", async () => {
+  const routes = mismatchedRoutes();
+  routes[`${base}/c1/threads/t1/posts`] = { value: [post("p1", { body: undefined })] };
+  routes[`${base}/c1/threads/t1/posts/p1`] = post("p1", { conversationThreadId: "returned-thread" });
+  routes[verifiedPath].value[0].body.content = "verified detail";
+  const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(result.posts[0].threadId, "returned-thread");
+  assert.equal(result.posts[0].bodyContent, "verified detail");
+  assert.equal(result.page.complete, true);
+  routes[verifiedPath] = new Error("Graph GET failed (403 Forbidden): PRIVATE_SECRET");
+  const rejected = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(rejected.posts.length, 0);
+  assert.equal(rejected.page.continuationAvailable, false);
+  assert.match(rejected.page.failure, /GROUP_POSTS_ACCESS_DENIED/);
+  assert.doesNotMatch(JSON.stringify(rejected), /PRIVATE_SECRET/);
+});
+
+test("resumed validation failure is not obscured by NO_PROGRESS and malformed IDs never leave the process", async () => {
+  for (const thread of [null, " returned-thread ", ".", "..", ""]) {
+    const routes = mismatchedRoutes({ conversationThreadId: thread });
+    const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 2 }, clientFor(routes));
+    const client = clientFor(routes);
+    const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+    assert.deepEqual(second.page.partialReasons, ["READ_FAILED"]);
+    assert.match(second.page.failure, /GROUP_ID_CHAIN_MISMATCH/);
+    assert.equal(second.page.continuationAvailable, false);
+    assert.equal(client.calls.length, 1);
+  }
+});
+
+test("verification failure preserves earlier hydrated posts and hides remote error details", async () => {
+  for (const remote of [{ value: null }, new Error("Graph GET failed (404 Not Found): PRIVATE_SECRET")]) {
+    const routes = mismatchedRoutes();
+    routes[`${base}/c1/threads/t1/posts`].value.unshift(post("safe"));
+    routes[verifiedPath] = remote;
+    const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+    assert.deepEqual(result.posts.map(p => p.id), ["safe"]);
+    assert.equal(result.page.continuationAvailable, false);
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SECRET/);
+  }
+});
+
+test("third verification page succeeds, cyclic pages fail and deadlines stop before another request", async () => {
+  const routes = mismatchedRoutes();
+  routes[`${verifiedPath}?page=3`] = routes[verifiedPath];
+  routes[verifiedPath] = { value: [], "@odata.nextLink": `https://graph.microsoft.com${verifiedPath}?page=2` };
+  routes[`${verifiedPath}?page=2`] = { value: [], "@odata.nextLink": `https://graph.microsoft.com${verifiedPath}?page=3` };
+  const result = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(result.page.complete, true);
+  assert.equal(result.page.requests, 6);
+  routes[`${verifiedPath}?page=2`]["@odata.nextLink"] = `https://graph.microsoft.com${verifiedPath}?page=2`;
+  const rejected = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.match(rejected.page.failure, /GROUP_ID_CHAIN_MISMATCH/);
+  const client = clientFor(routes), get = client.get;
+  let now = options.now();
+  client.get = async (...args) => { const result = await get(...args); now += 10; return result; };
+  const timed = await listGroupPosts(config, group, 20, { ...options, now: () => now, timeBudgetMs: 35 }, client);
+  assert.deepEqual(timed.page.partialReasons, ["TIME_BUDGET"]);
+  assert.equal(timed.page.requests, 4);
+  assert.equal(timed.posts.length, 0);
+});
+
+test("verified timestamp, not the original mismatched row, controls the requested date range", async () => {
+  const routes = mismatchedRoutes();
+  routes[verifiedPath].value[0].createdDateTime = "2026-09-01T00:00:00Z";
+  const outside = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(outside.posts.length, 0);
+  assert.equal(outside.page.complete, true);
+  routes[`${base}/c1/threads/t1/posts`].value[0].createdDateTime = "2026-09-01T00:00:00Z";
+  routes[verifiedPath].value[0].createdDateTime = "2026-10-10T01:00:00Z";
+  const inside = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(inside.posts.length, 1);
+  assert.equal(inside.posts[0].createdDateTime, "2026-10-10T01:00:00Z");
+});
+
+test("verification that cannot fit a record budget stops without advancing or looping forever", async () => {
+  const routes = mismatchedRoutes();
+  routes[verifiedPath] = { value: Array.from({ length: 1000 }, (_, i) => post(`v${i}`, { conversationThreadId: "returned-thread" })) };
+  const first = await listGroupPosts(config, group, 20, options, clientFor(routes));
+  assert.equal(first.posts.length, 0);
+  assert.deepEqual(first.page.partialReasons, ["SCAN_BUDGET"]);
+  assert.equal(first.page.continuationAvailable, true);
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, clientFor(routes));
+  assert.equal(second.posts.length, 0);
+  assert.deepEqual(second.page.partialReasons, ["NO_PROGRESS"]);
+  assert.equal(second.page.continuationAvailable, false);
+  assert.equal(second.page.complete, false);
 });
