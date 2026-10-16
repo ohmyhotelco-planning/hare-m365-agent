@@ -26,6 +26,7 @@ import {
   listMessageAttachments
 } from "./outlook-attachments.js";
 import { resolveMailboxTarget, runMailboxRead } from "./outlook-mailbox.js";
+import { registerGroupCommands } from "./groups-cli.js";
 import { downloadDriveItem, searchFiles, searchSites } from "./sharepoint.js";
 import { exportSharePointFiles } from "./sharepoint-export.js";
 import { listChatMessagesPage, listChats, listJoinedTeams, searchChatMessages } from "./teams.js";
@@ -213,6 +214,9 @@ node dist/cli.js files download --drive-id "<drive-id>" --item-id "<item-id>" --
 - 플래그된 메일 요청은 outlook flagged --folder all을 사용한다. 모든 메일 조회 결과의 flagStatus를 함께 확인한다.
 - --mailbox가 없는 Outlook 명령은 로그인한 사용자의 사서함만 조회한다. 사용자가 공유 사서함 이름이나 주소를 명시하면 recent, flagged, search, count에 --mailbox를 사용한다. 이름 후보가 여러 개면 정확한 주소를 확인하고, 공유 사서함 조회가 실패해도 본인 사서함으로 대체하지 않는다.
 - 공유 사서함 메일의 첨부파일은 조회에 사용한 동일한 --mailbox를 attachments list와 attachments download에도 전달한다.
+- M365 그룹 주소·별칭은 groups resolve --group으로 별도 확인한다. /users 0건은 그룹 부재가 아니다. 실제 groupTypes에 Unified가 있어야 groups posts로 직접 읽으며 그룹 조회 실패 후 본인 사서함 사본으로 대체하지 않는다.
+- groups posts는 대화→스레드→post를 순회한다. 날짜는 post.createdDateTime 기준(기본 최근 90일, Asia/Seoul)이며 최신순이 아니다. range를 알리고 page.complete, partialReasons, fullBodyUnavailableCount를 확인한다. continuationAvailable일 때만 같은 그룹·명시 기간과 nextCursor로 이어가며 NO_PROGRESS/HISTORY_LIMIT/CURSOR_STALE이면 반복하지 않는다. preview는 원문이 아니고 bodyContent가 원문이다.
+- 그룹 첨부는 groups attachments list/download에 동일한 group/thread-id/post-id/attachment-id를 사용한다. 그룹 본문 권한과 첨부 목록·바이트 권한은 다르다. Graph 그룹 post 첨부는 application 권한을 지원하지 않는다. 기존 다운로드 승인과 저장 정책을 유지하며 reference 첨부는 지원하지 않는다. metadataVerified, downloadedBytes, structureValidation을 구분하고 메타데이터 size와 파일 바이트가 같다고 가정하지 않는다. 권한 부족 시 scope 추가·동의·재로그인을 자동 실행하지 않는다.
 - 사용자가 기간을 지정한 조회는 inbox/chat-messages의 최근 건수 제한으로 대신하지 말고 search 명령의 --since/--until에 반영한다.
 - 사용자가 기간을 지정하지 않은 검색은 최근 90일을 조회한다. 결과 JSON의 search.range.notice를 사용자에게 알려 실제 조회 범위를 명확히 한다.
 - search.limitReached가 true이면 일부 결과만 반환된 것이므로 사용자에게 한도 도달 사실을 알린다.
@@ -575,6 +579,8 @@ program
   .action(() => {
     console.log(runtimeHost === "claude-code" ? localCodeGuide() : llmPrompt);
   });
+
+registerGroupCommands(program, config, emitJson);
 
 const outlook = program.command("outlook").description("Outlook read commands");
 

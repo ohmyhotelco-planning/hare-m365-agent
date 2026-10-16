@@ -14,6 +14,8 @@ release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드.html
 
 ## 실행 개요
 
+M365 그룹 원문·첨부 직접 조회는 [그룹메일 명령과 권한 기준](docs/group-mail.md)을 참고합니다. `groups resolve/posts/attachments`는 기존 본인·공유 사서함 조회와 분리되어 있으며, 그룹 권한을 자동 추가하거나 로그인 상태를 교체하지 않습니다.
+
 저장소:
 
 ```text

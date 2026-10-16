@@ -5,7 +5,7 @@ import type { AppConfig } from "./config.js";
 import { clearStoredFile, writeStoredText } from "./persistent-storage.js";
 
 export type DownloadApprovalPlan = {
-  source: "sharepoint" | "outlook";
+  source: "sharepoint" | "outlook" | "group";
   resourceKey: string;
   name: string;
   size: number;

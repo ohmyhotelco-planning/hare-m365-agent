@@ -14,6 +14,10 @@ import { buildSetupContract } from "../dist/setup-state.js";
 
 const marker = "PRIVATE_TEST_MARKER";
 const scopes = getScopeList();
+test("group reads request the delegated read scope without group write permissions", () => {
+  assert.ok(scopes.includes("Group.Read.All"));
+  assert.deepEqual(scopes.filter((scope) => scope.startsWith("Group")), ["Group.Read.All"]);
+});
 const host = "login.microsoftonline.com";
 const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
@@ -32,7 +36,7 @@ function tokenBody(config) {
   };
 }
 
-function successfulFetch(config) {
+function successfulFetch(config, grantedScopes = scopes) {
   return async (url, options) => {
     if (options.method === "GET") {
       if (url.includes("discovery/instance")) return jsonResponse({
@@ -51,11 +55,11 @@ function successfulFetch(config) {
       expires_in: 900, interval: 1, message: "Synthetic login only"
     });
     assert.ok(new URL(url).pathname.endsWith("/token"));
-    return jsonResponse(tokenBody(config));
+    return jsonResponse({ ...tokenBody(config), scope: grantedScopes.join(" ") });
   };
 }
 
-async function fixture(t) {
+async function fixture(t, { grantedScopes = scopes, expired = true } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hare-network-test-"));
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
   const config = {
@@ -66,12 +70,12 @@ async function fixture(t) {
   };
   const pca = new PublicClientApplication({
     auth: { clientId: config.clientId, authority: config.authority },
-    system: { networkClient: new ProxyAwareNetworkClient(successfulFetch(config)) }
+    system: { networkClient: new ProxyAwareNetworkClient(successfulFetch(config, grantedScopes)) }
   });
-  await pca.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: () => {} });
-  markAuthProfileReady(config, scopes);
+  await pca.acquireTokenByDeviceCode({ scopes: grantedScopes, deviceCodeCallback: () => {} });
+  markAuthProfileReady(config, grantedScopes);
   const cache = JSON.parse(pca.getTokenCache().serialize());
-  for (const value of Object.values(cache.AccessToken)) value.expires_on = "1";
+  if (expired) for (const value of Object.values(cache.AccessToken)) value.expires_on = "1";
   const cacheFile = path.join(config.cacheDir, "msal-cache.json");
   fs.writeFileSync(cacheFile, JSON.stringify(cache));
   const pendingFile = path.join(config.cacheDir, "device-login-state.json");
@@ -274,8 +278,44 @@ async function scopeFixture(t, storedScopes = scopes.filter((scope) => scope !==
   } };
 }
 
+test("unexpired pre-group token refreshes once without replacing account, profile or pending login", async (t) => {
+  const grantedScopes = scopes.filter((scope) => scope !== "Group.Read.All");
+  const { config, cacheFile, pendingFile } = await fixture(t, { grantedScopes, expired: false });
+  const homeAccountId = `33333333-3333-3333-3333-333333333333.${config.tenantId}`;
+  markAuthProfileReady(config, grantedScopes, homeAccountId);
+  const profileFile = getAuthProfilePath(config);
+  const profileBefore = fs.readFileSync(profileFile, "utf8");
+  const pendingBefore = fs.readFileSync(pendingFile, "utf8");
+  const cacheBefore = fs.readFileSync(cacheFile, "utf8");
+  const oldTokens = Object.values(JSON.parse(cacheBefore).AccessToken);
+  assert.ok(oldTokens.length > 0);
+  assert.ok(oldTokens.every((token) => Number(token.expires_on) * 1000 > Date.now()));
+  assert.ok(oldTokens.every((token) => !token.target.includes("Group.Read.All")));
+  let refreshes = 0;
+  const ok = successfulFetch(config);
+  const network = new ProxyAwareNetworkClient(async (url, options) => {
+    if (options.method === "POST") {
+      assert.ok(new URL(url).pathname.endsWith("/token"));
+      const body = new URLSearchParams(options.body);
+      assert.equal(body.get("grant_type"), "refresh_token");
+      assert.ok(body.get("scope").split(" ").includes("Group.Read.All"));
+      refreshes++;
+    }
+    return ok(url, options);
+  });
+  const status = await getAuthStatus(config, network);
+  assert.equal(status.tokenUsable, true, status.reason);
+  assert.equal(status.account.homeAccountId, homeAccountId);
+  assert.equal(await getAccessToken(config, network), "synthetic-access");
+  assert.equal(refreshes, 1);
+  assert.notEqual(fs.readFileSync(cacheFile, "utf8"), cacheBefore);
+  assert.equal(fs.readFileSync(profileFile, "utf8"), profileBefore);
+  assert.equal(fs.readFileSync(pendingFile, "utf8"), pendingBefore);
+});
+
 for (const [label, storedScopes] of [
   ["added", scopes.filter((scope) => scope !== "Mail.Read.Shared")],
+  ["group-read-added", scopes.filter((scope) => scope !== "Group.Read.All")],
   ["removed", [...scopes, "Calendars.Read"]],
   ["replaced", scopes.map((scope) => scope === "Mail.ReadWrite" ? "Mail.Read" : scope)],
   ["reordered", [...scopes].reverse().concat(scopes[0])]
@@ -340,7 +380,7 @@ for (const [label, response, reason] of [
   });
 }
 
-for (const kind of ["insufficient-scopes", "different-account"]) {
+for (const kind of ["insufficient-scopes", "missing-group-read", "different-account"]) {
   test(`silent response with ${kind} cannot become READY or persist new tokens`, async (t) => {
     const { config, assertPreserved } = await scopeFixture(t);
     const ok = successfulFetch(config);
@@ -348,10 +388,11 @@ for (const kind of ["insufficient-scopes", "different-account"]) {
       if (options.method !== "POST") return ok(url, options);
       const token = tokenBody(config);
       if (kind === "insufficient-scopes") token.scope = "User.Read";
+      else if (kind === "missing-group-read") token.scope = scopes.filter((scope) => scope !== "Group.Read.All").join(" ");
       else token.client_info = Buffer.from(JSON.stringify({ uid: "other-user", utid: config.tenantId })).toString("base64url");
       return jsonResponse(token);
     });
-    const expected = kind === "insufficient-scopes" ? "AUTH_SCOPES_INSUFFICIENT" : "AUTH_ACCOUNT_MISMATCH";
+    const expected = kind !== "different-account" ? "AUTH_SCOPES_INSUFFICIENT" : "AUTH_ACCOUNT_MISMATCH";
     const status = await getAuthStatus(config, network);
     assert.equal(status.reason, expected);
     assertPreserved();
