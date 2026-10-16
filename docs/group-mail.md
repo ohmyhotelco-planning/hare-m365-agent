@@ -19,7 +19,10 @@ hare-m365 --data-dir <existing-data-dir> groups attachments download --group <gr
 ## 원문과 완전성
 
 - conversation → thread → post 순회로 관계를 보존한다. `bodyContent`와 `bodyContentType`은 post 원문이며 `bodyHtml`은 HTML 원문, `body`는 읽기용 텍스트다. raw MIME 메일 전체를 뜻하지 않는다.
-- post의 `conversationId`가 `null`이면 요청한 부모 conversation 경로를 결과에 유지한다. 값이 있는 conversation ID나 thread ID가 요청 경로와 다르면 계속 오류로 중단한다.
+- post의 `conversationId`가 `null`이면 요청한 부모 conversation 경로를 결과에 유지한다. 값이 있는 conversation ID가 다르면 중단한다. thread ID가 다르면 같은 그룹의 반환 스레드 post 목록에서 동일 post ID·정확한 반환 thread ID·충돌 없는 conversation ID를 재검증한다. 단건 조회 성공만으로 ID가 동등하다고 추정하지 않는다.
+- 재검증은 최대 3페이지이며 기존 시간·요청·스캔 예산 안에서 수행한다. 성공한 경우 검증 목록의 원문을 사용하고 `threadId`에는 확인된 첨부 조회용 ID, `traversalThreadId`에는 원래 순회 ID, `threadVerification`에는 `POST_COLLECTION_REVALIDATED`를 반환한다. 원래 경로로 조회된 일반 결과는 `REQUEST_PATH`다. 원래 conversation 경로는 순회 출처이며 두 thread ID가 동등하다는 뜻은 아니다.
+- 재검증 실패나 상세 본문의 연결 불일치는 확보한 결과와 `page.failure`를 반환하고 `complete=false`, `continuationAvailable=false`로 중단한다. 실패 post는 결과에 포함하지 않으며 첨부 연결 검증을 완화하지 않는다. 예산 소진 시 미검증 post를 건너뛰지 않지만, 이어받기에서는 그 post의 재검증을 첫 페이지부터 다시 수행한다. 한 호출 예산 안에 검증하지 못하고 같은 위치에 머무르면 `NO_PROGRESS`로 중단한다.
+- 같은 그룹의 동일 post는 순회 thread가 달라도 한 번만 반환한다. 이 중복 제거 기준 변경으로 이전 버전의 posts 커서는 거부되므로 새 조회를 시작해야 한다. 첨부 목록 커서는 변경하지 않는다.
 - 실제 `createdDateTime` 기준으로 날짜를 비교한다. 기간 미지정은 최근 90일·Asia/Seoul이며 `range`를 반드시 보고한다. 대화 preview·lastDeliveredDateTime은 본문·post 생성시각이 아니다.
 - 문서에 보장되지 않은 post 날짜 필터·최신순 정렬에 의존하지 않는다. 오래된 post를 만났다고 순회를 조기 종료하지 않는다. 정렬된 최근 N건 명령이나 정확한 전체 건수 명령이 아니다.
 - 기본 호출 예산은 20초·100 요청·1,000 레코드, 반환은 기본 20건·최대 100건이다. `page.continuationAvailable`일 때 같은 그룹과 반환된 명시 날짜로 `nextCursor`를 사용한다. 커서는 본문을 포함하지 않지만 내부 식별자가 있으므로 공개하지 않는다. 그룹 전용 커서는 전체 진행 상태를 서명하며 24시간 동안 같은 데이터 폴더에서만 유효하다. 로컬 서명 키는 처음 이어받기가 생길 때 `.cache`에 생성되고 M365 인증과 별개다. 키·커서를 수정하거나 인증 파일로 대체하지 않는다.

@@ -11,7 +11,7 @@ import { decodeGroupCursor, encodeGroupCursor } from "./groups-cursor.js";
 type Entity = { id?: string };
 type Recipient = { emailAddress?: { name?: string; address?: string } };
 type Post = Entity & {
-  conversationId?: string | null; conversationThreadId?: string;
+  conversationId?: string | null; conversationThreadId?: string | null;
   body?: { content?: string; contentType?: string };
   from?: Recipient; sender?: Recipient;
   createdDateTime?: string; receivedDateTime?: string; lastModifiedDateTime?: string;
@@ -23,12 +23,14 @@ type Job = {
   url: string; offset: number; fingerprint?: string;
 };
 type CursorState = {
-  version: 1; criteria: string; jobs: Job[]; seen: string[]; pages: string[];
+  version: 2; criteria: string; jobs: Job[]; seen: string[]; pages: string[];
   missingBodies: number; missingTimestamps: number;
 };
 
 export type GroupPostSummary = {
   id: string; groupId: string; conversationId: string; threadId: string;
+  traversalThreadId?: string;
+  threadVerification: "REQUEST_PATH" | "POST_COLLECTION_REVALIDATED";
   from?: Recipient; sender?: Recipient;
   createdDateTime?: string; receivedDateTime?: string; lastModifiedDateTime?: string;
   hasAttachments: boolean | null;
@@ -63,7 +65,7 @@ export async function listGroupPosts(
   const range = resolveSearchRange(options.since, options.until, config.policy.defaultSearchLookbackDays, new Date(now()));
   const criteria = hash(JSON.stringify([group.id, range.startDateTime, range.endDateTimeExclusive, "createdDateTime"]));
   const state = options.cursor ? decodeCursor(config, options.cursor, criteria, group.id) : {
-    version: 1 as const, criteria, jobs: [newJob(group.id, "conversations")],
+    version: 2 as const, criteria, jobs: [newJob(group.id, "conversations")],
     seen: [], pages: [], missingBodies: 0, missingTimestamps: 0
   };
   const seen = new Set(state.seen);
@@ -79,6 +81,23 @@ export async function listGroupPosts(
   let resumable = true;
   // Cache a page only during this call. On resume, detect changed page IDs before skipping.
   const loaded = new Map<string, GraphPage<Entity>>();
+  const readVerificationPage = async (verificationUrl: string): Promise<GraphPage<Post>> => {
+    if (now() >= deadline) throw new Error("GROUP_VERIFICATION_TIME_BUDGET");
+    if (requests >= maxRequests || scannedRecords >= maxRecords) throw new Error("GROUP_VERIFICATION_SCAN_BUDGET");
+    requests++;
+    let verificationPage: GraphPage<Post>;
+    try {
+      verificationPage = await client.get<GraphPage<Post>>(verificationUrl, { totalTimeoutMs: Math.max(1, deadline - now()) });
+    } catch (error) {
+      throw groupReadError("POSTS", new Error(`Remote failure: ${error instanceof Error ? error.message : "unknown"}`));
+    }
+    if (!Array.isArray(verificationPage.value) || verificationPage.value.length > 1000) {
+      throw new Error("GROUP_ID_CHAIN_MISMATCH: Invalid verification collection.");
+    }
+    if (scannedRecords + verificationPage.value.length >= maxRecords) throw new Error("GROUP_VERIFICATION_SCAN_BUDGET");
+    scannedRecords += verificationPage.value.length;
+    return verificationPage;
+  };
   while (state.jobs.length) {
     if (posts.length >= maxResults) { stopReason = "RESULT_LIMIT"; break; }
     if (now() >= deadline) { stopReason = "TIME_BUDGET"; break; }
@@ -130,7 +149,7 @@ export async function listGroupPosts(
     }
     const item = values[job.offset];
     const id = groupIdentifier(item.id ?? "", `${job.kind} id`);
-    const identity = hash(JSON.stringify([job.kind, group.id, job.kind === "posts" ? job.threadId : null, id]));
+    const identity = hash(JSON.stringify([job.kind, group.id, id]));
     if (seen.has(identity)) { job.offset++; scannedRecords++; duplicates++; continue; }
     if (job.kind !== "posts") {
       seen.add(identity); job.offset++; scannedRecords++;
@@ -140,18 +159,52 @@ export async function listGroupPosts(
       continue;
     }
     let post = item as Post;
-    assertPostChain(post, job);
+    let threadId = job.threadId!;
+    let revalidated = false;
+    try {
+      const verified = await verifyPostThread(post, job, group.id, readVerificationPage);
+      post = verified.post;
+      threadId = verified.threadId;
+      revalidated = threadId !== job.threadId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === "GROUP_VERIFICATION_TIME_BUDGET" || message === "GROUP_VERIFICATION_SCAN_BUDGET") {
+        stopReason = message === "GROUP_VERIFICATION_TIME_BUDGET" ? "TIME_BUDGET" : "SCAN_BUDGET";
+      } else {
+        stopReason = "READ_FAILED";
+        failure = groupReadError("POSTS", error).message;
+        resumable = false;
+      }
+      break;
+    }
     let bodyFailure: string | undefined;
     if (typeof post.body?.content !== "string" || !validDate(post.createdDateTime)) {
       if (requests >= maxRequests || now() >= deadline) { stopReason = "SCAN_BUDGET"; break; }
+      let verifyingDetail = false;
       try {
         requests++;
-        const detail = await client.get<Post>(`${collection}/${encodeURIComponent(id)}?${postSelect()}`, { totalTimeoutMs: Math.max(1, deadline - now()) });
+        const detailCollection = revalidated ? threadPostsPath(group.id, threadId) : collection;
+        const detail = await client.get<Post>(`${detailCollection}/${encodeURIComponent(id)}?${postSelect()}`, { totalTimeoutMs: Math.max(1, deadline - now()) });
         if (detail.id !== id) throw new Error("GROUP_ID_CHAIN_MISMATCH: The post response does not match the requested ID.");
-        assertPostChain(detail, job);
-        post = { ...post, ...detail };
+        if (!revalidated && detail.conversationThreadId !== undefined && detail.conversationThreadId !== threadId) {
+          verifyingDetail = true;
+          const verified = await verifyPostThread(detail, job, group.id, readVerificationPage);
+          post = verified.post;
+          threadId = verified.threadId;
+          revalidated = true;
+        } else {
+          assertPostChain(detail, { ...job, threadId });
+          if (revalidated && detail.conversationThreadId !== threadId) throw new Error("GROUP_ID_CHAIN_MISMATCH: Verified thread evidence is missing from the post detail.");
+          post = { ...post, ...detail };
+        }
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith("GROUP_ID_CHAIN_MISMATCH")) throw error;
+        const message = error instanceof Error ? error.message : "";
+        if (message === "GROUP_VERIFICATION_TIME_BUDGET" || message === "GROUP_VERIFICATION_SCAN_BUDGET") {
+          stopReason = message === "GROUP_VERIFICATION_TIME_BUDGET" ? "TIME_BUDGET" : "SCAN_BUDGET"; break;
+        }
+        if (verifyingDetail || message.startsWith("GROUP_ID_CHAIN_MISMATCH")) {
+          stopReason = "READ_FAILED"; failure = groupReadError("POSTS", error).message; resumable = false; break;
+        }
         bodyFailure = groupReadError("POSTS", error).message;
       }
     }
@@ -166,7 +219,9 @@ export async function listGroupPosts(
     if (!fullBodyAvailable) state.missingBodies++;
     const html = post.body?.contentType?.toLowerCase() === "html";
     posts.push({
-      id, groupId: group.id, conversationId: job.conversationId!, threadId: job.threadId!,
+      id, groupId: group.id, conversationId: job.conversationId!, threadId,
+      ...(revalidated ? { traversalThreadId: job.threadId } : {}),
+      threadVerification: revalidated ? "POST_COLLECTION_REVALIDATED" : "REQUEST_PATH",
       from: post.from, sender: post.sender, createdDateTime: post.createdDateTime,
       receivedDateTime: post.receivedDateTime, lastModifiedDateTime: post.lastModifiedDateTime,
       hasAttachments: typeof post.hasAttachments === "boolean" ? post.hasAttachments : null,
@@ -178,7 +233,7 @@ export async function listGroupPosts(
   }
   state.seen = [...seen];
   state.pages = [...pages];
-  if (options.cursor && state.jobs.length && position(state) === initialPosition) {
+  if (options.cursor && resumable && state.jobs.length && position(state) === initialPosition) {
     stopReason = "NO_PROGRESS";
     resumable = false;
   }
@@ -216,6 +271,44 @@ function collectionPath(groupId: string, job: Job): string {
 function postSelect(): string {
   return "$select=id,conversationId,conversationThreadId,body,from,sender,createdDateTime,receivedDateTime,lastModifiedDateTime,hasAttachments";
 }
+function threadPostsPath(groupId: string, threadId: string): string {
+  return `${groupPath(groupId)}/threads/${encodeURIComponent(threadId)}/posts`;
+}
+
+// Never infer ID equivalence. Require the same post in the returned thread's own collection.
+async function verifyPostThread(
+  post: Post, job: Job, groupId: string,
+  read: (url: string) => Promise<GraphPage<Post>>
+): Promise<{ post: Post; threadId: string }> {
+  if (post.conversationId != null && post.conversationId !== job.conversationId) {
+    throw new Error("GROUP_ID_CHAIN_MISMATCH: The returned conversation does not match the traversal.");
+  }
+  if (post.conversationThreadId === undefined || post.conversationThreadId === job.threadId) {
+    return { post, threadId: job.threadId! };
+  }
+  const threadId = post.conversationThreadId;
+  if (typeof threadId !== "string" || !threadId || threadId !== groupIdentifier(threadId, "thread-id") || threadId === "." || threadId === "..") {
+    throw new Error("GROUP_ID_CHAIN_MISMATCH: A valid returned thread ID is required for verification.");
+  }
+  const collection = threadPostsPath(groupId, threadId);
+  let url = groupPageUrl(`${collection}?${postSelect()}`, collection);
+  const visited = new Set<string>();
+  for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
+    if (visited.has(url)) break;
+    visited.add(url);
+    const page = await read(url);
+    const matches = page.value!.filter(value => value?.id === post.id);
+    if (matches.length) {
+      const verified = matches[0];
+      if (matches.length !== 1 || verified.conversationThreadId !== threadId) break;
+      assertPostChain(verified, { ...job, threadId });
+      return { post: verified, threadId };
+    }
+    if (!page["@odata.nextLink"]) break;
+    url = groupPageUrl(page["@odata.nextLink"]!, collection);
+  }
+  throw new Error("GROUP_ID_CHAIN_MISMATCH: The same post could not be verified in the returned thread within the bounded check.");
+}
 function assertPostChain(post: Post, job: Job): void {
   if ((post.conversationThreadId !== undefined && post.conversationThreadId !== job.threadId) ||
       (post.conversationId != null && post.conversationId !== job.conversationId)) {
@@ -236,7 +329,7 @@ function boundedInteger(value: number, max: number, name: string): number {
 }
 function decodeCursor(config: AppConfig, cursor: string, criteria: string, groupId: string): CursorState {
   const state = decodeGroupCursor<CursorState>(config, "posts", cursor);
-  if (!state || state.version !== 1 || state.criteria !== criteria || !Array.isArray(state.jobs) || state.jobs.length < 1 || state.jobs.length > 3 ||
+  if (!state || state.version !== 2 || state.criteria !== criteria || !Array.isArray(state.jobs) || state.jobs.length < 1 || state.jobs.length > 3 ||
       !Array.isArray(state.seen) || state.seen.length > maxHistory || !Array.isArray(state.pages) || state.pages.length > maxHistory ||
       ![...state.seen, ...state.pages].every(v => typeof v === "string" && /^[a-f0-9]{64}$/.test(v)) ||
       !Number.isSafeInteger(state.missingBodies) || state.missingBodies < 0 || !Number.isSafeInteger(state.missingTimestamps) || state.missingTimestamps < 0) {
