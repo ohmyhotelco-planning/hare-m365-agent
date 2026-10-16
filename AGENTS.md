@@ -45,7 +45,7 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 ## 조회 기준
 
 - M365 그룹 직접 조회는 `groups resolve/posts/attachments`를 사용합니다. `/users` 검색 0건이나 본인 사서함의 배달 사본은 그룹 유형·전체 직접 읽기의 근거가 아닙니다. 실제 `groupTypes`의 `Unified`를 확인하며 상세 Exchange 유형은 미확인으로 둡니다.
-- 그룹 post 날짜는 `createdDateTime`, 기본 기간은 최근 90일입니다. 순회 결과는 최신순·스냅샷이 아니며 `complete`, `partialReasons`, 원문 누락 수와 이어받기를 확인합니다. 같은 그룹·명시 날짜만 커서로 이어가고 무진행·커서 변경 감지 시 멈춥니다.
+- 그룹 post 날짜는 `createdDateTime`, 기본 기간은 최근 90일입니다. 순회 결과는 최신순·스냅샷이 아니며 `complete`, `partialReasons`, 원문 누락 수와 이어받기를 확인합니다. `--out`으로 결과를 저장하고 같은 그룹·명시 날짜로 `--cursor-file <이전 결과 JSON 절대 경로>`를 사용합니다. 긴 커서를 명령줄이나 대화에 붙여넣지 않습니다. 무진행·커서 검증 실패 시 멈추며 확보한 페이지 ID 처리 완료를 실시간 전체 그룹의 시점 스냅샷 완전성으로 표현하지 않습니다.
 - 그룹 첨부의 group/thread/post/attachment 연결을 유지하고 기존 다운로드 정책을 적용합니다. 목록·메타데이터·바이트·파일 구조 검증은 별개입니다. 앱 전용 그룹 첨부 API는 지원되지 않으며 권한 부족 시 자동 scope 추가·동의·로그인·자기 사서함 fallback을 하지 않습니다. API별 권한은 `docs/group-mail.md`를 참고합니다.
 - 일반·최근 메일은 `outlook recent --folder all`을 사용하고, `outlook inbox`는 받은편지함이 명시된 경우에만 사용합니다.
 - 삭제된 항목은 기본 제외합니다. 사용자가 삭제된 메일만 요청하면 `--folder deleted`, 삭제된 메일 포함을 명시하면 `--folder all-with-deleted`를 recent/flagged/search/count에 사용합니다. 빈 결과를 이유로 자동 확장하지 않습니다. `deleted`는 삭제된 항목 폴더 직속 메일만 대상으로 하며 하위 폴더 재귀 조회·영구 삭제 복구 영역 조회·복원은 지원하지 않습니다. 날짜는 삭제일이 아닌 수신일 기준이고, 커서를 이어갈 때도 같은 `--folder`와 `--mailbox`를 유지합니다.

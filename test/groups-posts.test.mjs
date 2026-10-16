@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { listGroupPosts } from "../dist/groups-posts.js";
 import { groupPageUrl, groupReadError } from "../dist/groups-common.js";
 import { encodeGroupCursor } from "../dist/groups-cursor.js";
@@ -17,6 +18,7 @@ after(() => {
 const config = { cacheDir: path.join(fixtureRoot, "cache"), policy: { defaultSearchLookbackDays: 90, maxSearchResults: 1000 } };
 const group = { id: "group-one", mail: "team@example.test", groupTypes: ["Unified"], classification: "microsoft365", evidence: ["groupTypes includes Unified"], mailEnabled: true, securityEnabled: false, exchangeRecipientType: "unverified" };
 const base = "/v1.0/groups/group-one/conversations";
+const resumedPostPath = "/v1.0/groups/group-one/threads/t1/posts";
 const options = { since: "2026-10-01", until: "2026-10-15", now: () => Date.parse("2026-10-15T01:00:00Z") };
 const post = (id, extras = {}) => ({ id, createdDateTime: "2026-10-10T01:00:00Z", body: { contentType: "html", content: `<p>${id} ${"full body ".repeat(100)}</p>` }, hasAttachments: true, ...extras });
 function clientFor(routes) {
@@ -38,7 +40,8 @@ function clientFor(routes) {
 function oneThread(posts) {
   return { [base]: { value: [{ id: "c1", preview: "not a body", lastDeliveredDateTime: "2030-01-01T00:00:00Z" }] },
     [`${base}/c1/threads`]: { value: [{ id: "t1" }] },
-    [`${base}/c1/threads/t1/posts`]: { value: posts } };
+    [`${base}/c1/threads/t1/posts`]: { value: posts },
+    ...Object.fromEntries(posts.map(value => [`${resumedPostPath}/${encodeURIComponent(value.id)}`, value])) };
 }
 
 test("group posts traverse multiple conversations/threads/pages and retain complete body and chain", async () => {
@@ -183,16 +186,20 @@ test("rejects cross-conversation response and cross-group/host continuation", as
   }
 });
 
-test("cursor is bound to group and date range and detects changed page", async () => {
+test("cursor is bound to group and date range and resumes pinned posts despite changed page", async () => {
   const routes = oneThread([post("p1"), post("p2")]);
   const first = await listGroupPosts(config, group, 1, options, clientFor(routes));
   await assert.rejects(listGroupPosts(config, group, 2, { ...options, since: "2026-10-02", cursor: first.page.nextCursor }, clientFor(routes)), /GROUP_INVALID_CURSOR/);
   await assert.rejects(listGroupPosts(config, { ...group, id: "other" }, 2, { ...options, cursor: first.page.nextCursor }, clientFor(routes)), /GROUP_INVALID_CURSOR/);
   routes[`${base}/c1/threads/t1/posts`].value.unshift(post("inserted"));
-  const result = await listGroupPosts(config, group, 2, { ...options, cursor: first.page.nextCursor }, clientFor(routes));
-  assert.match(result.page.failure, /GROUP_CURSOR_STALE/);
+  const client = clientFor(routes);
+  const result = await listGroupPosts(config, group, 2, { ...options, cursor: first.page.nextCursor }, client);
+  assert.deepEqual(result.posts.map(value => value.id), ["p2"]);
+  assert.deepEqual(client.calls.map(call => call.key), [`${resumedPostPath}/p2`]);
   assert.equal(result.page.continuationAvailable, false);
-  assert.equal(result.page.complete, false);
+  assert.equal(result.page.complete, true);
+  assert.equal(result.page.snapshotConsistent, false);
+  assert.equal(result.page.completionScope, "PINNED_PAGE_INVENTORIES_WITH_LIVE_CONTINUATIONS");
 });
 
 test("unknown and non-Unified groups cannot call conversation APIs", async () => {
@@ -211,6 +218,7 @@ test("strict options and safe stage classification", async () => {
 test("minimum request budget can hydrate after resume and rejects nonviable budget", async () => {
   const routes = oneThread([post("p1", { body: undefined })]);
   routes[`${base}/c1/threads/t1/posts/p1`] = post("p1");
+  routes[`${resumedPostPath}/p1`] = post("p1");
   const client = clientFor(routes);
   await assert.rejects(listGroupPosts(config, group, 20, { ...options, maxRequests: 1 }, client), /GROUP_INVALID_OPTION/);
   let result = await listGroupPosts(config, group, 20, { ...options, maxRequests: 2 }, client);
@@ -407,14 +415,16 @@ test("hydration after revalidation stays in verified thread and rejects changed 
   assert.equal(result.posts[0].fullBodyAvailable, true);
 });
 
-test("old cursor deduplication version is rejected before network access", async () => {
+test("old cursor versions require restart before network access", async () => {
   const first = await listGroupPosts(config, group, 1, options, clientFor(oneThread([post("p1"), post("p2")])));
   const envelope = JSON.parse(Buffer.from(first.page.nextCursor.split(".")[1], "base64url").toString());
-  envelope.state.version = 1;
-  const cursor = encodeGroupCursor(config, "posts", envelope.state);
-  const client = clientFor({});
-  await assert.rejects(listGroupPosts(config, group, 20, { ...options, cursor }, client), /GROUP_INVALID_CURSOR/);
-  assert.equal(client.calls.length, 0);
+  for (const version of [1, 2]) {
+    envelope.state.version = version;
+    const cursor = encodeGroupCursor(config, "posts", envelope.state);
+    const client = clientFor({});
+    await assert.rejects(listGroupPosts(config, group, 20, { ...options, cursor }, client), /GROUP_INVALID_CURSOR.*Restart/);
+    assert.equal(client.calls.length, 0);
+  }
 });
 
 test("a mismatch discovered only during hydration also requires collection membership", async () => {
@@ -504,4 +514,155 @@ test("verification that cannot fit a record budget stops without advancing or lo
   assert.deepEqual(second.page.partialReasons, ["NO_PROGRESS"]);
   assert.equal(second.page.continuationAvailable, false);
   assert.equal(second.page.complete, false);
+});
+
+function cursorState(cursor) {
+  return JSON.parse(Buffer.from(cursor.split(".")[1], "base64url").toString()).state;
+}
+
+test("oversized pinned inventory preserves collected posts and stops with explicit partial status", async () => {
+  const routes = oneThread([post("p1")]);
+  routes[base].value.push(...Array.from({ length: 999 }, (_, index) => ({ id: `${index}-` + "x".repeat(4080) })));
+  const result = await listGroupPosts(config, group, 1, options, clientFor(routes));
+  assert.deepEqual(result.posts.map(value => value.id), ["p1"]);
+  assert.equal(result.posts[0].fullBodyAvailable, true);
+  assert.equal(result.page.complete, false);
+  assert.equal(result.page.partialResult, true);
+  assert.deepEqual(result.page.partialReasons, ["CURSOR_SIZE_LIMIT"]);
+  assert.equal(result.page.continuationAvailable, false);
+  assert.equal(result.page.nextCursor, undefined);
+});
+function refreshFingerprint(snapshot) {
+  snapshot.fingerprint = createHash("sha256").update(JSON.stringify([snapshot.ids, snapshot.nextLink ?? null])).digest("hex");
+}
+
+test("pinned parent inventories survive insert, reorder and removal without rereading parent pages", async () => {
+  for (const changed of [["inserted", "c1", "c2"], ["c2", "c1"], ["c1"]]) {
+    const routes = oneThread([post("p1")]);
+    routes[base].value.push({ id: "c2" });
+    routes[`${base}/c1/threads`].value.push({ id: "t2" });
+    routes[`${base}/c1/threads/t2/posts`] = { value: [post("p2")] };
+    routes[`${base}/c2/threads`] = { value: [{ id: "t3" }] };
+    routes[`${base}/c2/threads/t3/posts`] = { value: [post("p3")] };
+    const first = await listGroupPosts(config, group, 1, options, clientFor(routes));
+    routes[base].value = changed.map(id => ({ id }));
+    routes[`${base}/c1/threads`].value = [{ id: "inserted-thread" }, { id: "t1" }];
+    const client = clientFor(routes);
+    const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+    assert.deepEqual(second.posts.map(value => value.id), ["p2", "p3"]);
+    assert.equal(second.page.complete, true);
+    assert.equal(second.page.snapshotConsistent, false);
+    assert.ok(!client.calls.some(call => call.key === base || call.key === `${base}/c1/threads`));
+  }
+});
+
+test("pinned post order and nextLink survive removal, reorder and replacement of the live page", async () => {
+  const routes = oneThread([post("p1"), post("p2"), post("p3")]);
+  const collection = `${base}/c1/threads/t1/posts`;
+  routes[collection]["@odata.nextLink"] = `https://graph.microsoft.com${collection}?page=2`;
+  routes[`${collection}?page=2`] = { value: [post("p3"), post("p4")] };
+  const first = await listGroupPosts(config, group, 1, options, clientFor(routes));
+  routes[collection] = { value: [post("p3"), post("inserted")], "@odata.nextLink": "https://evil.example/changed" };
+  routes[base] = new Error("Parent collection must not be reread");
+  routes[`${base}/c1/threads`] = new Error("Parent collection must not be reread");
+  const client = clientFor(routes);
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+  assert.deepEqual(second.posts.map(value => value.id), ["p2", "p3", "p4"]);
+  assert.equal(second.page.duplicatesRemoved, 1);
+  assert.equal(second.page.complete, true);
+  assert.deepEqual(client.calls.map(call => call.key), [`${resumedPostPath}/p2`, `${resumedPostPath}/p3`, `${collection}?page=2`]);
+});
+
+test("missing pinned parents stop partially instead of skipping their descendants", async () => {
+  for (const missing of [`${base}/c1/threads/t2/posts`, `${base}/c2/threads`]) {
+    const routes = oneThread([post("p1")]);
+    if (missing.includes("/t2/")) routes[`${base}/c1/threads`].value.push({ id: "t2" });
+    else routes[base].value.push({ id: "c2" });
+    const first = await listGroupPosts(config, group, 1, options, clientFor(routes));
+    routes[missing] = new Error("Graph GET failed (404 Not Found): PRIVATE_SECRET");
+    const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, clientFor(routes));
+    assert.equal(second.page.complete, false);
+    assert.match(second.page.failure, /NOT_FOUND_OR_UNAVAILABLE/);
+    assert.deepEqual(second.posts, []);
+    assert.doesNotMatch(JSON.stringify(second), /PRIVATE_SECRET/);
+  }
+});
+
+test("exact resumed lookup rejects missing, wrong-ID and wrong-chain responses without skipping", async () => {
+  for (const detail of [null, {}, post("different"), post("P2"), post("p2", { conversationId: "other" }),
+    post("p2", { conversationThreadId: null }), new Error("Graph GET failed (404 Not Found): PRIVATE_SECRET")]) {
+    const routes = oneThread([post("p1"), post("p2"), post("p3")]);
+    const first = await listGroupPosts(config, group, 1, options, clientFor(routes));
+    routes[`${resumedPostPath}/p2`] = detail;
+    const client = clientFor(routes);
+    const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+    assert.deepEqual(second.posts, []);
+    assert.equal(second.page.complete, false);
+    assert.equal(second.page.continuationAvailable, false);
+    assert.deepEqual(second.page.partialReasons, ["READ_FAILED"]);
+    assert.match(second.page.failure, /GROUP_ID_CHAIN_MISMATCH|NOT_FOUND_OR_UNAVAILABLE/);
+    assert.doesNotMatch(JSON.stringify(second), /PRIVATE_SECRET/);
+    assert.deepEqual(client.calls.map(call => call.key), [`${resumedPostPath}/p2`]);
+  }
+});
+
+test("signed v3 inventory validation rejects malformed IDs, offsets, chains, nextLinks and bodies before reads", async () => {
+  const first = await listGroupPosts(config, group, 1, options, clientFor(oneThread([post("p1"), post("p2")])));
+  const mutations = [
+    state => { state.jobs[2].offset = 3; },
+    state => { delete state.jobs[2].snapshot; },
+    state => { state.jobs[0].offset = 0; },
+    state => { state.jobs[2].snapshot.ids.reverse(); },
+    state => { state.jobs[2].snapshot.ids = Array(1001).fill("p2"); refreshFingerprint(state.jobs[2].snapshot); },
+    state => { state.jobs[1].conversationId = "other"; state.jobs[1].url = "/groups/group-one/conversations/other/threads?$select=id"; },
+    state => { state.jobs[2].threadId = "other"; state.jobs[2].url = "/groups/group-one/conversations/c1/threads/other/posts?$select=id"; },
+    state => { state.jobs[2].snapshot.body = "must not be retained"; },
+    state => { state.body = "must not be retained"; },
+    ...[" p2", "p2 ", ".", "..", "", "bad\u0000id", "\ud800", null, 123, {}].map(id => state => {
+      state.jobs[2].snapshot.ids[1] = id; refreshFingerprint(state.jobs[2].snapshot);
+    }),
+    ...["https://evil.example/posts", "https://graph.microsoft.com/v1.0/groups/other/conversations/c1/threads/t1/posts",
+      "https://graph.microsoft.com/v1.0/groups/group-one/conversations/c1/threads/other/posts", "", null].map(next => state => {
+      state.jobs[2].snapshot.nextLink = next; refreshFingerprint(state.jobs[2].snapshot);
+    })
+  ];
+  for (const mutate of mutations) {
+    const state = cursorState(first.page.nextCursor);
+    mutate(state);
+    const client = clientFor({});
+    const cursor = encodeGroupCursor(config, "posts", state);
+    await assert.rejects(listGroupPosts(config, group, 20, { ...options, cursor }, client), /GROUP_INVALID_CURSOR/);
+    assert.equal(client.calls.length, 0);
+  }
+});
+
+test("opaque IDs retain their exact bytes and cursor inventories contain IDs only", async () => {
+  const id = "Case+Sensitive/opaque=%2F?end";
+  const routes = oneThread([post("p1"), post(id, { from: { emailAddress: { address: "PRIVATE_SENDER" } } })]);
+  const first = await listGroupPosts(config, group, 1, options, clientFor(routes));
+  const state = cursorState(first.page.nextCursor);
+  assert.equal(state.version, 3);
+  assert.deepEqual(state.jobs[2].snapshot.ids, ["p1", id]);
+  assert.doesNotMatch(JSON.stringify(state), /PRIVATE_SENDER|full body|"createdDateTime":|"body":|"bodyContent":/);
+  const client = clientFor(routes);
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+  assert.deepEqual(second.posts.map(value => value.id), [id]);
+  assert.equal(client.calls[0].key, `${resumedPostPath}/${encodeURIComponent(id)}`);
+});
+
+test("inventory acquisition is progress even when time expires before the first pinned item", async () => {
+  const routes = oneThread([post("p1")]);
+  const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 2 }, clientFor(routes));
+  let clock = options.now();
+  const client = clientFor(routes), get = client.get;
+  client.get = async (...args) => { const value = await get(...args); clock += 10; return value; };
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor, now: () => clock, timeBudgetMs: 5 }, client);
+  assert.deepEqual(second.posts, []);
+  assert.deepEqual(second.page.partialReasons, ["TIME_BUDGET"]);
+  assert.equal(second.page.noProgressDetected, false);
+  assert.equal(second.page.continuationAvailable, true);
+  assert.deepEqual(cursorState(second.page.nextCursor).jobs[2].snapshot.ids, ["p1"]);
+  const third = await listGroupPosts(config, group, 20, { ...options, cursor: second.page.nextCursor }, clientFor(routes));
+  assert.deepEqual(third.posts.map(value => value.id), ["p1"]);
+  assert.equal(third.page.complete, true);
 });

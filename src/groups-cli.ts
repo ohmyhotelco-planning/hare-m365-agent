@@ -3,6 +3,7 @@ import { requireConfigured, type AppConfig } from "./config.js";
 import { resolveGroup } from "./groups-directory.js";
 import { requireMicrosoft365Group } from "./groups-common.js";
 import { listGroupPosts } from "./groups-posts.js";
+import { readGroupCursorInput } from "./groups-cursor-input.js";
 import { listGroupPostAttachments, downloadGroupPostAttachment } from "./groups-attachments.js";
 
 type EmitJson = (data: unknown, out?: string) => void;
@@ -26,11 +27,13 @@ export function registerGroupCommands(program: Command, config: AppConfig, emitJ
     .option("--until <YYYY-MM-DD>", "last creation date inclusive, Asia/Seoul; default today")
     .option("--limit <number>", "maximum returned posts per call (1-100); traversal order is not newest-first", "20")
     .option("--cursor <cursor>", "resume the same group and date range using page.nextCursor")
+    .option("--cursor-file <path>", "read a UTF-8 cursor or previous groups posts result JSON; avoids command-line length limits")
     .option("--out <path>", "write JSON under Hare resultsDir")
-    .action(async (options: GroupOption & { since?: string; until?: string; limit: string; cursor?: string }) => {
+    .action(async (options: GroupOption & { since?: string; until?: string; limit: string; cursor?: string; cursorFile?: string }) => {
+      const cursor = readGroupCursorInput(options);
       requireConfigured(config);
       const group = await resolveGroup(config, options.group);
-      emitJson(await listGroupPosts(config, group, Number(options.limit), options), options.out);
+      emitJson(await listGroupPosts(config, group, Number(options.limit), { ...options, cursor }), options.out);
     });
   const attachments = groups.command("attachments").description("Group post attachments; Graph application permissions are unsupported for these endpoints");
   const common = (command: Command) => command
