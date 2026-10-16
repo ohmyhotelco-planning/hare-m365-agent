@@ -8,13 +8,15 @@
 
 ```sh
 hare-m365 --data-dir <existing-data-dir> groups resolve --group team@example.test
-hare-m365 --data-dir <existing-data-dir> groups posts --group team@example.test --since 2026-10-01 --until 2026-10-15 --limit 20
-hare-m365 --data-dir <existing-data-dir> groups posts --group team@example.test --since 2026-10-01 --until 2026-10-15 --cursor <nextCursor>
+hare-m365 --data-dir <existing-data-dir> groups posts --group team@example.test --since 2026-10-01 --until 2026-10-15 --limit 20 --out group-page-1.json
+hare-m365 --data-dir <existing-data-dir> groups posts --group team@example.test --since 2026-10-01 --until 2026-10-15 --cursor-file <previous-outputPath> --out group-page-2.json
 hare-m365 --data-dir <existing-data-dir> groups attachments list --group <group-id> --thread-id <thread-id> --post-id <post-id>
 hare-m365 --data-dir <existing-data-dir> groups attachments download --group <group-id> --thread-id <thread-id> --post-id <post-id> --attachment-id <attachment-id>
 ```
 
 `resolve`는 정확한 기본 SMTP·SMTP proxy 별칭·mailNickname 또는 디렉터리 ID를 확인한다. 표시 이름 유사 검색은 하지 않는다. 실제 `id`, `mail`, `groupTypes`, `mailEnabled`, `securityEnabled`, 판정 근거를 반환한다. `Unified`가 확인된 경우만 M365 그룹 원문을 읽는다. 0건·모호함·디렉터리 거부·유형 미확인을 구분하며 상세 Exchange 수신자 유형은 `unverified`다. 디렉터리에 없는 동적 배포 그룹까지 탐지하거나 사용자에게 연결된 모든 사서함을 열거하는 기능은 아니다.
+
+`--cursor-file`은 이전 `groups posts --out`의 `outputPath`에 저장된 JSON에서 `page.nextCursor`를 읽는다. 커서 문자열만 담은 UTF-8 파일도 지원한다. 파일은 최대 32MiB이며 BOM·끝 줄바꿈을 허용한다. `--cursor`와 함께 쓸 수 없고, 서명·만료·데이터 폴더·그룹·기간 검증을 우회하지 않는다. Windows 명령줄 길이 제한에 걸리지 않도록 파일 경로만 전달하며 원문 커서를 대화·로그에 복사하지 않는다. `continuationAvailable=false`이면 이어받지 않는다.
 
 ## 원문과 완전성
 
@@ -27,7 +29,9 @@ hare-m365 --data-dir <existing-data-dir> groups attachments download --group <gr
 - 문서에 보장되지 않은 post 날짜 필터·최신순 정렬에 의존하지 않는다. 오래된 post를 만났다고 순회를 조기 종료하지 않는다. 정렬된 최근 N건 명령이나 정확한 전체 건수 명령이 아니다.
 - 기본 호출 예산은 20초·100 요청·1,000 레코드, 반환은 기본 20건·최대 100건이다. `page.continuationAvailable`일 때 같은 그룹과 반환된 명시 날짜로 `nextCursor`를 사용한다. 커서는 본문을 포함하지 않지만 내부 식별자가 있으므로 공개하지 않는다. 그룹 전용 커서는 전체 진행 상태를 서명하며 24시간 동안 같은 데이터 폴더에서만 유효하다. 로컬 서명 키는 처음 이어받기가 생길 때 `.cache`에 생성되고 M365 인증과 별개다. 키·커서를 수정하거나 인증 파일로 대체하지 않는다.
 - 결과 한도·시간/스캔 예산·부분 실패·원문/시각 누락·무진행을 명시한다. `complete=false`를 전체 조회로 표현하지 않는다. 누락 수는 호출별/누적으로 구분한다. 중복 제거 이력 10,000개 한도나 무진행이면 중단하고 무한 재시도하지 않는다.
-- live API는 스냅샷이 아니다. 이어받는 페이지의 ID 구성이 달라지면 `CURSOR_STALE`로 중단한다. 미조회 페이지 변경까지 탐지하거나 과거 시점의 완전성을 보장하지 않는다.
+- 읽은 페이지의 순서 있는 ID 목록과 다음 페이지 링크를 서명된 커서에 고정한다. 이어받을 때 변경된 부모 페이지를 다시 읽고 이전 offset을 적용하지 않는다. 본문은 커서에 저장하지 않고, 미처리 post는 정확한 ID로 다시 읽어 기존 연결 검증을 적용한다. 대상이 사라졌거나 연결을 확인할 수 없으면 조용히 건너뛰지 않고 부분 실패로 표시한다.
+- 확보한 ID 목록이 커서 크기 상한을 넘으면 이미 읽은 post는 보존하고 `CURSOR_SIZE_LIMIT`, `complete=false`, `continuationAvailable=false`로 중단한다. 이 경우 커서를 편집하거나 같은 조회를 무한 반복하지 않는다.
+- live API는 스냅샷이 아니다. 이후 페이지는 여전히 실시간 API에서 받아오므로 이미 읽은 페이지에 새 항목이 추가되거나 미조회 페이지 경계가 바뀐 경우까지 완전 수집을 보장하지 않는다. 처리 완료는 확보한 ID와 이어받은 페이지의 순회 완료를 뜻하며 특정 시점 전체 그룹의 정확한 건수 증명이 아니다. posts 커서 v3 이전의 커서는 새 조회로 시작해야 한다. 첨부 목록 커서 형식은 그대로 유지한다.
 
 ## 권한과 실패 단계
 

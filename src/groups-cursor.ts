@@ -24,7 +24,7 @@ function keyFor(config: AppConfig, create: boolean): Buffer {
 
 export function encodeGroupCursor(config: AppConfig, kind: "posts" | "attachments", state: unknown, now = Date.now()): string {
   const payload = Buffer.from(JSON.stringify({ kind, expiresAt: now + ttlMs, state })).toString("base64url");
-  if (payload.length > maximumLength) throw invalid();
+  if (payload.length > maximumLength) throw new Error("GROUP_CURSOR_SIZE_LIMIT: Continuation exceeds the bounded cursor capacity.");
   const signature = createHmac("sha256", keyFor(config, true)).update(payload).digest("base64url");
   return `g1.${payload}.${signature}`;
 }
