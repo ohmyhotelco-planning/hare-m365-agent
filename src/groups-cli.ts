@@ -28,8 +28,9 @@ export function registerGroupCommands(program: Command, config: AppConfig, emitJ
     .option("--limit <number>", "maximum returned posts per call (1-100); traversal order is not newest-first", "20")
     .option("--cursor <cursor>", "resume the same group and date range using page.nextCursor")
     .option("--cursor-file <path>", "read a UTF-8 cursor or previous groups posts result JSON; avoids command-line length limits")
+    .option("--include-subject", "read each returned post's PidTagSubject within the existing budget; never substitute thread topic")
     .option("--out <path>", "write JSON under Hare resultsDir")
-    .action(async (options: GroupOption & { since?: string; until?: string; limit: string; cursor?: string; cursorFile?: string }) => {
+    .action(async (options: GroupOption & { since?: string; until?: string; limit: string; cursor?: string; cursorFile?: string; includeSubject?: boolean }) => {
       const cursor = readGroupCursorInput(options);
       requireConfigured(config);
       const group = await resolveGroup(config, options.group);

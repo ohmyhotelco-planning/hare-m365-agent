@@ -13,7 +13,7 @@ test("group CLI help exposes read-only commands and scoped identifiers offline",
     for (const [args, expected] of [
       [["groups"], /resolve[\s\S]*posts[\s\S]*attachments/],
       [["groups", "resolve"], /--group/],
-      [["groups", "posts"], /--since[\s\S]*--until[\s\S]*--limit[\s\S]*--cursor[\s\S]*--cursor-file/],
+      [["groups", "posts"], /--since[\s\S]*--until[\s\S]*--limit[\s\S]*--cursor[\s\S]*--cursor-file[\s\S]*--include-subject/],
       [["groups", "attachments", "list"], /--group[\s\S]*--thread-id[\s\S]*--post-id/],
       [["groups", "attachments", "download"], /--attachment-id[\s\S]*--name[\s\S]*--approval-token/]
     ]) {
@@ -32,6 +32,11 @@ test("group reads use the approved read scope without automatic permission escal
   const rules = fs.readFileSync("src/session-rules.ts", "utf8");
   assert.match(rules, /groups resolve --group/);
   assert.match(rules, /Do not expand scopes, consent or restart sign-in automatically/);
+  assert.match(rules, /groups posts --include-subject/);
+  assert.match(rules, /page.complete does not imply subject availability/);
+  const cli = fs.readFileSync("src/cli.ts", "utf8");
+  assert.match(cli, /groups posts --include-subject/);
+  assert.match(cli, /status=PRESENT/);
 });
 
 test("native CLI file transport forwards long cursors and rejects conflicting sources before group lookup", t => {
@@ -47,7 +52,7 @@ test("native CLI file transport forwards long cursors and rejects conflicting so
     if (url.endsWith('/dist/groups-directory.js')) return {format:'module',shortCircuit:true,source:
       'export async function resolveGroup(){ if(process.env.TEST_DENY_DIRECTORY) throw new Error("UNEXPECTED_DIRECTORY_LOOKUP"); return {}; }'};
     if (url.endsWith('/dist/groups-posts.js')) return {format:'module',shortCircuit:true,source:
-      'export async function listGroupPosts(c,g,l,o){return {receivedCursor:o.cursor};}'};
+      'export async function listGroupPosts(c,g,l,o){return {receivedCursor:o.cursor,includeSubject:o.includeSubject};}'};
     return next(url, context);
   }`);
   const preload = `import {register} from 'node:module'; register(${JSON.stringify(pathToFileURL(loader).href)});`;
@@ -64,6 +69,9 @@ test("native CLI file transport forwards long cursors and rejects conflicting so
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout).receivedCursor, cursor);
   }
+  const enriched = run(["--include-subject"]);
+  assert.equal(enriched.status, 0, enriched.stderr);
+  assert.equal(JSON.parse(enriched.stdout).includeSubject, true);
   const rejected = run(["--cursor", "inline"], true);
   assert.notEqual(rejected.status, 0);
   assert.match(rejected.stderr, /GROUP_INVALID_CURSOR_INPUT/);

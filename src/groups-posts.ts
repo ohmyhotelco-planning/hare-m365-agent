@@ -7,6 +7,7 @@ import {
 } from "./groups-common.js";
 import { resolveSearchRange } from "./search-range.js";
 import { decodeGroupCursor, encodeGroupCursor } from "./groups-cursor.js";
+import { readGroupPostSubject, unavailablePostSubject, type GroupPostSubject } from "./groups-post-subject.js";
 
 type Entity = { id?: string };
 type Recipient = { emailAddress?: { name?: string; address?: string } };
@@ -37,10 +38,12 @@ export type GroupPostSummary = {
   hasAttachments: boolean | null;
   body?: string; bodyHtml?: string; bodyContent?: string; bodyContentType?: string;
   fullBodyAvailable: boolean; bodyFailure?: string;
+  postSubject?: GroupPostSubject;
 };
 
 export type GroupPostOptions = {
   since?: string; until?: string; cursor?: string;
+  includeSubject?: boolean;
   timeBudgetMs?: number; maxRequests?: number; maxRecords?: number;
   now?: () => number;
 };
@@ -223,6 +226,22 @@ export async function listGroupPosts(
         bodyFailure = groupReadError("POSTS", error).message;
       }
     }
+    let postSubject: GroupPostSubject | undefined;
+    const inRange = validDate(post.createdDateTime) && Date.parse(post.createdDateTime!) >= Date.parse(range.startDateTime) &&
+      Date.parse(post.createdDateTime!) < Date.parse(range.endDateTimeExclusive);
+    if (options.includeSubject && inRange) {
+      if (requests >= maxRequests || now() >= deadline || scannedRecords >= maxRecords) {
+        postSubject = unavailablePostSubject("NOT_ATTEMPTED_BUDGET");
+      } else {
+        try {
+          requests++;
+          postSubject = await readGroupPostSubject({ groupId: group.id, conversationId: job.conversationId!, threadId, postId: id, revalidated },
+            <T>(subjectUrl: string) => client.get<T>(subjectUrl, { totalTimeoutMs: Math.max(1, deadline - now()) }));
+        } catch (error) {
+          stopReason = "READ_FAILED"; failure = groupReadError("POST_SUBJECT", error).message; resumable = false; break;
+        }
+      }
+    }
     seen.add(identity); job.offset++; scannedRecords++; scannedPosts++;
     if (!validDate(post.createdDateTime)) {
       state.missingTimestamps++;
@@ -243,7 +262,7 @@ export async function listGroupPosts(
       body: fullBodyAvailable ? (html ? textFromHtml(post.body!.content!) : post.body!.content) : undefined,
       bodyHtml: html ? post.body?.content : undefined,
       bodyContent: post.body?.content, bodyContentType: post.body?.contentType,
-      fullBodyAvailable, ...(bodyFailure ? { bodyFailure } : {})
+      fullBodyAvailable, ...(bodyFailure ? { bodyFailure } : {}), ...(postSubject ? { postSubject } : {})
     });
   }
   state.seen = [...seen];
@@ -265,6 +284,12 @@ export async function listGroupPosts(
   const reasons = [stopReason, state.missingBodies ? "BODY_UNAVAILABLE" : undefined, state.missingTimestamps ? "TIMESTAMP_UNAVAILABLE" : undefined].filter((v): v is string => Boolean(v));
   return {
     group, range: { ...range, dateField: "createdDateTime", filtering: "client-side" }, posts,
+    ...(options.includeSubject ? { subjectRead: {
+      scope: "RETURNED_POSTS_THIS_CALL",
+      availableCount: posts.filter(post => post.postSubject?.status === "PRESENT" || post.postSubject?.status === "EMPTY").length,
+      unavailableCount: posts.filter(post => post.postSubject?.status !== "PRESENT" && post.postSubject?.status !== "EMPTY").length,
+      notice: "Enumeration completeness does not imply subject availability. Unavailable subjects are not retried by continuation; topic/body are never substituted."
+    } } : {}),
     page: {
       returnedCount: posts.length, limit: maxResults, scannedRecords, scannedPosts, requests, duplicatesRemoved: duplicates,
       complete: state.jobs.length === 0 && reasons.length === 0,
