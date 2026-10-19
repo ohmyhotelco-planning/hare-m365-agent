@@ -17,7 +17,7 @@ export type GroupReadClient = {
   get<T>(pathOrUrl: string, options?: GraphRequestOptions): Promise<T>;
 };
 
-export type GroupStage = "DIRECTORY" | "CONVERSATIONS" | "THREADS" | "POSTS" | "ATTACHMENT_LIST" | "ATTACHMENT_METADATA" | "ATTACHMENT_BYTES";
+export type GroupStage = "DIRECTORY" | "CONVERSATIONS" | "THREADS" | "POSTS" | "POST_SUBJECT" | "ATTACHMENT_LIST" | "ATTACHMENT_METADATA" | "ATTACHMENT_BYTES";
 
 export function defaultGroupClient(config: AppConfig): GroupReadClient {
   return { get: <T>(url: string, options?: GraphRequestOptions) => graphGet<T>(config, url, options) };

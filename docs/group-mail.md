@@ -33,6 +33,18 @@ hare-m365 --data-dir <existing-data-dir> groups attachments download --group <gr
 - 확보한 ID 목록이 커서 크기 상한을 넘으면 이미 읽은 post는 보존하고 `CURSOR_SIZE_LIMIT`, `complete=false`, `continuationAvailable=false`로 중단한다. 이 경우 커서를 편집하거나 같은 조회를 무한 반복하지 않는다.
 - live API는 스냅샷이 아니다. 이후 페이지는 여전히 실시간 API에서 받아오므로 이미 읽은 페이지에 새 항목이 추가되거나 미조회 페이지 경계가 바뀐 경우까지 완전 수집을 보장하지 않는다. 처리 완료는 확보한 ID와 이어받은 페이지의 순회 완료를 뜻하며 특정 시점 전체 그룹의 정확한 건수 증명이 아니다. posts 커서 v3 이전의 커서는 새 조회로 시작해야 한다. 첨부 목록 커서 형식은 그대로 유지한다.
 
+## 개별 메일 제목 (선택 조회)
+
+`groups posts --include-subject`는 반환할 post마다 검증된 최종 group/thread/post 경로에서 `singleValueExtendedProperties($filter=id eq 'String 0x0037')`를 읽는다. 기존 `Group.Read.All` 위임 권한을 사용하며 권한·인증 설정은 바꾸지 않는다. 기본 조회는 요청 수와 결과 형식이 그대로다.
+
+- `postSubject.source=PidTagSubject`, `scope=POST`는 개별 메시지의 전체 제목 속성을 뜻한다. `value`는 접두사와 공백을 포함한 원문이다. thread/conversation `topic`과 본문은 제목 대체값으로 쓰지 않는다.
+- 상태는 `PRESENT`(문자열 있음), `EMPTY`(확인된 빈 문자열), `MISSING`(확장 목록에 속성 없음), `UNVERIFIED`(확장 목록 미반환·불완전), `INVALID_RESPONSE`(잘못된 형식·중복 속성), `READ_FAILED`(API 실패), `NOT_ATTEMPTED_BUDGET`(예산 소진)을 구분한다. `PRESENT` 이외 상태로 제목 조건 충족을 추정하지 않는다.
+- 추가 GET도 기존 시간·요청 예산에 포함한다. 제목 API 실패·예산 소진은 확보된 본문을 보존하고 상태를 반환한다. 단, 제목 응답의 post/thread/conversation 연결이 충돌하면 해당 post를 반환하지 않고 비재개 오류로 중단한다. 재검증된 thread는 제목 응답에서도 명시적 일치를 요구한다.
+- `page.complete`는 기존 순회·본문 기준이며 제목 확보 성공을 뜻하지 않는다. 별도의 `subjectRead`는 이번 호출 반환 post의 제목 확보/미확보 수다. 제목 미확보 post도 반환·처리된 것이므로 일반 continuation에서 재시도하지 않는다.
+- v3 커서에는 제목·옵션을 넣지 않는다. `--cursor-file` 재개 시에도 `--include-subject`를 명시해야 한다. 옵션을 바꾸면 이후 반환 post에만 적용되며 과거 결과를 보충하지 않는다. 제목이 필요한 분석은 옵션을 켜고 새 조회부터 시작한다.
+
+공식 근거: [확장 속성 읽기](https://learn.microsoft.com/en-us/graph/api/singlevaluelegacyextendedproperty-get?view=graph-rest-1.0), [PidTagSubject 정의](https://learn.microsoft.com/en-us/office/client-developer/outlook/mapi/pidtagsubject-canonical-property). 실제 그룹 post의 속성 반환 여부는 환경별로 확인하며 문서 지원만으로 제목 확보 성공을 단정하지 않는다.
+
 ## 권한과 실패 단계
 
 2026-10-16 공식 v1.0 문서 확인 기준이다. 아래는 읽기 권한만 표기한다. Hare 인증은 그룹 본문·첨부 직접 조회를 위해 `Group.Read.All` 위임 scope를 요청한다. 해당 권한의 관리자 동의는 Entra에서 별도로 완료해야 하며 Hare가 자동으로 동의하거나 앱 권한을 변경하지 않는다. 기존 앱·테넌트·계정이 일치하면 인증 캐시를 보존하고 새 scope로 silent 취득을 먼저 시도한다. 추가 상호작용이 필요한 경우에만 로그인 절차를 안내한다. 현재 로그인으로 거부될 경우 구현 테스트와 실제 권한 검증 상태를 분리해 보고한다.
