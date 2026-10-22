@@ -267,7 +267,8 @@ test("failed resumed page stops with sanitized failure instead of a non-advancin
   const routes = oneThread([post("p1")]);
   routes[`${base}/c1/threads/t1/posts`] = new Error("Graph GET failed (403 Forbidden): PRIVATE_SECRET");
   const result = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, clientFor(routes));
-  assert.equal(result.page.noProgressDetected, true);
+  assert.equal(result.page.noProgressDetected, false);
+  assert.equal(result.page.failureDetails.retryable, false);
   assert.equal(result.page.continuationAvailable, false);
   assert.match(result.page.failure, /GROUP_POSTS_ACCESS_DENIED/);
   assert.doesNotMatch(result.page.failure, /PRIVATE_SECRET/);
@@ -520,7 +521,7 @@ function cursorState(cursor) {
   return JSON.parse(Buffer.from(cursor.split(".")[1], "base64url").toString()).state;
 }
 
-test("oversized pinned inventory preserves collected posts and stops with explicit partial status", async () => {
+test("oversized pinned inventory preserves collected posts with a bounded local checkpoint cursor", async () => {
   const routes = oneThread([post("p1")]);
   routes[base].value.push(...Array.from({ length: 999 }, (_, index) => ({ id: `${index}-` + "x".repeat(4080) })));
   const result = await listGroupPosts(config, group, 1, options, clientFor(routes));
@@ -528,9 +529,10 @@ test("oversized pinned inventory preserves collected posts and stops with explic
   assert.equal(result.posts[0].fullBodyAvailable, true);
   assert.equal(result.page.complete, false);
   assert.equal(result.page.partialResult, true);
-  assert.deepEqual(result.page.partialReasons, ["CURSOR_SIZE_LIMIT"]);
-  assert.equal(result.page.continuationAvailable, false);
-  assert.equal(result.page.nextCursor, undefined);
+  assert.deepEqual(result.page.partialReasons, ["RESULT_LIMIT"]);
+  assert.equal(result.page.continuationAvailable, true);
+  assert.ok(result.page.nextCursor.length < 1000);
+  assert.equal(cursorState(result.page.nextCursor).version, 4);
 });
 function refreshFingerprint(snapshot) {
   snapshot.fingerprint = createHash("sha256").update(JSON.stringify([snapshot.ids, snapshot.nextLink ?? null])).digest("hex");

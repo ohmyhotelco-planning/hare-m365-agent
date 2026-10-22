@@ -153,6 +153,8 @@ export function retryDelayMs(retryAfter: string | null | undefined, attempt: num
 
 function isTransientNetworkError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
+  // HTTP retryability is determined by status, never by words in an error body.
+  if (/^Graph \w+ failed \(\d{3}\b/.test(error.message)) return false;
   if (error.name === "AbortError") return true;
   return /fetch failed|network|socket|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(
     `${error.message} ${(error as Error & { cause?: unknown }).cause ?? ""}`
