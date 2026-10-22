@@ -11,6 +11,7 @@ import { hasPendingDeviceLoginState, startDeviceLogin } from "../dist/device-log
 import { getAuthProfilePath, markAuthProfileReady } from "../dist/auth-profile.js";
 import { ProxyAwareNetworkClient } from "../dist/msal-network.js";
 import { buildSetupContract } from "../dist/setup-state.js";
+import { readAuthProvenance } from "../dist/auth-diagnostics.js";
 
 const marker = "PRIVATE_TEST_MARKER";
 const scopes = getScopeList();
@@ -34,6 +35,42 @@ function tokenBody(config) {
     })}.signature`,
     client_info: encode({ uid: "33333333-3333-3333-3333-333333333333", utid: config.tenantId })
   };
+}
+
+for (const phase of ["load", "account", "silent", "validate", "commit"]) {
+  test(`token failure provenance retains ${phase} without raw details or changing auth decisions`, async t => {
+    const { config, cacheFile } = await fixture(t);
+    const network = new ProxyAwareNetworkClient(successfulFetch(config));
+    const problem = Object.assign(new Error(marker), { errorCode: "server_error", code: "EPERM", path: marker });
+    let expectedReason = "TOKEN_ACQUISITION_FAILED";
+    if (phase === "load") {
+      const read = fs.readFileSync;
+      t.mock.method(fs, "readFileSync", (file, ...args) => { if (file === cacheFile) throw problem; return read(file, ...args); });
+      expectedReason = "AUTH_CACHE_UNREADABLE";
+    } else if (phase === "account") {
+      t.mock.method(PublicClientApplication.prototype, "getTokenCache", () => ({ getAllAccounts: async () => { throw problem; } }));
+    } else if (phase === "silent") {
+      t.mock.method(PublicClientApplication.prototype, "acquireTokenSilent", async () => { throw problem; });
+    } else if (phase === "validate") {
+      t.mock.method(PublicClientApplication.prototype, "acquireTokenSilent", async () => null);
+      expectedReason = "NO_ACCESS_TOKEN";
+    } else {
+      problem.code = "EIO";
+      const rename = fs.renameSync;
+      t.mock.method(fs, "renameSync", (from, to) => { if (to === cacheFile) throw problem; return rename(from, to); });
+    }
+    await assert.rejects(getAccessToken(config, network), error => {
+      assert.ok(error.message.startsWith(expectedReason));
+      const detail = readAuthProvenance(error);
+      assert.equal(detail.phase, phase);
+      assert.equal(detail.reason, expectedReason);
+      assert.doesNotMatch(JSON.stringify(detail), new RegExp(marker));
+      if (!["load", "validate"].includes(phase)) {
+        assert.equal(detail.errorCode, "server_error"); assert.equal(detail.ioCode, phase === "commit" ? "EIO" : "EPERM");
+      }
+      return true;
+    });
+  });
 }
 
 function successfulFetch(config, grantedScopes = scopes) {

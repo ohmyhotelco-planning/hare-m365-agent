@@ -7,6 +7,10 @@ import { listGroupPosts } from "../dist/groups-posts.js";
 import { readGroupPostSubject } from "../dist/groups-post-subject.js";
 import { readGroupCursorInput } from "../dist/groups-cursor-input.js";
 import { listGroupPostAttachments } from "../dist/groups-attachments.js";
+import { decodeGroupCursor, encodeGroupCursor } from "../dist/groups-cursor.js";
+import { encodePostContinuation } from "../dist/groups-post-checkpoint.js";
+import { createHash } from "node:crypto";
+import { authFailure } from "../dist/auth-diagnostics.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hare-subject-test-"));
 after(() => {
@@ -145,31 +149,37 @@ test("subject identity contradictions fail closed and preserve preceding verifie
   await assert.rejects(readGroupPostSubject({ ...chain, revalidated: true }, async () => ({ id: "p", singleValueExtendedProperties: subject("unverified") })), /GROUP_ID_CHAIN_MISMATCH/);
 });
 
-test("subject API failures are sanitized, preserve bodies and do not imply subject completion", async () => {
+test("terminal subject API failures are sanitized and never consume the pending post", async () => {
   for (const error of ["Graph GET failed (403 Forbidden): PRIVATE_SECRET", "Graph GET failed (400 Bad Request): PRIVATE_SECRET", "network timeout PRIVATE_SECRET", "GROUP_REMOTE_PRIVATE_SECRET"]) {
     const client = fixture([post("p")], { "/groups/g/threads/t/posts/p": new Error(error) });
     const result = await listGroupPosts(config, group, 20, options, client);
-    assert.equal(result.posts[0].postSubject.status, "READ_FAILED");
-    assert.equal(result.posts[0].fullBodyAvailable, true);
-    assert.equal(result.subjectRead.unavailableCount, 1);
-    assert.equal(result.page.complete, true);
+    assert.equal(result.posts.length, 0);
+    assert.equal(result.page.scannedPosts, 0);
+    assert.equal(result.page.failureDetails.stage, "POST_SUBJECT");
+    assert.equal(result.page.continuationAvailable, false);
+    assert.equal(result.page.complete, false);
     assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SECRET/);
     assert.equal(client.calls.filter(c => c.expanded).length, 1);
   }
 });
 
-test("budget exhaustion returns explicit unavailable title without losing any post on resume", async () => {
-  const client = fixture([post("p"), post("p2")], { "/groups/g/threads/t/posts/p2": { id: "p2", singleValueExtendedProperties: subject("second") } });
+test("budget exhaustion defers the same post until its subject is read", async () => {
+  const client = fixture([post("p"), post("p2")], {
+    "/groups/g/threads/t/posts/p": { id: "p", singleValueExtendedProperties: subject("first") },
+    "/groups/g/threads/t/posts/p2": { id: "p2", singleValueExtendedProperties: subject("second") }
+  });
   const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 3 }, client);
-  assert.deepEqual(first.posts.map(p => p.id), ["p"]);
-  assert.equal(first.posts[0].postSubject.status, "NOT_ATTEMPTED_BUDGET");
+  assert.deepEqual(first.posts, []);
+  assert.deepEqual(first.page.partialReasons, ["SUBJECT_BUDGET"]);
+  assert.equal(first.page.scannedPosts, 0);
   assert.equal(first.page.requests, 3);
   const second = await listGroupPosts(config, group, 20, { ...options, maxRequests: 2, cursor: first.page.nextCursor }, client);
-  assert.deepEqual(second.posts.map(p => p.id), ["p2"]);
-  assert.equal(second.posts[0].postSubject.value, "second");
+  assert.deepEqual(second.posts.map(p => p.id), ["p"]);
+  assert.equal(second.posts[0].postSubject.value, "first");
   assert.equal(second.page.requests, 2);
   const third = await listGroupPosts(config, group, 20, { ...options, cursor: second.page.nextCursor }, client);
-  assert.equal(third.posts.length, 0);
+  assert.deepEqual(third.posts.map(p => p.id), ["p2"]);
+  assert.equal(third.posts[0].postSubject.value, "second");
   assert.equal(third.page.complete, true);
 });
 
@@ -180,18 +190,133 @@ test("subject reads are not attempted for posts outside the requested range", as
   assert.equal(client.calls.filter(c => c.expanded).length, 0);
 });
 
-test("deadline exhaustion during body hydration retains the post with budget status", async () => {
+test("deadline exhaustion during hydration leaves the post pending for subject resume", async () => {
   let clock = options.now();
-  const client = fixture([post("p", { body: undefined }), post("p2")]);
+  const client = fixture([post("p", { body: undefined })], { "/groups/g/threads/t/posts/p": { id: "p", singleValueExtendedProperties: subject("recovered") } });
   client.routes["/groups/g/conversations/c/threads/t/posts/p"] = () => {
     clock += 100;
     return post("p");
   };
   const result = await listGroupPosts(config, group, 20, { ...options, now: () => clock, timeBudgetMs: 50 }, client);
-  assert.deepEqual(result.posts.map(p => p.id), ["p"]);
-  assert.equal(result.posts[0].postSubject.status, "NOT_ATTEMPTED_BUDGET");
-  assert.equal(result.posts[0].fullBodyAvailable, true);
+  assert.deepEqual(result.posts, []);
   assert.equal(result.page.continuationAvailable, true);
-  assert.deepEqual(result.page.partialReasons, ["TIME_BUDGET"]);
+  assert.deepEqual(result.page.partialReasons, ["SUBJECT_BUDGET"]);
   assert.equal(client.calls.filter(c => c.expanded).length, 0);
+  client.routes["/groups/g/threads/t/posts/p"] = post("p");
+  const resumed = await listGroupPosts(config, group, 20, { ...options, cursor: result.page.nextCursor }, client);
+  assert.equal(resumed.posts[0].postSubject.value, "recovered");
+  assert.equal(resumed.posts[0].fullBodyAvailable, true);
+  assert.equal(resumed.page.complete, true);
 });
+
+test("subject option cannot be dropped on continuation", async () => {
+  const client = fixture([post("p")]);
+  const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 3 }, client);
+  await assert.rejects(listGroupPosts(config, group, 20, { ...options, includeSubject: false, cursor: first.page.nextCursor }, client), /GROUP_SUBJECT_OPTION_REQUIRED/);
+});
+
+test("safe token failure provenance survives the full subject error chain without retry or consumption", async () => {
+  const error = authFailure("AUTH_CACHE_CHANGED", "commit", { message: "PRIVATE", code: "EPERM" });
+  const client = fixture([post("p")], { "/groups/g/threads/t/posts/p": error });
+  const result = await listGroupPosts(config, group, 20, options, client);
+  assert.equal(result.posts.length, 0);
+  assert.equal(result.page.continuationAvailable, false);
+  assert.equal(result.page.failureDetails.retryAllowed, false);
+  assert.deepEqual(result.page.failureDetails.authProvenance, { phase: "commit", reason: "AUTH_CACHE_CHANGED", ioCode: "EPERM" });
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE/);
+});
+
+test("same-position subject budget deferrals stop after three attempts without consuming", async () => {
+  let clock = options.now();
+  const client = fixture([post("p")]);
+  const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 3 }, client);
+  client.routes["/groups/g/threads/t/posts/p"] = () => { clock += 100; return post("p"); };
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor, now: () => clock, timeBudgetMs: 50 }, client);
+  assert.equal(second.page.continuationAvailable, true);
+  assert.equal(second.page.noProgressDetected, false);
+  const third = await listGroupPosts(config, group, 20, { ...options, cursor: second.page.nextCursor, now: () => clock, timeBudgetMs: 50 }, client);
+  assert.deepEqual(third.page.partialReasons, ["SUBJECT_BUDGET_RETRY_LIMIT"]);
+  assert.equal(third.page.continuationAvailable, false);
+  assert.equal(third.page.scannedPosts, 0);
+});
+
+for (const failure of ["Graph GET failed (429 Too Many Requests)", "Graph GET failed (503 Service Unavailable)", "Graph request exceeded the 1ms time budget", "fetch failed ECONNRESET"]) {
+  test(`transient subject failure resumes the same post: ${failure}`, async () => {
+    const client = fixture([post("p")], { "/groups/g/threads/t/posts/p": new Error(failure) });
+    const first = await listGroupPosts(config, group, 20, options, client);
+    assert.equal(first.page.failureDetails.retryAllowed, true);
+    assert.equal(first.page.failureDetails.stage, "POST_SUBJECT");
+    assert.equal(first.posts.length, 0);
+    client.subjects["/groups/g/threads/t/posts/p"] = { id: "p", singleValueExtendedProperties: subject("recovered") };
+    const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+    assert.equal(second.posts[0].postSubject.value, "recovered");
+    assert.equal(second.page.complete, true);
+  });
+}
+
+test("repeated transient subject failures stop at the existing retry limit", async () => {
+  const client = fixture([post("p")], { "/groups/g/threads/t/posts/p": new Error("Graph GET failed (503 Service Unavailable)") });
+  let result;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    result = await listGroupPosts(config, group, 20, { ...options, cursor: result?.page.nextCursor }, client);
+    assert.equal(result.page.failureDetails.consecutiveAttempts, attempt);
+    assert.equal(result.page.scannedPosts, 0);
+  }
+  assert.deepEqual(result.page.partialReasons, ["TRANSIENT_RETRY_LIMIT"]);
+  assert.equal(result.page.continuationAvailable, false);
+});
+
+test("alternating budget and transient failures share a bounded pending-position allowance", async () => {
+  let clock = options.now();
+  const client = fixture([post("p")], { "/groups/g/threads/t/posts/p": new Error("Graph GET failed (503 Service Unavailable)") });
+  const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 3 }, client);
+  const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+  assert.equal(second.page.continuationAvailable, true);
+  client.routes["/groups/g/threads/t/posts/p"] = () => { clock += 100; return post("p"); };
+  const third = await listGroupPosts(config, group, 20, { ...options, cursor: second.page.nextCursor, now: () => clock, timeBudgetMs: 50 }, client);
+  assert.deepEqual(third.page.partialReasons, ["SUBJECT_BUDGET_RETRY_LIMIT"]);
+  assert.equal(third.page.continuationAvailable, false);
+  assert.equal(third.posts.length, 0);
+});
+
+for (const local of [false, true]) {
+  test(`signed subject retry state is validated before reads (local=${local})`, async () => {
+    const client = fixture([post("p")]);
+    const first = await listGroupPosts(config, group, 20, { ...options, maxRequests: 3 }, client);
+    const original = decodeGroupCursor(config, "posts", first.page.nextCursor);
+    for (const mutate of [
+      s => { s.subjectDeferral.position = [s.subjectDeferral.position]; },
+      s => { s.retry = { position: [s.subjectDeferral.position], attempts: 1 }; },
+      s => { s.subjectDeferral.position = "f".repeat(64); },
+      s => { s.retry = { position: "f".repeat(64), attempts: 1 }; },
+      s => { s.retry = { ...s.subjectDeferral }; s.subjectDeferral.attempts = 2; },
+      s => { s.subjectRequired = false; },
+      s => { s.missingSubjects = -1; }
+    ]) {
+      const state = structuredClone(original);
+      mutate(state);
+      if (local) state.seen.push(...Array.from({ length: 8200 }, (_, i) => createHash("sha256").update(`filler${i}`).digest("hex")));
+      const cursor = local ? encodePostContinuation(config, state) : encodeGroupCursor(config, "posts", state);
+      client.calls.length = 0;
+      await assert.rejects(listGroupPosts(config, group, 20, { ...options, cursor }, client), /GROUP_INVALID_CURSOR/);
+      assert.equal(client.calls.length, 0);
+    }
+  });
+}
+
+for (const [properties, status] of [[[], "MISSING"], [undefined, "UNVERIFIED"], [null, "INVALID_RESPONSE"]]) {
+  test(`${status} is explicit and prevents completion across pages`, async () => {
+    const client = fixture([post("p"), post("p2")], {
+      "/groups/g/threads/t/posts/p": { id: "p", singleValueExtendedProperties: properties },
+      "/groups/g/threads/t/posts/p2": { id: "p2", singleValueExtendedProperties: subject("") }
+    });
+    const first = await listGroupPosts(config, group, 1, options, client);
+    assert.equal(first.posts[0].postSubject.status, status);
+    const second = await listGroupPosts(config, group, 20, { ...options, cursor: first.page.nextCursor }, client);
+    assert.equal(second.posts[0].postSubject.status, "EMPTY");
+    assert.equal(second.subjectRead.cumulativeUnavailableCount, 1);
+    assert.equal(second.page.complete, false);
+    assert.equal(second.page.continuationAvailable, false);
+    assert.deepEqual(second.page.partialReasons, ["SUBJECT_UNAVAILABLE"]);
+  });
+}

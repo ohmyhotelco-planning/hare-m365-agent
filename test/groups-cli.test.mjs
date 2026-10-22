@@ -33,10 +33,11 @@ test("group reads use the approved read scope without automatic permission escal
   assert.match(rules, /groups resolve --group/);
   assert.match(rules, /Do not expand scopes, consent or restart sign-in automatically/);
   assert.match(rules, /groups posts --include-subject/);
-  assert.match(rules, /page.complete does not imply subject availability/);
+  assert.match(rules, /SUBJECT_BUDGET retains the pending post for continuation/);
+  assert.match(rules, /Missing or invalid properties remain explicit and prevent page.complete/);
   const cli = fs.readFileSync("src/cli.ts", "utf8");
   assert.match(cli, /groups posts --include-subject/);
-  assert.match(cli, /status=PRESENT/);
+  assert.match(cli, /PRESENT의 value로만 제목 조건을 판단/);
 });
 
 test("native CLI file transport forwards long cursors and rejects conflicting sources before group lookup", t => {

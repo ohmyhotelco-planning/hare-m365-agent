@@ -1,4 +1,5 @@
 import { groupPath, groupReadError, type GroupReadClient } from "./groups-common.js";
+import { copyAuthProvenance, readAuthProvenance, type AuthProvenance } from "./auth-diagnostics.js";
 
 export type GroupPostSubject = {
   source: "PidTagSubject";
@@ -7,6 +8,7 @@ export type GroupPostSubject = {
   status: "PRESENT" | "EMPTY" | "MISSING" | "UNVERIFIED" | "INVALID_RESPONSE" | "READ_FAILED" | "NOT_ATTEMPTED_BUDGET";
   value?: string;
   failure?: string;
+  authProvenance?: AuthProvenance;
 };
 
 export function unavailablePostSubject(status: GroupPostSubject["status"]): GroupPostSubject {
@@ -31,7 +33,9 @@ export async function readGroupPostSubject(
   try {
     detail = await read(url);
   } catch (error) {
-    return { ...unavailablePostSubject("READ_FAILED"), failure: groupReadError("POST_SUBJECT", new Error(`Remote failure: ${error instanceof Error ? error.message : "unknown"}`)).message };
+    const failure = groupReadError("POST_SUBJECT", copyAuthProvenance(new Error(`Remote failure: ${error instanceof Error ? error.message : "unknown"}`), error));
+    const authProvenance = readAuthProvenance(failure);
+    return { ...unavailablePostSubject("READ_FAILED"), failure: failure.message, ...(authProvenance ? { authProvenance } : {}) };
   }
   if (!detail || detail.id !== chain.postId ||
       (detail.conversationId != null && detail.conversationId !== chain.conversationId) ||
