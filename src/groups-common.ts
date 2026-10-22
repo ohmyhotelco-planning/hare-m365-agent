@@ -56,7 +56,16 @@ export function groupReadError(stage: GroupStage, error: unknown): Error {
   const status = /Graph \w+ failed \((\d{3})\b/i.exec(message)?.[1];
   let code: string;
   let explanation: string;
-  if (status === "403") {
+  if (status === "429" || ["500", "502", "503", "504"].includes(status ?? "")) {
+    code = status === "429" ? "THROTTLED" : "SERVICE_UNAVAILABLE";
+    explanation = "The bounded request retries did not complete. Resume only with the returned continuation and retry allowance.";
+  } else if (!status && /Graph request exceeded (?:the )?\d+ms time budget/i.test(message)) {
+    code = "TIME_BUDGET_EXCEEDED";
+    explanation = "The request exhausted its time budget; this is not an authentication or identity failure.";
+  } else if (!status && !/AUTH_|TOKEN_|LOGIN_|interaction_required|invalid_grant|ENOTFOUND|EACCES|EPERM|blocked-by-allowlist/i.test(message) && /fetch failed|socket|ECONNRESET|ETIMEDOUT|EAI_AGAIN|AbortError/i.test(message)) {
+    code = "TRANSIENT_NETWORK";
+    explanation = "A transient transport failure prevented this bounded read.";
+  } else if (status === "403") {
     code = "ACCESS_DENIED";
     explanation = "The current delegated token or user access does not permit this stage. No automatic consent or sign-in was started.";
   } else if (status === "404") {
@@ -76,4 +85,8 @@ export function groupReadError(stage: GroupStage, error: unknown): Error {
     explanation = "This read stage failed. No mailbox fallback was attempted.";
   }
   return new Error(`GROUP_${stage}_${code}: ${explanation}${status ? ` HTTP ${status}.` : ""}`);
+}
+
+export function retryableGroupReadFailure(message: string): boolean {
+  return /^GROUP_[A-Z_]+_(THROTTLED|SERVICE_UNAVAILABLE|TIME_BUDGET_EXCEEDED|TRANSIENT_NETWORK):/.test(message);
 }

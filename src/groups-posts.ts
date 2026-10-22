@@ -3,10 +3,10 @@ import type { AppConfig } from "./config.js";
 import type { GraphPage } from "./graph.js";
 import {
   defaultGroupClient, groupIdentifier, groupPageUrl, groupPath, groupReadError,
-  requireMicrosoft365Group, type GroupReadClient, type GroupReference, type GroupStage
+  requireMicrosoft365Group, retryableGroupReadFailure, type GroupReadClient, type GroupReference, type GroupStage
 } from "./groups-common.js";
 import { resolveSearchRange } from "./search-range.js";
-import { decodeGroupCursor, encodeGroupCursor } from "./groups-cursor.js";
+import { decodePostContinuation, encodePostContinuation, maximumHistoryEntries } from "./groups-post-checkpoint.js";
 import { readGroupPostSubject, unavailablePostSubject, type GroupPostSubject } from "./groups-post-subject.js";
 
 type Entity = { id?: string };
@@ -27,6 +27,7 @@ type Job = {
 type CursorState = {
   version: 3; criteria: string; jobs: Job[]; seen: string[]; pages: string[];
   missingBodies: number; missingTimestamps: number;
+  retry?: { position: string; attempts: number };
 };
 
 export type GroupPostSummary = {
@@ -47,7 +48,7 @@ export type GroupPostOptions = {
   timeBudgetMs?: number; maxRequests?: number; maxRecords?: number;
   now?: () => number;
 };
-const maxHistory = 10_000;
+const legacyHistoryLimit = 10_000;
 
 // Pin bounded page inventories, not remote offsets or message bodies, across calls.
 export async function listGroupPosts(
@@ -65,7 +66,6 @@ export async function listGroupPosts(
   if (maxRequests < 2) throw new Error("GROUP_INVALID_OPTION: max-requests must allow at least a page read and post detail read (2).");
   const maxRecords = boundedInteger(options.maxRecords ?? 1000, 1000, "max-records");
   const now = options.now ?? Date.now;
-  const deadline = now() + timeBudgetMs;
   const range = resolveSearchRange(options.since, options.until, config.policy.defaultSearchLookbackDays, new Date(now()));
   const criteria = hash(JSON.stringify([group.id, range.startDateTime, range.endDateTimeExclusive, "createdDateTime"]));
   const state = options.cursor ? decodeCursor(config, options.cursor, criteria, group.id) : {
@@ -75,6 +75,7 @@ export async function listGroupPosts(
   const seen = new Set(state.seen);
   const pages = new Set(state.pages);
   const initialPosition = position(state);
+  const deadline = now() + timeBudgetMs;
   const posts: GroupPostSummary[] = [];
   let requests = 0;
   let scannedRecords = 0;
@@ -82,7 +83,14 @@ export async function listGroupPosts(
   let duplicates = 0;
   let stopReason: string | undefined;
   let failure: string | undefined;
+  let failureStage: GroupStage | undefined;
   let resumable = true;
+  const failRead = (stage: GroupStage, error: unknown) => {
+    stopReason = "READ_FAILED";
+    failureStage = stage;
+    failure = groupReadError(stage, error).message;
+    resumable = retryableGroupReadFailure(failure);
+  };
   // Same-call objects avoid detail reads; only their exact IDs enter the signed cursor.
   const loaded = new Map<string, GraphPage<Entity>>();
   const readVerificationPage = async (verificationUrl: string): Promise<GraphPage<Post>> => {
@@ -106,7 +114,7 @@ export async function listGroupPosts(
     if (posts.length >= maxResults) { stopReason = "RESULT_LIMIT"; break; }
     if (now() >= deadline) { stopReason = "TIME_BUDGET"; break; }
     if (requests >= maxRequests || scannedRecords >= maxRecords) { stopReason = "SCAN_BUDGET"; break; }
-    if (seen.size >= maxHistory || pages.size >= maxHistory) { stopReason = "HISTORY_LIMIT"; resumable = false; break; }
+    if (seen.size >= maximumHistoryEntries || pages.size >= maximumHistoryEntries) { stopReason = "STATE_CAPACITY_LIMIT"; resumable = false; break; }
     const job = state.jobs[state.jobs.length - 1];
     const collection = collectionPath(group.id, job);
     const url = groupPageUrl(job.url, collection);
@@ -127,10 +135,8 @@ export async function listGroupPosts(
         loaded.set(url, page);
       } catch (error) {
         const safe = groupReadError(stageFor(job), error);
-        if (!posts.length && !options.cursor && scannedRecords === 0) throw safe;
-        stopReason = "READ_FAILED";
-        failure = safe.message;
-        resumable = !safe.message.startsWith("GROUP_INVALID") && !safe.message.startsWith("GROUP_PAGE_TOO_LARGE");
+        if (!posts.length && !options.cursor && scannedRecords === 0 && !retryableGroupReadFailure(safe.message)) throw safe;
+        failRead(stageFor(job), safe);
         break;
       }
     }
@@ -189,9 +195,7 @@ export async function listGroupPosts(
       if (message === "GROUP_VERIFICATION_TIME_BUDGET" || message === "GROUP_VERIFICATION_SCAN_BUDGET") {
         stopReason = message === "GROUP_VERIFICATION_TIME_BUDGET" ? "TIME_BUDGET" : "SCAN_BUDGET";
       } else {
-        stopReason = "READ_FAILED";
-        failure = groupReadError("POSTS", error).message;
-        resumable = false;
+        failRead("POSTS", error);
       }
       break;
     }
@@ -220,8 +224,9 @@ export async function listGroupPosts(
         if (message === "GROUP_VERIFICATION_TIME_BUDGET" || message === "GROUP_VERIFICATION_SCAN_BUDGET") {
           stopReason = message === "GROUP_VERIFICATION_TIME_BUDGET" ? "TIME_BUDGET" : "SCAN_BUDGET"; break;
         }
-        if (verifyingDetail || message.startsWith("GROUP_ID_CHAIN_MISMATCH")) {
-          stopReason = "READ_FAILED"; failure = groupReadError("POSTS", error).message; resumable = false; break;
+        const safe = groupReadError("POSTS", error);
+        if (verifyingDetail || message.startsWith("GROUP_ID_CHAIN_MISMATCH") || safe.message.startsWith("GROUP_POSTS_FAILED:") || retryableGroupReadFailure(safe.message)) {
+          failRead("POSTS", safe); break;
         }
         bodyFailure = groupReadError("POSTS", error).message;
       }
@@ -267,18 +272,22 @@ export async function listGroupPosts(
   }
   state.seen = [...seen];
   state.pages = [...pages];
-  if (options.cursor && resumable && state.jobs.length && position(state) === initialPosition) {
+  let retryAttempts = 0;
+  if (failure && resumable) {
+    const failedPosition = hash(position(state));
+    retryAttempts = state.retry?.position === failedPosition ? state.retry.attempts + 1 : 1;
+    state.retry = { position: failedPosition, attempts: retryAttempts };
+    if (retryAttempts >= 3) { stopReason = "TRANSIENT_RETRY_LIMIT"; resumable = false; }
+  } else {
+    delete state.retry;
+  }
+  if (options.cursor && resumable && !failure && state.jobs.length && position(state) === initialPosition) {
     stopReason = "NO_PROGRESS";
     resumable = false;
   }
   let nextCursor: string | undefined;
   if (state.jobs.length > 0 && resumable) {
-    try { nextCursor = encodeGroupCursor(config, "posts", state); }
-    catch (error) {
-      if (!(error instanceof Error) || !error.message.startsWith("GROUP_CURSOR_SIZE_LIMIT:")) throw error;
-      stopReason = "CURSOR_SIZE_LIMIT";
-      resumable = false;
-    }
+    nextCursor = encodePostContinuation(config, state);
   }
   const continuationAvailable = state.jobs.length > 0 && resumable;
   const reasons = [stopReason, state.missingBodies ? "BODY_UNAVAILABLE" : undefined, state.missingTimestamps ? "TIMESTAMP_UNAVAILABLE" : undefined].filter((v): v is string => Boolean(v));
@@ -297,6 +306,14 @@ export async function listGroupPosts(
       completionScope: "PINNED_PAGE_INVENTORIES_WITH_LIVE_CONTINUATIONS",
       partialResult: reasons.length > 0 || state.jobs.length > 0, partialReasons: reasons,
       ...(failure ? { failure } : {}),
+      ...(failure ? { failureDetails: {
+        stage: failureStage ?? "POSTS", code: failure.split(":", 1)[0],
+        retryable: retryableGroupReadFailure(failure), consecutiveAttempts: retryAttempts,
+        retryAllowed: resumable && retryableGroupReadFailure(failure),
+        retryAfterMs: resumable && retryAttempts ? 1000 * 2 ** (retryAttempts - 1) : 0
+      } } : {}),
+      history: { seenEntries: seen.size, visitedPages: pages.size,
+        continuationStorage: !nextCursor ? "NONE" : JSON.parse(Buffer.from(nextCursor.split(".")[1], "base64url").toString()).state.version === 4 ? "LOCAL_CHECKPOINT" : "INLINE" },
       fullBodyUnavailableCount: posts.filter(post => !post.fullBodyAvailable).length,
       cumulativeFullBodyUnavailableCount: state.missingBodies,
       cumulativeTimestampUnavailableCount: state.missingTimestamps,
@@ -390,14 +407,21 @@ function boundedInteger(value: number, max: number, name: string): number {
   return value;
 }
 function decodeCursor(config: AppConfig, cursor: string, criteria: string, groupId: string): CursorState {
-  const state = decodeGroupCursor<CursorState>(config, "posts", cursor);
+  const decoded = decodePostContinuation<CursorState>(config, cursor, criteria);
+  const state = decoded.state;
+  const maxHistory = decoded.local ? maximumHistoryEntries : legacyHistoryLimit;
   if (!state || state.version !== 3 || state.criteria !== criteria ||
-      Object.keys(state).some(key => !["version", "criteria", "jobs", "seen", "pages", "missingBodies", "missingTimestamps"].includes(key)) ||
+      Object.keys(state).some(key => !["version", "criteria", "jobs", "seen", "pages", "missingBodies", "missingTimestamps", "retry"].includes(key)) ||
       !Array.isArray(state.jobs) || state.jobs.length < 1 || state.jobs.length > 3 ||
       !Array.isArray(state.seen) || state.seen.length > maxHistory || !Array.isArray(state.pages) || state.pages.length > maxHistory ||
       ![...state.seen, ...state.pages].every(v => typeof v === "string" && /^[a-f0-9]{64}$/.test(v)) ||
       !Number.isSafeInteger(state.missingBodies) || state.missingBodies < 0 || !Number.isSafeInteger(state.missingTimestamps) || state.missingTimestamps < 0) {
     throw new Error("GROUP_INVALID_CURSOR: Cursor does not match this group/date range or reader version. Restart the query.");
+  }
+  if (state.retry !== undefined && (!state.retry || !/^[a-f0-9]{64}$/.test(state.retry.position) ||
+      !Number.isSafeInteger(state.retry.attempts) || state.retry.attempts < 1 || state.retry.attempts > 2 ||
+      Object.keys(state.retry).some(k => !["position", "attempts"].includes(k)))) {
+    throw new Error("GROUP_INVALID_CURSOR: Invalid retry state.");
   }
   const kinds = ["conversations", "threads", "posts"];
   state.jobs.forEach((job, index) => {
