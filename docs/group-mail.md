@@ -41,6 +41,7 @@ hare-m365 --data-dir <existing-data-dir> groups attachments download --group <gr
 - seen(대화·스레드·post 식별자 합계)와 visited pages는 각각 최대 500,000개, 객체당 16MiB, 저장소 합계 256MiB로 제한한다. 이력은 호출 시 메모리에 복원하므로 무제한·고정 메모리 수집이 아니다. 한도는 메일 개수와 같지 않다. 저장 실패 시 이전 커서를 보존하고 운영 담당자에게 확인한다.
 - `READ_FAILED`의 `failureDetails`는 단계·정제된 오류 코드·연속 실패 횟수·재개 가능 여부·대기 시간을 제공한다. HTTP 429/500/502/503/504, 명시적 요청 시간 예산 소진, 일부 일시 전송 오류만 재개 대상이다. `continuationAvailable=true`와 `retryAllowed=true`가 모두 있을 때 `retryAfterMs` 이후 반환된 새 커서로만 재개한다. 같은 위치에서 세 번째 연속 실패 시 `TRANSIENT_RETRY_LIMIT`으로 중단한다. 옛 커서 반복으로 이 제한을 우회하지 않는다.
 - 인증·권한·식별자·알 수 없는 실패를 일시 오류로 추정하지 않는다. 기존 본문 보충 조회의 비일시적 실패는 `bodyFailure`/본문·시각 누락으로 명시하며 원문 확보 성공으로 계산하지 않는다. 알 수 없는 본문 보충 실패는 미처리 post를 소비하지 않고 중단한다. 제목 미확보 처리는 아래 기준을 유지한다.
+- `AUTH_CHECK_BLOCKED`는 Graph 호출 전 토큰 확인이 불가능했던 상태이므로 인증 거부와 구분한다. `failureDetails.authProvenance`가 있으면 허용된 실패 단계·원인·오류 코드만 확인한다. 캐시/프로필 읽기, 계정 선택, silent 취득, 토큰 검증, 저장 단계는 구분하되 이 진단 정보만으로 재로그인이나 재시도를 시작하지 않는다. 실제 HTTP 401과 달리 이후 `READY`가 가능하며 과거 실패의 원인이 사후 상태만으로 확정되지는 않는다.
 
 ## 개별 메일 제목 (선택 조회)
 
@@ -48,9 +49,10 @@ hare-m365 --data-dir <existing-data-dir> groups attachments download --group <gr
 
 - `postSubject.source=PidTagSubject`, `scope=POST`는 개별 메시지의 전체 제목 속성을 뜻한다. `value`는 접두사와 공백을 포함한 원문이다. thread/conversation `topic`과 본문은 제목 대체값으로 쓰지 않는다.
 - 상태는 `PRESENT`(문자열 있음), `EMPTY`(확인된 빈 문자열), `MISSING`(확장 목록에 속성 없음), `UNVERIFIED`(확장 목록 미반환·불완전), `INVALID_RESPONSE`(잘못된 형식·중복 속성), `READ_FAILED`(API 실패), `NOT_ATTEMPTED_BUDGET`(예산 소진)을 구분한다. `PRESENT` 이외 상태로 제목 조건 충족을 추정하지 않는다.
-- 추가 GET도 기존 시간·요청 예산에 포함한다. 제목 API 실패·예산 소진은 확보된 본문을 보존하고 상태를 반환한다. 단, 제목 응답의 post/thread/conversation 연결이 충돌하면 해당 post를 반환하지 않고 비재개 오류로 중단한다. 재검증된 thread는 제목 응답에서도 명시적 일치를 요구한다.
-- `page.complete`는 기존 순회·본문 기준이며 제목 확보 성공을 뜻하지 않는다. 별도의 `subjectRead`는 이번 호출 반환 post의 제목 확보/미확보 수다. 제목 미확보 post도 반환·처리된 것이므로 일반 continuation에서 재시도하지 않는다.
-- v3 커서에는 제목·옵션을 넣지 않는다. `--cursor-file` 재개 시에도 `--include-subject`를 명시해야 한다. 옵션을 바꾸면 이후 반환 post에만 적용되며 과거 결과를 보충하지 않는다. 제목이 필요한 분석은 옵션을 켜고 새 조회부터 시작한다.
+- 추가 GET도 기존 시간·요청 예산에 포함한다. 제목 조회 전 예산이 소진되면 `SUBJECT_BUDGET`으로 해당 post를 미처리 상태로 보존하며, 다음 continuation에서 같은 ID의 본문·연결을 다시 검증한 뒤 제목을 조회한다. `NOT_ATTEMPTED_BUDGET`은 구버전 결과 해석용이며 새 조회에서는 반환하지 않는다.
+- 일시적인 제목 API 실패는 기존 제한 재시도를 사용하고, 인증·권한·식별자·알 수 없는 실패는 post를 소비하지 않고 중단한다. 동일 위치의 예산 이월과 일시 실패는 합계 3회에서 중단하므로 무한 재시도하지 않는다. 제목 응답의 post/thread/conversation 검증은 유지한다.
+- `EMPTY`는 정상 조회된 빈 제목이다. `MISSING/UNVERIFIED/INVALID_RESPONSE`는 상태를 명시하고 `subjectRead.cumulativeUnavailableCount`에 누적하며 `SUBJECT_UNAVAILABLE`로 전체 완료를 막는다. 원격에 없는 속성을 추정하거나 재시도로 무한 보충하지 않는다.
+- 새 제목 조회 커서는 `--include-subject` 유지 여부를 검증한다. 커서에는 본문·제목을 저장하지 않는다. 구버전 커서·옵션 없이 처리한 과거 결과는 자동 보충되지 않으므로, 누락 없는 제목 분석은 옵션을 켜고 새 조회부터 시작한다. `page.complete`는 고정된 페이지 ID 순회 기준이며 시점 스냅샷을 보장하지 않는다.
 
 공식 근거: [확장 속성 읽기](https://learn.microsoft.com/en-us/graph/api/singlevaluelegacyextendedproperty-get?view=graph-rest-1.0), [PidTagSubject 정의](https://learn.microsoft.com/en-us/office/client-developer/outlook/mapi/pidtagsubject-canonical-property). 실제 그룹 post의 속성 반환 여부는 환경별로 확인하며 문서 지원만으로 제목 확보 성공을 단정하지 않는다.
 

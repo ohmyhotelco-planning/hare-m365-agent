@@ -23,6 +23,7 @@ import {
 } from "./device-login.js";
 import { ProxyAwareNetworkClient, type AuthNetworkFailure } from "./msal-network.js";
 import { classifyAuthFailure } from "./setup-state.js";
+import { authFailure, type AuthPhase } from "./auth-diagnostics.js";
 import {
   clearStoredFile,
   storedFileHasContent,
@@ -375,24 +376,28 @@ export async function getAccessToken(
   if (networkClient instanceof ProxyAwareNetworkClient) networkClient.takeNetworkFailure();
   const profile = prepareAuthProfile(config, scopes);
   if (profile.migrationRequired || profile.reason) {
-    throw new Error(
-      `${profile.reason ?? "AUTH_MIGRATION_REQUIRED"}: Authentication profile validation failed. Existing authentication files were preserved.`
+    throw authFailure(
+      `${profile.reason ?? "AUTH_MIGRATION_REQUIRED"}: Authentication profile validation failed. Existing authentication files were preserved.`, "load", undefined
     );
   }
+  let phase: AuthPhase = "load";
   try {
     const { pca, commit } = await buildPca(config, networkClient);
+    phase = "account";
     const accounts = await pca.getTokenCache().getAllAccounts();
     const account = selectAccount(accounts, config, profile.homeAccountId);
+    phase = "silent";
     const result = await pca.acquireTokenSilent({ account, scopes });
+    phase = "validate";
     const token = verifySilentResult(result, account);
+    phase = "commit";
     await commit();
     return token;
   } catch (error) {
     const failure = networkClient instanceof ProxyAwareNetworkClient
       ? networkClient.takeNetworkFailure() : undefined;
     const reason = networkBlockedReason(error, failure);
-    if (reason) throw new Error(reason);
-    throw new Error(tokenFailureReason(error));
+    throw authFailure(reason ?? tokenFailureReason(error), phase, error, failure?.code);
   }
 }
 

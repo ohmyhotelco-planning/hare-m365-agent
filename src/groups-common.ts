@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config.js";
 import { graphGet, type GraphRequestOptions } from "./graph.js";
+import { copyAuthProvenance } from "./auth-diagnostics.js";
 
 export type GroupReference = {
   id: string;
@@ -62,6 +63,9 @@ export function groupReadError(stage: GroupStage, error: unknown): Error {
   } else if (!status && /Graph request exceeded (?:the )?\d+ms time budget/i.test(message)) {
     code = "TIME_BUDGET_EXCEEDED";
     explanation = "The request exhausted its time budget; this is not an authentication or identity failure.";
+  } else if (!status && /^(?:Remote failure: )?AUTH_CHECK_BLOCKED:/.test(message)) {
+    code = "NETWORK_BLOCKED";
+    explanation = "Token verification could not complete before Graph was called. Token expiry or rejection is not established. Preserve the cache; inspect the safe authentication diagnostics before retrying.";
   } else if (!status && !/AUTH_|TOKEN_|LOGIN_|interaction_required|invalid_grant|ENOTFOUND|EACCES|EPERM|blocked-by-allowlist/i.test(message) && /fetch failed|socket|ECONNRESET|ETIMEDOUT|EAI_AGAIN|AbortError/i.test(message)) {
     code = "TRANSIENT_NETWORK";
     explanation = "A transient transport failure prevented this bounded read.";
@@ -74,7 +78,7 @@ export function groupReadError(stage: GroupStage, error: unknown): Error {
   } else if (status === "400" || status === "405" || status === "501") {
     code = "API_UNSUPPORTED";
     explanation = "The API rejected this operation for the requested resource.";
-  } else if (status === "401" || /AUTH_|TOKEN_|LOGIN_|interaction_required|invalid_grant/i.test(message)) {
+  } else if (status === "401" || (!status && /AUTH_|TOKEN_|LOGIN_|interaction_required|invalid_grant/i.test(message))) {
     code = "AUTH_BLOCKED";
     explanation = "Authentication could not be used. Preserve the existing login and follow the authentication gate.";
   } else if (/timeout|timed out|network|fetch failed|ENOTFOUND|EACCES|ECONN|EAI_AGAIN|ETIMEDOUT/i.test(message)) {
@@ -84,7 +88,7 @@ export function groupReadError(stage: GroupStage, error: unknown): Error {
     code = "FAILED";
     explanation = "This read stage failed. No mailbox fallback was attempted.";
   }
-  return new Error(`GROUP_${stage}_${code}: ${explanation}${status ? ` HTTP ${status}.` : ""}`);
+  return copyAuthProvenance(new Error(`GROUP_${stage}_${code}: ${explanation}${status ? ` HTTP ${status}.` : ""}`), error);
 }
 
 export function retryableGroupReadFailure(message: string): boolean {

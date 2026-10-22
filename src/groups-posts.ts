@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { copyAuthProvenance, readAuthProvenance, type AuthProvenance } from "./auth-diagnostics.js";
 import type { AppConfig } from "./config.js";
 import type { GraphPage } from "./graph.js";
 import {
@@ -7,7 +8,7 @@ import {
 } from "./groups-common.js";
 import { resolveSearchRange } from "./search-range.js";
 import { decodePostContinuation, encodePostContinuation, maximumHistoryEntries } from "./groups-post-checkpoint.js";
-import { readGroupPostSubject, unavailablePostSubject, type GroupPostSubject } from "./groups-post-subject.js";
+import { readGroupPostSubject, type GroupPostSubject } from "./groups-post-subject.js";
 
 type Entity = { id?: string };
 type Recipient = { emailAddress?: { name?: string; address?: string } };
@@ -28,6 +29,9 @@ type CursorState = {
   version: 3; criteria: string; jobs: Job[]; seen: string[]; pages: string[];
   missingBodies: number; missingTimestamps: number;
   retry?: { position: string; attempts: number };
+  subjectRequired?: true;
+  missingSubjects?: number;
+  subjectDeferral?: { position: string; attempts: number };
 };
 
 export type GroupPostSummary = {
@@ -72,6 +76,10 @@ export async function listGroupPosts(
     version: 3 as const, criteria, jobs: [newJob(group.id, "conversations")],
     seen: [], pages: [], missingBodies: 0, missingTimestamps: 0
   };
+  if (state.subjectRequired && !options.includeSubject) {
+    throw new Error("GROUP_SUBJECT_OPTION_REQUIRED: Keep --include-subject when resuming this query.");
+  }
+  if (options.includeSubject) state.subjectRequired = true;
   const seen = new Set(state.seen);
   const pages = new Set(state.pages);
   const initialPosition = position(state);
@@ -84,11 +92,14 @@ export async function listGroupPosts(
   let stopReason: string | undefined;
   let failure: string | undefined;
   let failureStage: GroupStage | undefined;
+  let authProvenance: AuthProvenance | undefined;
   let resumable = true;
+  let subjectDeferred = false;
   const failRead = (stage: GroupStage, error: unknown) => {
     stopReason = "READ_FAILED";
     failureStage = stage;
     failure = groupReadError(stage, error).message;
+    authProvenance = readAuthProvenance(error);
     resumable = retryableGroupReadFailure(failure);
   };
   // Same-call objects avoid detail reads; only their exact IDs enter the signed cursor.
@@ -101,7 +112,7 @@ export async function listGroupPosts(
     try {
       verificationPage = await client.get<GraphPage<Post>>(verificationUrl, { totalTimeoutMs: Math.max(1, deadline - now()) });
     } catch (error) {
-      throw groupReadError("POSTS", new Error(`Remote failure: ${error instanceof Error ? error.message : "unknown"}`));
+      throw groupReadError("POSTS", copyAuthProvenance(new Error(`Remote failure: ${error instanceof Error ? error.message : "unknown"}`), error));
     }
     if (!Array.isArray(verificationPage.value) || verificationPage.value.length > 1000) {
       throw new Error("GROUP_ID_CHAIN_MISMATCH: Invalid verification collection.");
@@ -182,7 +193,7 @@ export async function listGroupPosts(
         try {
           post = await client.get<Post>(`${threadPostsPath(group.id, job.threadId!)}/${encodeURIComponent(id)}?${postSelect()}`, { totalTimeoutMs: Math.max(1, deadline - now()) });
         } catch (error) {
-          throw groupReadError("POSTS", new Error(`Remote failure: ${error instanceof Error ? error.message : "unknown"}`));
+          throw groupReadError("POSTS", copyAuthProvenance(new Error(`Remote failure: ${error instanceof Error ? error.message : "unknown"}`), error));
         }
       }
       if (!post || post.id !== id) throw new Error("GROUP_ID_CHAIN_MISMATCH: The post response does not match the pinned ID.");
@@ -236,14 +247,22 @@ export async function listGroupPosts(
       Date.parse(post.createdDateTime!) < Date.parse(range.endDateTimeExclusive);
     if (options.includeSubject && inRange) {
       if (requests >= maxRequests || now() >= deadline || scannedRecords >= maxRecords) {
-        postSubject = unavailablePostSubject("NOT_ATTEMPTED_BUDGET");
+        stopReason = "SUBJECT_BUDGET";
+        subjectDeferred = true;
+        break;
       } else {
         try {
           requests++;
           postSubject = await readGroupPostSubject({ groupId: group.id, conversationId: job.conversationId!, threadId, postId: id, revalidated },
             <T>(subjectUrl: string) => client.get<T>(subjectUrl, { totalTimeoutMs: Math.max(1, deadline - now()) }));
         } catch (error) {
-          stopReason = "READ_FAILED"; failure = groupReadError("POST_SUBJECT", error).message; resumable = false; break;
+          failRead("POST_SUBJECT", error); break;
+        }
+        if (postSubject.status === "READ_FAILED") {
+          failRead("POST_SUBJECT", copyAuthProvenance(new Error(postSubject.failure), postSubject)); break;
+        }
+        if (postSubject.status !== "PRESENT" && postSubject.status !== "EMPTY") {
+          state.missingSubjects = (state.missingSubjects ?? 0) + 1;
         }
       }
     }
@@ -277,11 +296,21 @@ export async function listGroupPosts(
     const failedPosition = hash(position(state));
     retryAttempts = state.retry?.position === failedPosition ? state.retry.attempts + 1 : 1;
     state.retry = { position: failedPosition, attempts: retryAttempts };
-    if (retryAttempts >= 3) { stopReason = "TRANSIENT_RETRY_LIMIT"; resumable = false; }
-  } else {
+    const deferredAttempts = state.subjectDeferral?.position === failedPosition ? state.subjectDeferral.attempts : 0;
+    if (retryAttempts + deferredAttempts >= 3) { stopReason = "TRANSIENT_RETRY_LIMIT"; resumable = false; }
+  } else if (!subjectDeferred || state.retry?.position !== hash(position(state))) {
     delete state.retry;
   }
-  if (options.cursor && resumable && !failure && state.jobs.length && position(state) === initialPosition) {
+  if (subjectDeferred) {
+    const pendingPosition = hash(position(state));
+    const attempts = state.subjectDeferral?.position === pendingPosition ? state.subjectDeferral.attempts + 1 : 1;
+    state.subjectDeferral = { position: pendingPosition, attempts };
+    const failedAttempts = state.retry?.position === pendingPosition ? state.retry.attempts : 0;
+    if (attempts + failedAttempts >= 3) { stopReason = "SUBJECT_BUDGET_RETRY_LIMIT"; resumable = false; }
+  } else if (!failure || state.subjectDeferral?.position !== hash(position(state))) {
+    delete state.subjectDeferral;
+  }
+  if (options.cursor && resumable && !failure && !subjectDeferred && state.jobs.length && position(state) === initialPosition) {
     stopReason = "NO_PROGRESS";
     resumable = false;
   }
@@ -290,14 +319,17 @@ export async function listGroupPosts(
     nextCursor = encodePostContinuation(config, state);
   }
   const continuationAvailable = state.jobs.length > 0 && resumable;
-  const reasons = [stopReason, state.missingBodies ? "BODY_UNAVAILABLE" : undefined, state.missingTimestamps ? "TIMESTAMP_UNAVAILABLE" : undefined].filter((v): v is string => Boolean(v));
+  const reasons = [stopReason, state.missingBodies ? "BODY_UNAVAILABLE" : undefined, state.missingTimestamps ? "TIMESTAMP_UNAVAILABLE" : undefined,
+    state.missingSubjects ? "SUBJECT_UNAVAILABLE" : undefined].filter((v): v is string => Boolean(v));
   return {
     group, range: { ...range, dateField: "createdDateTime", filtering: "client-side" }, posts,
     ...(options.includeSubject ? { subjectRead: {
       scope: "RETURNED_POSTS_THIS_CALL",
       availableCount: posts.filter(post => post.postSubject?.status === "PRESENT" || post.postSubject?.status === "EMPTY").length,
       unavailableCount: posts.filter(post => post.postSubject?.status !== "PRESENT" && post.postSubject?.status !== "EMPTY").length,
-      notice: "Enumeration completeness does not imply subject availability. Unavailable subjects are not retried by continuation; topic/body are never substituted."
+      cumulativeUnavailableCount: state.missingSubjects ?? 0,
+      deferred: subjectDeferred,
+      notice: "Budget-deferred subjects and retryable subject failures retain the pending post for continuation. Missing or invalid properties remain explicit and prevent completion; topic/body are never substituted."
     } } : {}),
     page: {
       returnedCount: posts.length, limit: maxResults, scannedRecords, scannedPosts, requests, duplicatesRemoved: duplicates,
@@ -308,6 +340,7 @@ export async function listGroupPosts(
       ...(failure ? { failure } : {}),
       ...(failure ? { failureDetails: {
         stage: failureStage ?? "POSTS", code: failure.split(":", 1)[0],
+        ...(authProvenance ? { authProvenance } : {}),
         retryable: retryableGroupReadFailure(failure), consecutiveAttempts: retryAttempts,
         retryAllowed: resumable && retryableGroupReadFailure(failure),
         retryAfterMs: resumable && retryAttempts ? 1000 * 2 ** (retryAttempts - 1) : 0
@@ -411,14 +444,24 @@ function decodeCursor(config: AppConfig, cursor: string, criteria: string, group
   const state = decoded.state;
   const maxHistory = decoded.local ? maximumHistoryEntries : legacyHistoryLimit;
   if (!state || state.version !== 3 || state.criteria !== criteria ||
-      Object.keys(state).some(key => !["version", "criteria", "jobs", "seen", "pages", "missingBodies", "missingTimestamps", "retry"].includes(key)) ||
+      Object.keys(state).some(key => !["version", "criteria", "jobs", "seen", "pages", "missingBodies", "missingTimestamps", "retry", "subjectRequired", "missingSubjects", "subjectDeferral"].includes(key)) ||
       !Array.isArray(state.jobs) || state.jobs.length < 1 || state.jobs.length > 3 ||
       !Array.isArray(state.seen) || state.seen.length > maxHistory || !Array.isArray(state.pages) || state.pages.length > maxHistory ||
       ![...state.seen, ...state.pages].every(v => typeof v === "string" && /^[a-f0-9]{64}$/.test(v)) ||
       !Number.isSafeInteger(state.missingBodies) || state.missingBodies < 0 || !Number.isSafeInteger(state.missingTimestamps) || state.missingTimestamps < 0) {
     throw new Error("GROUP_INVALID_CURSOR: Cursor does not match this group/date range or reader version. Restart the query.");
   }
-  if (state.retry !== undefined && (!state.retry || !/^[a-f0-9]{64}$/.test(state.retry.position) ||
+  if ((state.subjectRequired !== undefined && state.subjectRequired !== true) ||
+      (state.missingSubjects !== undefined && (!Number.isSafeInteger(state.missingSubjects) || state.missingSubjects < 0)) ||
+      ((state.missingSubjects !== undefined || state.subjectDeferral !== undefined) && !state.subjectRequired)) {
+    throw new Error("GROUP_INVALID_CURSOR: Invalid subject state.");
+  }
+  if (state.subjectDeferral !== undefined && (!state.subjectDeferral || typeof state.subjectDeferral.position !== "string" || !/^[a-f0-9]{64}$/.test(state.subjectDeferral.position) ||
+      !Number.isSafeInteger(state.subjectDeferral.attempts) || state.subjectDeferral.attempts < 1 || state.subjectDeferral.attempts > 2 ||
+      Object.keys(state.subjectDeferral).some(k => !["position", "attempts"].includes(k)))) {
+    throw new Error("GROUP_INVALID_CURSOR: Invalid subject deferral state.");
+  }
+  if (state.retry !== undefined && (!state.retry || typeof state.retry.position !== "string" || !/^[a-f0-9]{64}$/.test(state.retry.position) ||
       !Number.isSafeInteger(state.retry.attempts) || state.retry.attempts < 1 || state.retry.attempts > 2 ||
       Object.keys(state.retry).some(k => !["position", "attempts"].includes(k)))) {
     throw new Error("GROUP_INVALID_CURSOR: Invalid retry state.");
@@ -455,6 +498,12 @@ function decodeCursor(config: AppConfig, cursor: string, criteria: string, group
       throw new Error("GROUP_INVALID_CURSOR: Invalid pinned inventory or parent/collection binding. Restart the query.");
     }
   });
+  const currentPosition = hash(position(state));
+  if ((state.retry && state.retry.position !== currentPosition) ||
+      (state.subjectDeferral && state.subjectDeferral.position !== currentPosition) ||
+      (state.retry?.attempts ?? 0) + (state.subjectDeferral?.attempts ?? 0) >= 3) {
+    throw new Error("GROUP_INVALID_CURSOR: Retry state is exhausted or does not match the pending position.");
+  }
   return state;
 }
 function textFromHtml(value: string): string {
