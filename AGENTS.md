@@ -10,7 +10,7 @@ Hare는 Microsoft Graph delegated 권한으로 Outlook, Teams, SharePoint/OneDri
 - 사용자가 선택한 기존 Hare 데이터 폴더를 작업 폴더로 열고, 모든 명령에 그 절대 경로를 `--data-dir`로 유지합니다. 새 세션에서도 같은 폴더의 `CLAUDE.md`와 `claude/hare-m365-agent-rules.md`를 읽습니다. Git worktree나 비슷한 이름의 새 폴더로 바꾸지 않습니다.
 - 신규 사용자는 Git 저장소·OneDrive 등 동기화 폴더 밖의 로컬 폴더를 선택합니다. 기존 인증이 있다는 이유로 캐시 원문을 읽거나 출력하지 않습니다.
 - 앱 clone·build는 데이터 폴더 밖의 로컬 런타임에서 수행합니다. Windows는 PowerShell, Mac은 POSIX 셸 기준이며 `--command-shell powershell|posix`와 반환된 명령 구문을 일치시킵니다.
-- Git과 Node.js 20.18.1 이상이 실제 Claude Code 세션의 PATH에서 실행 가능해야 합니다. 설치·업데이트 실패 시 중단하고 기존 인증 데이터를 유지합니다.
+- Git과 보안 패치된 Node.js가 실제 Claude Code 세션의 PATH에서 실행 가능해야 합니다. 권장 버전은 Node 24.x LTS의 24.22.1 이상이며, 기존 22.x는 22.23.4 이상, 26.x는 26.12.1 이상을 허용합니다. 다른 주 버전이나 기준 미만은 승인 후 업데이트하며, 설치·업데이트 실패 시 중단하고 기존 인증 데이터를 유지합니다.
 - 연결 확인은 같은 접두사로 `network check --environment claude-code`를 사용합니다. Claude Code 표준 권한 UI로 필요한 범위만 승인받으며 전체 권한 우회 모드를 사용하지 않습니다. Cowork 허용 목록이 Local 실행 권한을 부여하지 않습니다.
 - 호스트 변경만으로 재로그인하지 않습니다. startup의 상태를 따르며 앱·테넌트·계정 불일치나 네트워크 실패는 기존 캐시를 보존하고 중단합니다.
 

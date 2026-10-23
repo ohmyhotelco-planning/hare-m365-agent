@@ -14,6 +14,10 @@ release-templates/cowork-git-clone/Hare_M365_Claude_Cowork_연결가이드.html
 
 ## 실행 개요
 
+Node.js는 **24.x LTS의 24.22.1 이상**을 권장합니다. 기존 22.x는 22.23.4 이상, 26.x는 26.12.1 이상을 지원하며 Node 20 등 지원 종료 버전은 사용하지 않습니다. 이는 [2026-10-21 Node 보안 릴리스](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)를 반영한 최소 기준이며, 이후 보안 패치도 적용해야 합니다.
+
+Hare의 HTTP 요청은 별도 npm 패키지 `undici`를 사용하므로 Node 업데이트만으로 충분하지 않습니다. 최신 `master`의 잠금 파일로 `npm ci` 후 빌드하여 `undici` 7.30.1 이상도 적용합니다. 다른 앱이 관리하는 번들 Node는 직접 교체하지 않고 해당 앱의 업데이트 절차를 따릅니다. 이 기준은 패키지 `engines`와 가이드에 적용되며, 이미 실행 중인 Node 프로세스를 자동 업데이트하거나 종료하지 않습니다.
+
 M365 그룹 원문·첨부 직접 조회는 [그룹메일 명령과 권한 기준](docs/group-mail.md)을 참고합니다. `groups resolve/posts/attachments`는 기존 본인·공유 사서함 조회와 분리되어 있으며, 그룹 권한을 자동 추가하거나 로그인 상태를 교체하지 않습니다.
 
 저장소:
