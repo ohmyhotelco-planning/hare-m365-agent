@@ -27,6 +27,10 @@
     [hidden] { display: none !important; }
     .controls { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
     .copy-status { min-height: 26px; flex: 1 1 220px; }
+    .steps { padding-left: 24px; }
+    .steps li { padding-left: 6px; margin: 12px 0; }
+    .next-action { font-weight: 600; }
+    blockquote { margin: 12px 0; padding: 8px 16px; border-left: 3px solid var(--line); white-space: pre-line; }
     details { margin: 18px 0; padding: 12px 0; border-top: 1px solid var(--line); }
     summary { cursor: pointer; font-weight: 600; }
     li { margin: 10px 0; }
@@ -37,12 +41,12 @@
   </style>
 </head>
 <body>
-  <header><div><h1>Hare M365 Agent 接続ガイド</h1><p class="muted">Claude Desktop · Code · Local | Windows / Mac</p></div></header>
+  <header><div><h1>Hare M365 Agent 接続ガイド</h1><p class="muted">Claude アプリで始める · Windows / Mac</p></div></header>
   <main>
-    <aside class="notice"><p>環境準備 → Hare フォルダー選択 → 接続 → Microsoft ログインの順に進めます。利用可能なツールと既存の Hare ログインをできるだけ再利用します。</p><p>この HTML ファイルをダウンロードし、ブラウザーで開いてください。Teams/OneDrive のプレビューではコピーが制限される場合があります。</p></aside>
-    <label for="platform">使用する OS</label>
-    <select id="platform"><option value="windows">Windows · PowerShell</option><option value="mac">Mac · POSIX</option></select>
-    <section aria-labelledby="prepare"><h2 id="prepare">1. Claude Code Local を開く</h2><p>Claude Desktop の Code タブで進めます。Claude CLI の別途インストールは不要です。次の手順で、Hare に必要な Node.js と Git を Claude が確認します。npm は Node.js と一緒にインストールされます。</p>
+    <aside class="notice"><p>次の4ステップで進めてください。難しい設定は Claude が確認します。</p><p>このファイルを PC に保存し、Edge または Chrome で開いてください。</p></aside>
+    <label for="platform">使っている PC はどちらですか？</label>
+    <select id="platform"><option value="windows">Windows</option><option value="mac">Mac</option></select>
+    <section aria-labelledby="prepare"><h2 id="prepare">1. Claude アプリを開く</h2><p>Claude を開き、Code、Local の順に選びます。Local は自分の PC で作業するという意味です。</p>
       <details id="manual-setup"><summary>Code が開かない、または手動インストールが必要な場合</summary>
         <p>既にインストールしたツールを再インストールしないでください。直前にインストールした場合も、まず Claude を完全に終了して開き直します。エラーが続く場合やインストール済みか不明な場合は社内 IT 担当者に確認してください。以下は未インストールまたは承認済みのアップグレードと確認できた場合だけ進めます。新しくダウンロードしたインストーラーは実行前に公式取得元・有効なデジタル署名・公式配布者を確認してください。確認が難しい場合は実行前に IT 担当者の支援を受けてください。既存ツールにこの確認は要求しません。</p>
         <div data-platform="windows"><h3>Windows</h3><ol><li>Git または Git Bash が必要というエラーが出る場合: Git for Windows の公式ページから PC に合うインストーラーをダウンロードして実行します。システムの種類は Windows の設定 &gt; システム &gt; バージョン情報で確認できます。Git Bash は同梱されています。PATH の画面では Git from the command line and also from 3rd-party software (推奨) を選択してください。他の起動エラーを Git 不足と決めつけないでください。</li><li>Node.js のインストールや更新が必要な場合: 公式ダウンロードページで Windows と 24.x LTS (24.22.1 以上) を選び、Windows Installer (.msi) をダウンロードして実行します。npm も含まれます。Tools for Native Modules の追加インストールはチェックしないでください。Chocolatey、Python、Visual Studio Build Tools などが追加されるためです。</li></ol><p><a href="https://git-scm.com/install/windows">Git for Windows</a> · <a href="https://nodejs.org/en/download">Node.js LTS</a></p></div>
@@ -50,41 +54,58 @@
         <p>公式 Node.js・Git インストーラー、Mac の Apple Command Line Tools、既存 winget は社内で利用が許可されています。インストール前に Claude の説明を確認して承認してください。管理者承認画面は直接操作し、パスワードをチャットに入力しないでください。実際に遮断されたら回避せず IT 担当者に依頼してください。インストール後は Claude を完全に終了し、Local で一度開き直します。選択済みフォルダーは維持します。それでも認識されない場合は環境準備未完了のため Hare 接続へ進まず、IT 担当者に確認してください。</p>
       </details>
     </section>
-    <section aria-labelledby="environment"><h2 id="environment">2. Claude に環境の準備を依頼</h2><p>以下の環境準備プロンプトを Claude Code Local のチャットに貼り付けてください。Claude が必要なツールを確認し、不足があればインストール方法を説明して承認を求めます。すべて準備できたら手順 3 に進んでください。</p>
-      <div data-platform="windows"><h3 id="environment-label-windows">Windows</h3><textarea id="environment-windows" aria-label="環境準備プロンプト (windows)" aria-describedby="environment-label-windows" readonly spellcheck="false">この PC の Hare 実行環境を今確認してください。プロンプトのレビューではなく実際の環境準備の依頼です。読み取り専用の確認から開始し、インストール・更新は対象と方法を説明して別途ユーザー承認を得てください。
+    <section aria-labelledby="environment"><h2 id="environment">2. 必要なプログラムを準備する</h2><p>何が入っているか分からなくても大丈夫です。Claude が調べ、足りなければインストールを手伝います。</p>
+      <ol class="steps"><li>下の「準備の内容をコピー」を押します。</li><li>Claude のチャットに貼り付けて送ります。</li><li>インストールを聞かれたら説明を読み、同意する場合は「インストールして」と答えてください。</li></ol>
+      <div class="controls"><button type="button" id="copy-environment" hidden>準備の内容をコピー</button><span class="copy-status" id="environment-status" role="status" aria-live="polite" data-success="コピーしました。Claude のチャットに貼り付けて送ってください。" data-fallback="下の文章を選択しました。自分でコピーし、Claude のチャットで送ってください。"></span></div>
+      <details id="environment-details"><summary>送る内容を見る</summary>
+      <div data-platform="windows"><h3 id="environment-label-windows">Windows</h3><textarea id="environment-windows" aria-label="Claude に送る準備の内容 (windows)" aria-describedby="environment-label-windows" readonly spellcheck="false">この PC の Hare 実行環境を今確認してください。プロンプトのレビューではなく実際の環境準備の依頼です。読み取り専用の確認から開始し、インストール・更新は対象と方法を説明して別途ユーザー承認を得てください。
+
+ユーザーへの案内: 専門知識がなくても分かるやさしい日本語を使ってください。内部確認の各項目を実況せず、操作が必要なときや結果が変わったときだけ短く案内します。一度に次の操作を一つだけ求め、通常3〜6行にします。ただし重要なリスクや同意事項を行数のために省略しません。点検表、パッケージ ID、バージョン・OS ビルド番号、パス、コマンド、署名者名、ENVIRONMENT_INCOMPLETE などの内部コードは通常の返答に列挙しません。求められた場合だけ秘密を除いた詳細を示してください。コードは内部判定に使い、ユーザーには「インストールが必要です」「準備できました」と伝えます。インストール前は実際に必要なプログラム名・目的、公式取得元、インストール・更新とプログラムを見つける設定変更、本人が管理者許可画面を確認することを短く説明して一度承認を得てください。正確な ID・バージョン・配布者・パスは内部で確認し、求められたら提示します。一つだけ不足していればその一つだけを確認します。未インストールが明確な場合や回答済みの場合は過去のインストールを再度質問しません。不明な場合だけ一度聞いてください。インストールの選択肢はその画面が出たときに一つずつ案内します。確認前に完了と言わず、失敗時は何ができないかと次に必要な操作を先に伝えます。安全・同意・停止条件は維持してください。
+
+次は Node.js と Git が両方ない場合だけの例です。実際の結果に合わせて名前と変更内容を調整し、例を PC の確認結果として扱わないでください。
+Hare に必要な Node.js と Git が入っていません。
+公式のインストーラーで2つを入れ、Claude が見つけられるよう設定してもよいですか？
+インストールの許可画面が出たら、ご自身で確認してください。
 
 社内許可方針: この Hare 環境準備では、nodejs.org の公式 Node.js インストーラー、git-scm.com から案内される公式 Git インストーラー、Mac の Apple Command Line Tools、Windows の既存 winget の利用が許可されています。社員に会社の許可を再確認させないでください。個別のインストール・アップグレードの説明と明示的なユーザー承認は別途必要です。この許可は管理者権限の付与や実際の OS・セキュリティ制限の回避を意味しません。
 
 Hare 接続前に、この PC の必須ツールだけを準備してください。提供されたホスト・実行環境情報で Claude Desktop &gt; Code &gt; Local と実際の OS を確認します。判別できない場合だけ Local か一度確認し、OS やパスだけで推測しません。Cloud/SSH/WSL では停止してください。この環境準備は Hare フォルダー未選択でも進められます。フォルダー選択・作成は Hare 接続時に行い、アプリ自体が作業フォルダーを要求する場合のみローカルフォルダーの選択を案内してください。この段階では Hare のインストール、git clone、npm ci、ビルド、Microsoft ログイン、業務検索を行わないでください。既存の Hare データファイルや認証キャッシュを読んだり変更したりしないでください。
 
-既存ツールは Get-Command で実際の実行パスとリンク先を確認し、バージョンコマンドが成功するかを確認します。標準の保存先、OS のインストール記録、nvm-windows など既存のバージョン管理ツールの場所を認めます。既存ツールの署名確認は任意の診断です。署名の有無・確認失敗・署名者の違いだけで正常動作を止めないでください。この PC で確認した署名者は Node.js が OpenJS Foundation、Git for Windows が Johannes Schindelin ですが、固定の許可リストではありません。Node と同じフォルダーの npm.cmd はそのまま使います。グローバル更新などで別の npm が選ばれた場合は場所の違いだけを報告し、正常実行を止めません。npm スクリプトチェーンの解析やパッケージの再ダウンロード・展開・ハッシュ比較は行いません。新しいインストーラーは別途、公式取得元、Get-AuthenticodeSignature -LiteralPath の Valid、公式配布者の一致を確認し、ユーザー承認後に実行します。新しいインストーラーの出所・署名を確認できない場合や OS が実際に遮断する場合は実行しません。
+既存ツールは Get-Command で実際の実行パスとリンク先を確認し、バージョンコマンドが成功するかを確認します。標準の保存先、OS のインストール記録、nvm-windows など既存のバージョン管理ツールの場所を認めます。既存ツールの署名確認は任意の診断です。署名の有無・確認失敗・署名者の違いだけで正常動作を止めないでください。この PC で確認した署名者は Node.js が OpenJS Foundation、Git for Windows が Johannes Schindelin ですが、固定の許可リストではありません。Node と同じフォルダーの npm.cmd はそのまま使います。グローバル更新などで別の npm が選ばれた場合は場所の違いは内部でのみ確認し、正常実行を止めません。求められた場合だけ違いを説明します。npm スクリプトチェーンの解析やパッケージの再ダウンロード・展開・ハッシュ比較は行いません。新しいインストーラーは別途、公式取得元、Get-AuthenticodeSignature -LiteralPath の Valid、公式配布者の一致を確認し、ユーザー承認後に実行します。新しいインストーラーの出所・署名を確認できない場合や OS が実際に遮断する場合は実行しません。
 
 同じセッションで node --version、npm --version、git --version を読み取り専用で確認し、準備済み/インストール必要/アップグレード必要/インストール済み・PATH 未反映/確認不可を区別してください。推奨: Node.js 24.x LTS (24.22.1 以上)。既存の 22.x は 22.23.4 以上、26.x は 26.12.1 以上も利用できます。各最低バージョン未満はアップグレード必要と判定し、他のメジャーバージョンも更新が必要です。インストールと同じ承認手順を適用します。新規インストールと更新には公式サイトの 24.x LTS 最新パッチを使用します。Node 20.x はサポート終了で準備済みにはしません。更新が拒否または失敗した場合は ENVIRONMENT_INCOMPLETE で停止し、既存の Hare データを保持します。要件を満たして利用可能なツールはユーザー承認なしで再インストール・更新しないでください。Git は git --version と git branch -h の --show-current 対応を確認し、ヘルプの終了コードだけをインストール失敗としません。必要なオプションがなければ更新を提案します。権限拒否やネットワーク障害を未インストールと判断しません。Mac の git がインストール画面を開いたら、自動承認せずユーザーに伝えてください。
 
-コマンドが見つからなくても、すぐにインストールを提案しないでください。新しいセッションでも標準の保存先と OS のインストール記録、既存のバージョン管理ツールの場所を必要な範囲だけ読み取り専用で確認します。ファイルの存在だけで準備完了とせず、見つかったツールの絶対パスでバージョンを確認してください。絶対パスでは動くが通常のコマンドでは動かない場合はインストール済み・PATH 未反映と判定し、再インストールしません。標準の保存先にないだけで未インストールと断定しないでください。状態や過去の試行が不明なら、最近のインストールや別の保存先をユーザーに確認して停止します。ディスク全体の検索や認証キャッシュの読み取りは禁止です。
+コマンドが見つからなくても、すぐにインストールを提案しないでください。新しいセッションでも標準の保存先と OS のインストール記録、既存のバージョン管理ツールの場所を必要な範囲だけ読み取り専用で確認します。ファイルの存在だけで準備完了とせず、見つかったツールの絶対パスでバージョンを確認してください。絶対パスでは動くが通常のコマンドでは動かない場合はインストール済み・PATH 未反映と判定し、再インストールしません。標準の保存先にないだけで未インストールと断定しないでください。インストールの有無が不明な場合だけ、最近のインストールや別の保存先をユーザーに確認して停止します。ディスク全体の検索や認証キャッシュの読み取りは禁止です。
 
-インストール・アップグレードが必要な項目だけについて、名前・理由・公式配布元・方法・変更範囲・管理者権限の要否を示し、明示的承認を待ってください。上記の社内許可方針に明記した方法を使用します。方法や対象が変われば再承認を得てください。npm は Node.js と一緒にインストールし、単独で最新版に更新しません。既存のバージョン管理ツールがあれば、競合するインストールを追加せず現状を先に確認してください。
+インストール・アップグレードが必要な項目だけについて、名前・目的・公式のインストール方法・PC 設定の変更・管理者許可画面の要否をやさしく短く説明し、明示的承認を待ってください。技術情報は内部で確認し、求められた場合だけ詳しく説明します。上記の社内許可方針に明記した方法を使用します。方法や対象が変われば再承認を得てください。npm は Node.js と一緒にインストールし、単独で最新版に更新しません。既存のバージョン管理ツールがあれば、競合するインストールを追加せず現状を先に確認してください。
 
 承認後に限り、許可された標準ツールで対象のインストールを実行します。インストール画面・管理者承認・利用できないツールなどでユーザー操作が必要なら、必要なクリックを案内して待ってください。パスワードを要求したり読んだりしません。権限拒否やポリシーによる遮断では停止し、社内 IT 担当者への確認を案内してください。セキュリティ設定・実行ポリシー・PATH を勝手に変更したり、権限を回避したりしないでください。この準備のために Claude CLI、WSL、Docker、別のパッケージ管理ツールを新規インストールしません。
 
 インストールしたら Claude を完全に終了し、Local で開き直すよう案内してください。選択済みフォルダーは維持します。このプロンプトを再開したらバージョンを再確認し、すべて使える場合だけ環境準備完了と伝えて Hare 接続へ案内します。再起動後も見つからなければ再インストールを繰り返さずエラーを報告して停止します。環境準備完了を Hare ログイン成功として扱わないでください。
 
-対象 OS: Windows ネイティブ Local。公式配布元は https://nodejs.org/en/download と https://git-scm.com/install/windows です。npm は npm.cmd --version で確認し、npm.ps1 ポリシーエラーを未インストールと扱わないでください。コマンドが見つからない場合、実際の ProgramFiles 内の nodejs と Git/cmd (通常 C:\Program Files\nodejs、C:\Program Files\Git\cmd)、LocalAppData 内の Programs/Git、OS のインストール記録、確認済みのバージョン管理ツールの保存先だけを読み取り専用で確認します。この準備作業での既存 winget の社内許可は確認済みです。Node LTS=OpenJS.NodeJS.LTS、Git=Git.Git を --exact --source winget で照会してください。承認後のインストールは --interactive でオプションをユーザーが確認し、--silent や任意の --override は使いません。Node は npm を含む MSI を選び、portable ZIP は使いません。インストール前にパッケージ ID・配布者・取得元・バージョン・変更範囲を示し、明示的承認を得てください。winget がない、または遮断されている場合は新規インストール・修復・制限回避をせず、許可済み公式インストーラーの手動手順を案内します。そのインストールも実際に遮断されれば停止します。全パッケージの一括更新やソースの追加・変更は禁止です。UAC はユーザーが直接操作します。Node の Tools for Native Modules はチェックしません。Git の PATH は Git from the command line and also from 3rd-party software を選び、この PATH 変更も承認前に説明します。任意の別途 PATH 編集はしません。PowerShell 構文を Git Bash に直接渡さないでください。
+対象 OS: Windows ネイティブ Local。公式配布元は https://nodejs.org/en/download と https://git-scm.com/install/windows です。npm は npm.cmd --version で確認し、npm.ps1 ポリシーエラーを未インストールと扱わないでください。コマンドが見つからない場合、実際の ProgramFiles 内の nodejs と Git/cmd (通常 C:\Program Files\nodejs、C:\Program Files\Git\cmd)、LocalAppData 内の Programs/Git、OS のインストール記録、確認済みのバージョン管理ツールの保存先だけを読み取り専用で確認します。この準備作業での既存 winget の社内許可は確認済みです。Node LTS=OpenJS.NodeJS.LTS、Git=Git.Git を --exact --source winget で照会してください。承認後のインストールは --interactive でオプションをユーザーが確認し、--silent や任意の --override は使いません。Node は npm を含む MSI を選び、portable ZIP は使いません。インストール前にパッケージ ID・配布者・取得元・バージョン・変更範囲を内部で確認します。ユーザーには名前・目的・PC の変更をやさしく短く説明し、明示的承認を得てください。winget がない、または遮断されている場合は新規インストール・修復・制限回避をせず、許可済み公式インストーラーの手動手順を案内します。そのインストールも実際に遮断されれば停止します。全パッケージの一括更新やソースの追加・変更は禁止です。UAC はユーザーが直接操作します。Node の Tools for Native Modules はチェックしません。Git の PATH は Git from the command line and also from 3rd-party software を選び、この PATH 変更も承認前に説明します。任意の別途 PATH 編集はしません。PowerShell 構文を Git Bash に直接渡さないでください。
 
-インストール済み・PATH 未反映は ENVIRONMENT_INCOMPLETE (環境準備未完了) であり、Hare 接続に進んではいけません。未再起動なら Claude を完全に終了し、Local で一度だけ開き直すよう案内します。新しいセッションでは、この問題で既に再起動したかを先に確認し、実施済みなら再び要求しません。再起動後のセッションで通常のコマンドによりバージョンを再確認します (Windows は npm.cmd --version)。まだ認識されなければ ENVIRONMENT_INCOMPLETE と対象ツール・エラーを報告し、IT 確認を案内してください。再インストール・手動 PATH 編集・絶対パスによる Hare 接続への迂回はしません。バージョンの条件を満たし、通常のコマンドがすべて動く場合のみ環境準備完了とします。</textarea></div>
-<div data-platform="mac"><h3 id="environment-label-mac">Mac</h3><textarea id="environment-mac" aria-label="環境準備プロンプト (mac)" aria-describedby="environment-label-mac" readonly spellcheck="false">この PC の Hare 実行環境を今確認してください。プロンプトのレビューではなく実際の環境準備の依頼です。読み取り専用の確認から開始し、インストール・更新は対象と方法を説明して別途ユーザー承認を得てください。
+インストール済み・PATH 未反映は ENVIRONMENT_INCOMPLETE (環境準備未完了) であり、Hare 接続に進んではいけません。未再起動なら Claude を完全に終了し、Local で一度だけ開き直すよう案内します。新しいセッションでは、この問題で既に再起動したかを先に確認し、実施済みなら再び要求しません。再起動後のセッションで通常のコマンドによりバージョンを再確認します (Windows は npm.cmd --version)。まだ認識されなければ内部では ENVIRONMENT_INCOMPLETE と判定し、まだプログラムを使えないことをやさしく説明して IT 確認を案内してください。技術的なエラーの詳細は求められた場合だけ示します。再インストール・手動 PATH 編集・絶対パスによる Hare 接続への迂回はしません。バージョンの条件を満たし、通常のコマンドがすべて動く場合のみ環境準備完了とします。</textarea></div>
+<div data-platform="mac"><h3 id="environment-label-mac">Mac</h3><textarea id="environment-mac" aria-label="Claude に送る準備の内容 (mac)" aria-describedby="environment-label-mac" readonly spellcheck="false">この PC の Hare 実行環境を今確認してください。プロンプトのレビューではなく実際の環境準備の依頼です。読み取り専用の確認から開始し、インストール・更新は対象と方法を説明して別途ユーザー承認を得てください。
+
+ユーザーへの案内: 専門知識がなくても分かるやさしい日本語を使ってください。内部確認の各項目を実況せず、操作が必要なときや結果が変わったときだけ短く案内します。一度に次の操作を一つだけ求め、通常3〜6行にします。ただし重要なリスクや同意事項を行数のために省略しません。点検表、パッケージ ID、バージョン・OS ビルド番号、パス、コマンド、署名者名、ENVIRONMENT_INCOMPLETE などの内部コードは通常の返答に列挙しません。求められた場合だけ秘密を除いた詳細を示してください。コードは内部判定に使い、ユーザーには「インストールが必要です」「準備できました」と伝えます。インストール前は実際に必要なプログラム名・目的、公式取得元、インストール・更新とプログラムを見つける設定変更、本人が管理者許可画面を確認することを短く説明して一度承認を得てください。正確な ID・バージョン・配布者・パスは内部で確認し、求められたら提示します。一つだけ不足していればその一つだけを確認します。未インストールが明確な場合や回答済みの場合は過去のインストールを再度質問しません。不明な場合だけ一度聞いてください。インストールの選択肢はその画面が出たときに一つずつ案内します。確認前に完了と言わず、失敗時は何ができないかと次に必要な操作を先に伝えます。安全・同意・停止条件は維持してください。
+
+次は Node.js と Git が両方ない場合だけの例です。実際の結果に合わせて名前と変更内容を調整し、例を PC の確認結果として扱わないでください。
+Hare に必要な Node.js と Git が入っていません。
+公式のインストーラーで2つを入れ、Claude が見つけられるよう設定してもよいですか？
+インストールの許可画面が出たら、ご自身で確認してください。
 
 社内許可方針: この Hare 環境準備では、nodejs.org の公式 Node.js インストーラー、git-scm.com から案内される公式 Git インストーラー、Mac の Apple Command Line Tools、Windows の既存 winget の利用が許可されています。社員に会社の許可を再確認させないでください。個別のインストール・アップグレードの説明と明示的なユーザー承認は別途必要です。この許可は管理者権限の付与や実際の OS・セキュリティ制限の回避を意味しません。
 
 Hare 接続前に、この PC の必須ツールだけを準備してください。提供されたホスト・実行環境情報で Claude Desktop &gt; Code &gt; Local と実際の OS を確認します。判別できない場合だけ Local か一度確認し、OS やパスだけで推測しません。Cloud/SSH/WSL では停止してください。この環境準備は Hare フォルダー未選択でも進められます。フォルダー選択・作成は Hare 接続時に行い、アプリ自体が作業フォルダーを要求する場合のみローカルフォルダーの選択を案内してください。この段階では Hare のインストール、git clone、npm ci、ビルド、Microsoft ログイン、業務検索を行わないでください。既存の Hare データファイルや認証キャッシュを読んだり変更したりしないでください。
 
-既存ツールは command -v で実際の実行パスとリンク先を確認し、バージョンコマンドが成功するかを確認します。標準の保存先、インストール記録、既存のバージョン管理ツールの場所を認めます。既存ツールの codesign 検証は必須ではなく、署名や記録の不足だけで正常動作を止めません。Node と同じインストールの npm はそのまま使い、グローバル更新などで別の場所の npm が選ばれた場合は違いだけ報告します。npm スクリプトチェーンの解析やパッケージの再ダウンロード・展開・ハッシュ比較は行いません。新しい .pkg は別途、公式取得元と pkgutil --check-signature の有効な署名・公式配布者を確認し、ユーザー承認後に実行します。確認失敗や実際の OS 遮断では実行しません。Gatekeeper は解除しません。
+既存ツールは command -v で実際の実行パスとリンク先を確認し、バージョンコマンドが成功するかを確認します。標準の保存先、インストール記録、既存のバージョン管理ツールの場所を認めます。既存ツールの codesign 検証は必須ではなく、署名や記録の不足だけで正常動作を止めません。Node と同じインストールの npm はそのまま使い、グローバル更新などで別の場所の npm が選ばれた場合は場所の違いは内部でのみ確認し、正常実行を止めません。求められた場合だけ違いを説明します。npm スクリプトチェーンの解析やパッケージの再ダウンロード・展開・ハッシュ比較は行いません。新しい .pkg は別途、公式取得元と pkgutil --check-signature の有効な署名・公式配布者を確認し、ユーザー承認後に実行します。確認失敗や実際の OS 遮断では実行しません。Gatekeeper は解除しません。
 
 同じセッションで node --version、npm --version、git --version を読み取り専用で確認し、準備済み/インストール必要/アップグレード必要/インストール済み・PATH 未反映/確認不可を区別してください。推奨: Node.js 24.x LTS (24.22.1 以上)。既存の 22.x は 22.23.4 以上、26.x は 26.12.1 以上も利用できます。各最低バージョン未満はアップグレード必要と判定し、他のメジャーバージョンも更新が必要です。インストールと同じ承認手順を適用します。新規インストールと更新には公式サイトの 24.x LTS 最新パッチを使用します。Node 20.x はサポート終了で準備済みにはしません。更新が拒否または失敗した場合は ENVIRONMENT_INCOMPLETE で停止し、既存の Hare データを保持します。要件を満たして利用可能なツールはユーザー承認なしで再インストール・更新しないでください。Git は git --version と git branch -h の --show-current 対応を確認し、ヘルプの終了コードだけをインストール失敗としません。必要なオプションがなければ更新を提案します。権限拒否やネットワーク障害を未インストールと判断しません。Mac の git がインストール画面を開いたら、自動承認せずユーザーに伝えてください。
 
-コマンドが見つからなくても、すぐにインストールを提案しないでください。新しいセッションでも標準の保存先と OS のインストール記録、既存のバージョン管理ツールの場所を必要な範囲だけ読み取り専用で確認します。ファイルの存在だけで準備完了とせず、見つかったツールの絶対パスでバージョンを確認してください。絶対パスでは動くが通常のコマンドでは動かない場合はインストール済み・PATH 未反映と判定し、再インストールしません。標準の保存先にないだけで未インストールと断定しないでください。状態や過去の試行が不明なら、最近のインストールや別の保存先をユーザーに確認して停止します。ディスク全体の検索や認証キャッシュの読み取りは禁止です。
+コマンドが見つからなくても、すぐにインストールを提案しないでください。新しいセッションでも標準の保存先と OS のインストール記録、既存のバージョン管理ツールの場所を必要な範囲だけ読み取り専用で確認します。ファイルの存在だけで準備完了とせず、見つかったツールの絶対パスでバージョンを確認してください。絶対パスでは動くが通常のコマンドでは動かない場合はインストール済み・PATH 未反映と判定し、再インストールしません。標準の保存先にないだけで未インストールと断定しないでください。インストールの有無が不明な場合だけ、最近のインストールや別の保存先をユーザーに確認して停止します。ディスク全体の検索や認証キャッシュの読み取りは禁止です。
 
-インストール・アップグレードが必要な項目だけについて、名前・理由・公式配布元・方法・変更範囲・管理者権限の要否を示し、明示的承認を待ってください。上記の社内許可方針に明記した方法を使用します。方法や対象が変われば再承認を得てください。npm は Node.js と一緒にインストールし、単独で最新版に更新しません。既存のバージョン管理ツールがあれば、競合するインストールを追加せず現状を先に確認してください。
+インストール・アップグレードが必要な項目だけについて、名前・目的・公式のインストール方法・PC 設定の変更・管理者許可画面の要否をやさしく短く説明し、明示的承認を待ってください。技術情報は内部で確認し、求められた場合だけ詳しく説明します。上記の社内許可方針に明記した方法を使用します。方法や対象が変われば再承認を得てください。npm は Node.js と一緒にインストールし、単独で最新版に更新しません。既存のバージョン管理ツールがあれば、競合するインストールを追加せず現状を先に確認してください。
 
 承認後に限り、許可された標準ツールで対象のインストールを実行します。インストール画面・管理者承認・利用できないツールなどでユーザー操作が必要なら、必要なクリックを案内して待ってください。パスワードを要求したり読んだりしません。権限拒否やポリシーによる遮断では停止し、社内 IT 担当者への確認を案内してください。セキュリティ設定・実行ポリシー・PATH を勝手に変更したり、権限を回避したりしないでください。この準備のために Claude CLI、WSL、Docker、別のパッケージ管理ツールを新規インストールしません。
 
@@ -92,16 +113,24 @@ Hare 接続前に、この PC の必須ツールだけを準備してくださ�
 
 対象 OS: Mac Local、POSIX シェル。公式配布元は https://nodejs.org/en/download と https://git-scm.com/install/mac です。コマンドがない場合、/usr/local/bin/node、/usr/local/bin/npm、/usr/bin/git、Apple のインストール記録、確認済みのバージョン管理ツールの保存先だけを読み取り専用で確認します。Git 用 Apple Command Line Tools のインストール画面は xcode-select --install で要求できますが、ユーザー承認前には実行しないでください。
 
-インストール済み・PATH 未反映は ENVIRONMENT_INCOMPLETE (環境準備未完了) であり、Hare 接続に進んではいけません。未再起動なら Claude を完全に終了し、Local で一度だけ開き直すよう案内します。新しいセッションでは、この問題で既に再起動したかを先に確認し、実施済みなら再び要求しません。再起動後のセッションで通常のコマンドによりバージョンを再確認します (Windows は npm.cmd --version)。まだ認識されなければ ENVIRONMENT_INCOMPLETE と対象ツール・エラーを報告し、IT 確認を案内してください。再インストール・手動 PATH 編集・絶対パスによる Hare 接続への迂回はしません。バージョンの条件を満たし、通常のコマンドがすべて動く場合のみ環境準備完了とします。</textarea></div>
-      <div class="controls"><button type="button" id="copy-environment" hidden>環境準備プロンプトをコピー</button><span class="copy-status" id="environment-status" role="status" aria-live="polite" data-success="プロンプトをコピーしました。" data-fallback="自動コピーを利用できません。選択されたプロンプトを手動でコピーしてください。"></span></div>
-      <p>要件を満たすツールは再インストールしません。アップグレードが必要なら Claude が説明して承認を求めます。インストール後は Claude を完全に終了し、Local で開き直してください。選択済みフォルダーがあれば維持してください。新しいチャットでは、直前にインストールしたことも伝えてください。</p><noscript><p>JavaScript が無効です。使用する OS のプロンプトを手動で選択してコピーしてください。</p></noscript>
+インストール済み・PATH 未反映は ENVIRONMENT_INCOMPLETE (環境準備未完了) であり、Hare 接続に進んではいけません。未再起動なら Claude を完全に終了し、Local で一度だけ開き直すよう案内します。新しいセッションでは、この問題で既に再起動したかを先に確認し、実施済みなら再び要求しません。再起動後のセッションで通常のコマンドによりバージョンを再確認します (Windows は npm.cmd --version)。まだ認識されなければ内部では ENVIRONMENT_INCOMPLETE と判定し、まだプログラムを使えないことをやさしく説明して IT 確認を案内してください。技術的なエラーの詳細は求められた場合だけ示します。再インストール・手動 PATH 編集・絶対パスによる Hare 接続への迂回はしません。バージョンの条件を満たし、通常のコマンドがすべて動く場合のみ環境準備完了とします。</textarea></div>
+      </details>
+      <p class="muted">2つとも入っていない場合の案内例</p><blockquote>Hare に必要な Node.js と Git が入っていません。
+公式のインストーラーで2つを入れ、Claude が見つけられるよう設定してもよいですか？
+インストールの許可画面が出たら、ご自身で確認してください。</blockquote>
+      <p>Claude から開き直すよう案内されたら、アプリを完全に終了して開き直し、ステップ2の内容をもう一度送ってください。</p><noscript><p>コピーボタンが表示されない場合は「送る内容を見る」を開いてコピーしてください。</p></noscript>
+      <p class="next-action">Claude に「準備できました」と言われたら、ステップ3へ進んでください。</p>
     </section>
-    <section aria-labelledby="setup"><h2 id="setup">3. Hare に接続</h2><p>Code タブで Local を選び、既存の Hare データフォルダーを作業フォルダーとして開きます。初めて利用する場合のみ、リポジトリ外の OneDrive ではない専用ローカルフォルダーを選んでください。クラウド/サンドボックスのパス、Git worktree、推測した代替フォルダーは使用しません。</p><p>これは AI 用プロンプトであり、ターミナルに貼り付けるコマンドではありません。AI が選択中の絶対パスを確認し、プレースホルダーを安全に置換してから実行します。</p>
-      <div data-platform="windows"><h3 id="label-windows">Windows · PowerShell</h3><textarea id="prompt-windows" aria-label="Claude Code Local に貼り付けるプロンプト (windows)" aria-describedby="label-windows" readonly spellcheck="false">この PC で Hare M365 Agent の接続を進めてください。以下の準備コマンドによる clone・依存関係のインストール・ビルド・ルール生成を依頼します。Microsoft ログインはユーザーと確認して進めてください。メール送信や業務データ変更の承認ではありません。
+    <section aria-labelledby="setup"><h2 id="setup">3. フォルダーを選んで接続する</h2><p>Hare を使ったことがありますか？ 前に使った Hare フォルダーをそのまま選んでください。</p><p>初めての場合は PC に Hare 専用のフォルダーを作って選びます。ログイン情報を保存する場所です。OneDrive に自動保存されるフォルダーやプログラムのソースがあるフォルダーは避けてください。</p><p>下のボタンを押し、Claude のチャットに貼り付けて送ってください。</p>
+      <div class="controls"><button type="button" id="copy" hidden>接続の内容をコピー</button><span class="copy-status" id="copy-status" role="status" aria-live="polite" data-success="コピーしました。Claude のチャットに貼り付けて送ってください。" data-fallback="下の文章を選択しました。自分でコピーし、Claude のチャットで送ってください。"></span></div>
+      <details id="connection-details"><summary>送る内容を見る</summary>
+      <div data-platform="windows"><h3 id="label-windows">Windows</h3><textarea id="prompt-windows" aria-label="Claude に送る接続の内容 (windows)" aria-describedby="label-windows" readonly spellcheck="false">この PC で Hare M365 Agent の接続を進めてください。以下の準備コマンドによる clone・依存関係のインストール・ビルド・ルール生成を依頼します。Microsoft ログインはユーザーと確認して進めてください。メール送信や業務データ変更の承認ではありません。
+
+ユーザーへの案内: 専門知識がなくても分かるやさしい日本語を使ってください。内部確認の各項目を実況せず、操作が必要なときや結果が変わったときだけ短く案内します。一度に次の操作を一つだけ求め、通常3〜6行にします。ただし重要なリスクや同意事項を行数のために省略しません。点検表、パッケージ ID、バージョン・OS ビルド番号、パス、コマンド、署名者名、ENVIRONMENT_INCOMPLETE などの内部コードは通常の返答に列挙しません。求められた場合だけ秘密を除いた詳細を示してください。コードは内部判定に使い、ユーザーには「インストールが必要です」「準備できました」と伝えます。インストール前は実際に必要なプログラム名・目的、公式取得元、インストール・更新とプログラムを見つける設定変更、本人が管理者許可画面を確認することを短く説明して一度承認を得てください。正確な ID・バージョン・配布者・パスは内部で確認し、求められたら提示します。一つだけ不足していればその一つだけを確認します。未インストールが明確な場合や回答済みの場合は過去のインストールを再度質問しません。不明な場合だけ一度聞いてください。インストールの選択肢はその画面が出たときに一つずつ案内します。確認前に完了と言わず、失敗時は何ができないかと次に必要な操作を先に伝えます。安全・同意・停止条件は維持してください。
 
 現在の Claude Desktop の Code &gt; Local セッションで Hare を準備してください。提供されたホスト・実行環境情報で確認し、判別できない場合だけ Local かユーザーに一度確認してください。OS やパスだけで Local と推測しません。Cloud/SSH/WSL では実行せず停止してください。
 
-現在選択されている作業フォルダーの正確な絶対パスを確認してください。既存ユーザーは既存の Hare データフォルダーを再利用します。初回のみ、ユーザーが選択した OneDrive 外かつ Git リポジトリ外の専用ローカルフォルダーを使ってください。選択がない、または不明な場合は FOLDER_REQUIRED を報告して停止してください。推測したパス、新しい代替フォルダー、Git worktree、クラウド/サンドボックスの場所を使わないでください。
+現在選択されている作業フォルダーの正確な絶対パスを確認してください。既存ユーザーは既存の Hare データフォルダーを再利用します。初回のみ、ユーザーが選択した OneDrive 外かつ Git リポジトリ外の専用ローカルフォルダーを使ってください。選択がない、または不明な場合は 内部では FOLDER_REQUIRED と判定し、フォルダーを選ぶ必要があると案内して停止してください。推測したパス、新しい代替フォルダー、Git worktree、クラウド/サンドボックスの場所を使わないでください。
 
 以下のコマンドの &lt;SELECTED_LOCAL_FOLDER&gt; だけを、現在選択中の正確な絶対 Local 作業フォルダーに置換してください。パス内の引用符などは対象シェルの規則でエスケープし、パス自体の値は変更しないでください。他のコマンド内容は変更しません。未置換のプレースホルダーや山括弧を含む仮のパスを絶対に実行しないでください。安全に置換できなければ停止してください。
 
@@ -221,16 +250,18 @@ startup の setup.state と setup.nextCommand だけに従い、一段階ずつ�
 
 LOGIN_COMPLETE_REQUIRED では既存のログイン待機状態とコードを保持してください。ユーザーがログイン完了を明示的に確認するまで完了コマンドを実行しません。確認後、setup.nextCommand を変更せずフォアグラウンドで正確に一度実行してください。ポーリング、バックグラウンド実行、login-start の重複は禁止です。READY では準備完了を伝えて停止してください。業務検索は別途のユーザー依頼と loggedIn=true かつ tokenUsable=true の確認後のみ実行してください。
 
-BLOCKED または AUTH_CHECK_BLOCKED の loggedIn=null/tokenUsable=null は認証未確認であり、ログアウトや期限切れではありません。認証フォルダーとキャッシュを保持してください。生成されたルールの限定された network check --environment claude-code 手順だけに従い、失敗・拒否済みの検査は繰り返さないでください。再ログイン、キャッシュ初期化、別 dataDir、コネクター/GUI への迂回はしません。他の失敗では失敗段階と秘密情報を含まないエラー一行だけを報告して停止してください。
+BLOCKED または AUTH_CHECK_BLOCKED の loggedIn=null/tokenUsable=null は認証未確認であり、ログアウトや期限切れではありません。認証フォルダーとキャッシュを保持してください。生成されたルールの限定された network check --environment claude-code 手順だけに従い、失敗・拒否済みの検査は繰り返さないでください。再ログイン、キャッシュ初期化、別 dataDir、コネクター/GUI への迂回はしません。他の失敗では何ができないかと次に必要な操作をやさしい一文で案内して停止してください。技術的なエラーの詳細は求められた場合だけ秘密を除いて提示します。
 
 以後の M365 検索と Outlook 下書きは Hare CLI だけを使用してください。コネクター、Computer Use、ブラウザー自動化、Outlook/Teams/SharePoint GUI に迂回しません。既定は読み取り専用です。Outlook 下書きは宛先、件名、本文、添付の完全なプレビューと明示的承認の後だけ作成し、送信しないでください。ダウンロード/export の条件付き AWAITING_USER_APPROVAL、全体計画、承認トークン、制限、再開手順は生成されたルールを維持し、無条件許可に変更しないでください。
 
 次回も同じフォルダーでチャットを開始し、CLAUDE.md のルール参照が適用されていることを確認して生成された状態確認コマンドを使ってください。新しいチャットというだけで再インストールや再ログインをしないでください。Local 実行でも返された業務内容がモデルに送信されることをユーザーに伝えてください。</textarea></div>
-      <div data-platform="mac"><h3 id="label-mac">Mac · POSIX</h3><textarea id="prompt-mac" aria-label="Claude Code Local に貼り付けるプロンプト (mac)" aria-describedby="label-mac" readonly spellcheck="false">この PC で Hare M365 Agent の接続を進めてください。以下の準備コマンドによる clone・依存関係のインストール・ビルド・ルール生成を依頼します。Microsoft ログインはユーザーと確認して進めてください。メール送信や業務データ変更の承認ではありません。
+      <div data-platform="mac"><h3 id="label-mac">Mac</h3><textarea id="prompt-mac" aria-label="Claude に送る接続の内容 (mac)" aria-describedby="label-mac" readonly spellcheck="false">この PC で Hare M365 Agent の接続を進めてください。以下の準備コマンドによる clone・依存関係のインストール・ビルド・ルール生成を依頼します。Microsoft ログインはユーザーと確認して進めてください。メール送信や業務データ変更の承認ではありません。
+
+ユーザーへの案内: 専門知識がなくても分かるやさしい日本語を使ってください。内部確認の各項目を実況せず、操作が必要なときや結果が変わったときだけ短く案内します。一度に次の操作を一つだけ求め、通常3〜6行にします。ただし重要なリスクや同意事項を行数のために省略しません。点検表、パッケージ ID、バージョン・OS ビルド番号、パス、コマンド、署名者名、ENVIRONMENT_INCOMPLETE などの内部コードは通常の返答に列挙しません。求められた場合だけ秘密を除いた詳細を示してください。コードは内部判定に使い、ユーザーには「インストールが必要です」「準備できました」と伝えます。インストール前は実際に必要なプログラム名・目的、公式取得元、インストール・更新とプログラムを見つける設定変更、本人が管理者許可画面を確認することを短く説明して一度承認を得てください。正確な ID・バージョン・配布者・パスは内部で確認し、求められたら提示します。一つだけ不足していればその一つだけを確認します。未インストールが明確な場合や回答済みの場合は過去のインストールを再度質問しません。不明な場合だけ一度聞いてください。インストールの選択肢はその画面が出たときに一つずつ案内します。確認前に完了と言わず、失敗時は何ができないかと次に必要な操作を先に伝えます。安全・同意・停止条件は維持してください。
 
 現在の Claude Desktop の Code &gt; Local セッションで Hare を準備してください。提供されたホスト・実行環境情報で確認し、判別できない場合だけ Local かユーザーに一度確認してください。OS やパスだけで Local と推測しません。Cloud/SSH/WSL では実行せず停止してください。
 
-現在選択されている作業フォルダーの正確な絶対パスを確認してください。既存ユーザーは既存の Hare データフォルダーを再利用します。初回のみ、ユーザーが選択した OneDrive 外かつ Git リポジトリ外の専用ローカルフォルダーを使ってください。選択がない、または不明な場合は FOLDER_REQUIRED を報告して停止してください。推測したパス、新しい代替フォルダー、Git worktree、クラウド/サンドボックスの場所を使わないでください。
+現在選択されている作業フォルダーの正確な絶対パスを確認してください。既存ユーザーは既存の Hare データフォルダーを再利用します。初回のみ、ユーザーが選択した OneDrive 外かつ Git リポジトリ外の専用ローカルフォルダーを使ってください。選択がない、または不明な場合は 内部では FOLDER_REQUIRED と判定し、フォルダーを選ぶ必要があると案内して停止してください。推測したパス、新しい代替フォルダー、Git worktree、クラウド/サンドボックスの場所を使わないでください。
 
 以下のコマンドの &lt;SELECTED_LOCAL_FOLDER&gt; だけを、現在選択中の正確な絶対 Local 作業フォルダーに置換してください。パス内の引用符などは対象シェルの規則でエスケープし、パス自体の値は変更しないでください。他のコマンド内容は変更しません。未置換のプレースホルダーや山括弧を含む仮のパスを絶対に実行しないでください。安全に置換できなければ停止してください。
 
@@ -322,17 +353,17 @@ startup の setup.state と setup.nextCommand だけに従い、一段階ずつ�
 
 LOGIN_COMPLETE_REQUIRED では既存のログイン待機状態とコードを保持してください。ユーザーがログイン完了を明示的に確認するまで完了コマンドを実行しません。確認後、setup.nextCommand を変更せずフォアグラウンドで正確に一度実行してください。ポーリング、バックグラウンド実行、login-start の重複は禁止です。READY では準備完了を伝えて停止してください。業務検索は別途のユーザー依頼と loggedIn=true かつ tokenUsable=true の確認後のみ実行してください。
 
-BLOCKED または AUTH_CHECK_BLOCKED の loggedIn=null/tokenUsable=null は認証未確認であり、ログアウトや期限切れではありません。認証フォルダーとキャッシュを保持してください。生成されたルールの限定された network check --environment claude-code 手順だけに従い、失敗・拒否済みの検査は繰り返さないでください。再ログイン、キャッシュ初期化、別 dataDir、コネクター/GUI への迂回はしません。他の失敗では失敗段階と秘密情報を含まないエラー一行だけを報告して停止してください。
+BLOCKED または AUTH_CHECK_BLOCKED の loggedIn=null/tokenUsable=null は認証未確認であり、ログアウトや期限切れではありません。認証フォルダーとキャッシュを保持してください。生成されたルールの限定された network check --environment claude-code 手順だけに従い、失敗・拒否済みの検査は繰り返さないでください。再ログイン、キャッシュ初期化、別 dataDir、コネクター/GUI への迂回はしません。他の失敗では何ができないかと次に必要な操作をやさしい一文で案内して停止してください。技術的なエラーの詳細は求められた場合だけ秘密を除いて提示します。
 
 以後の M365 検索と Outlook 下書きは Hare CLI だけを使用してください。コネクター、Computer Use、ブラウザー自動化、Outlook/Teams/SharePoint GUI に迂回しません。既定は読み取り専用です。Outlook 下書きは宛先、件名、本文、添付の完全なプレビューと明示的承認の後だけ作成し、送信しないでください。ダウンロード/export の条件付き AWAITING_USER_APPROVAL、全体計画、承認トークン、制限、再開手順は生成されたルールを維持し、無条件許可に変更しないでください。
 
 次回も同じフォルダーでチャットを開始し、CLAUDE.md のルール参照が適用されていることを確認して生成された状態確認コマンドを使ってください。新しいチャットというだけで再インストールや再ログインをしないでください。Local 実行でも返された業務内容がモデルに送信されることをユーザーに伝えてください。</textarea></div>
-      <div class="controls"><button type="button" id="copy" hidden>Hare 接続プロンプトをコピー</button><span class="copy-status" id="copy-status" role="status" aria-live="polite" data-success="プロンプトをコピーしました。" data-fallback="自動コピーを利用できません。選択されたプロンプトを手動でコピーしてください。"></span></div>
-      <noscript><p>JavaScript が無効です。使用する OS のプロンプトを手動で選択してコピーしてください。</p></noscript>
+      </details>
+      <noscript><p>コピーボタンが表示されない場合は「送る内容を見る」を開いてコピーしてください。</p></noscript>
     </section>
-    <section aria-labelledby="next"><h2 id="next">4. ログインと次回のチャット</h2><p>準備コマンドは startup まで実行します。その後、生成された CLAUDE.md と claude/hare-m365-agent-rules.md を読み、setup.state の次の手順だけに従います。ログイン待機中は、ユーザーの完了確認後に完了コマンドを一度だけ実行します。READY では停止して業務依頼を待ちます。</p><p>新しいチャットでも必ず同じ Hare フォルダーを Code Local の作業フォルダーとして開いてください。既定では CLAUDE.md が自動で読み込まれ、生成されたルールへ案内します。適用を確認し、ルール内の状態確認コマンドを使用してください。新しいチャットという理由だけで再ログインしないでください。</p></section>
-    <section aria-labelledby="security"><h2 id="security">セキュリティと権限</h2><p>Local はコマンドの実行場所を意味します。Hare が返し Claude が読む業務内容はモデルに送信されます。生の認証キャッシュや秘密情報を読んだり、チャットに貼り付けたりしないでください。</p><p>必要なツール権限だけを標準の承認手順で要求します。権限の一括回避は行わず、拒否されたら停止します。Local のネットワーク方針が Cowork の許可リストと同じとは仮定しません。ネットワーク障害で認証を確認できない場合はキャッシュを保持し、再ログインしません。</p><p>検索と Outlook 下書きには Hare だけを使い、コネクターや GUI で迂回しません。下書きは宛先・件名・本文・添付の完全なプレビューと明示的な承認後に作成します。送信には対応しません。ダウンロードとエクスポートは、生成されたルールの条件付き承認手順を維持します。</p></section>
-    <footer><strong>公式参考資料</strong><ul>
+    <section aria-labelledby="next"><h2 id="next">4. 会社のアカウントでログインする</h2><p>Claude にログインを案内された場合だけ、次の手順を進めてください。接続済みなら、そのまま使えます。</p><ol class="steps"><li>Claude が案内する Microsoft のログイン先を開きます。</li><li>Claude が表示したコードを入力し、自分の会社アカウントでログインします。</li><li>Claude に戻り「ログイン完了」と送ります。</li></ol><p>次回もステップ3で選んだ同じフォルダーを開いてください。</p></section>
+    <section aria-labelledby="security"><h2 id="security">知っておいてください</h2><p>Claude が読むメールや会話の内容は AI サービスに送られます。パスワードは Claude のチャットに書かないでください。</p><p>インストールの許可画面が出たら、Claude が説明したプログラムか確認してください。進められない場合は、そのメッセージを担当者に見せてください。</p><p>メールの下書きは内容を見せて同意を得てから作ります。メールの送信はしません。</p></section>
+    <footer><strong>詳しい説明と公式サイト</strong><ul>
       <li><a href="https://code.claude.com/docs/en/desktop">Claude Code Desktop</a></li>
       <li><a href="https://code.claude.com/docs/en/setup">Setup</a></li>
       <li><a href="https://code.claude.com/docs/en/memory">CLAUDE.md / Memory</a></li>
@@ -366,6 +397,7 @@ BLOCKED または AUTH_CHECK_BLOCKED の loggedIn=null/tokenUsable=null は認�
         }
       } catch { /* Local-file clipboard restrictions use the selection fallback. */ }
       if (!copied) {
+        prompt.closest("details").open = true;
         prompt.focus();
         prompt.select();
         try { copied = document.execCommand("copy"); } catch { copied = false; }

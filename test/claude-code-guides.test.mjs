@@ -27,13 +27,14 @@ for (const [language, filename] of Object.entries(GUIDE_FILES)) {
     assert.match(html, /--brand: #FF6000/);
     assert.doesNotMatch(html, /DRAFT|Draft \/|NOT RELEASED|draftGate/);
     assert.match(html, /<label for="platform">/);
-    assert.match(html, /<select id="platform"><option value="windows">Windows · PowerShell<\/option><option value="mac">Mac · POSIX<\/option><\/select>/);
+    assert.match(html, /<select id="platform"><option value="windows">Windows<\/option><option value="mac">Mac<\/option><\/select>/);
     assert.match(html, /role="status" aria-live="polite"/);
     assert.match(html, /<noscript>/);
     assert.equal([...html.matchAll(/<textarea\b/g)].length, 4);
     assert.ok(html.indexOf('id="platform"') < html.indexOf('id="prepare"'));
     assert.ok(html.indexOf('id="environment"') < html.indexOf('id="setup"'));
     assert.match(html, /<details id="manual-setup"><summary>/);
+    for (const id of ["environment-details", "connection-details"]) assert.ok(html.includes(`<details id="${id}"><summary>`));
     const manual = html.match(/<details id="manual-setup">([\s\S]*?)<\/details>/)[1];
     const installerChecks = {
       ko: ["공식 출처·유효한 디지털 서명·공식 배포자", "실행 전에 IT 담당자의 도움", "기존 도구에는 이 검사를 요구하지 않습니다"],
@@ -51,6 +52,20 @@ for (const [language, filename] of Object.entries(GUIDE_FILES)) {
   });
 
   for (const [platform, shell] of Object.entries(SHELLS)) {
+    test(`${language}/${platform}: plain replies keep consent and avoid diagnostic overload`, () => {
+      const phrases = {
+        ko: ["비개발자가 바로 따라", "3~6줄", "다음 행동 하나만", "요청한 경우에만", "이름·목적", "명확히 미설치를 확인", "완료 전 완료됐다고 말하지", "줄 수 때문에 빼지 마"],
+        en: ["simple English", "3–6 lines", "one next action", "details only on request", "software and purpose", "conclusive absence checks", "Do not claim completion before verification", "never omit material risks"],
+        ja: ["やさしい日本語", "3〜6行", "操作を一つだけ", "求められた場合だけ", "プログラム名・目的", "未インストールが明確", "確認前に完了と言わず", "重要なリスクや同意事項"]
+      };
+      for (const prompt of [buildEnvironmentPrompt(language, platform), buildPrompt(language, platform)]) {
+        for (const phrase of phrases[language]) assert.ok(prompt.includes(phrase), phrase);
+      }
+      const environment = buildEnvironmentPrompt(language, platform);
+      assert.doesNotMatch(environment, /변경 범위를 보여주고|show the exact package ID|変更範囲を示し/);
+      const conditional = { ko: "두 가지", en: "both Node.js and Git are missing", ja: "Node.js と Git が両方ない場合だけ" };
+      assert.ok(environment.includes(language === "ko" ? "Node.js와 Git이 모두 없는 경우에만" : conditional[language]));
+    });
     test(`${language}/${platform}: upgrades and missing-command recovery avoid reinstall loops`, () => {
       const prompt = buildEnvironmentPrompt(language, platform);
       const safeguards = {
@@ -86,9 +101,9 @@ for (const [language, filename] of Object.entries(GUIDE_FILES)) {
       const signatureCommand = platform === "windows" ? "Get-AuthenticodeSignature -LiteralPath" : "pkgutil --check-signature";
       assert.ok(prompt.includes(signatureCommand));
       const functionalChecks = {
-        ko: ["버전 명령이 성공", "기존 버전 관리자 위치", "위치 차이만 보고", "패키지 재다운로드·압축 해제·해시 대조는 하지 마", "재시작 후 세션에서", "일반 명령이 모두 동작할 때만"],
-        en: ["version-command success", "existing version-manager locations", "report the location difference", "Do not analyze the npm script chain or redownload, extract, or hash-compare", "in the session after restart", "all ordinary commands work"],
-        ja: ["バージョンコマンドが成功", "既存のバージョン管理ツール", "違いだけ", "再ダウンロード・展開・ハッシュ比較は行いません", "再起動後のセッションで", "通常のコマンドがすべて動く場合のみ"]
+        ko: ["버전 명령이 성공", "기존 버전 관리자 위치", "위치 차이는 내부에서만 확인", "패키지 재다운로드·압축 해제·해시 대조는 하지 마", "재시작 후 세션에서", "일반 명령이 모두 동작할 때만"],
+        en: ["version-command success", "existing version-manager locations", "keep the location difference internal", "Do not analyze the npm script chain or redownload, extract, or hash-compare", "in the session after restart", "all ordinary commands work"],
+        ja: ["バージョンコマンドが成功", "既存のバージョン管理ツール", "場所の違いは内部でのみ確認", "再ダウンロード・展開・ハッシュ比較は行いません", "再起動後のセッションで", "通常のコマンドがすべて動く場合のみ"]
       };
       for (const phrase of functionalChecks[language]) assert.ok(prompt.includes(phrase), phrase);
       assert.doesNotMatch(prompt, /NotSigned|npm-prefix\.js|node_modules\/npm\/bin\/npm-cli\.js|codesign --verify|재시작 뒤 같은 세션에서/);
@@ -216,12 +231,14 @@ function browserHarness(language, clipboardMode) {
     "environment-status": { textContent: "", dataset: { success: "copied", fallback: "select manually" } }
   };
   const copied = [];
+  const details = { prompt: { open: false }, environment: { open: false } };
   for (const platform of Object.keys(SHELLS)) {
     for (const [prefix, build] of [["prompt", buildPrompt], ["environment", buildEnvironmentPrompt]]) {
     elements[`${prefix}-${platform}`] = {
       value: build(language, platform),
       focused: false,
       selected: false,
+      closest(selector) { assert.equal(selector, "details"); return details[prefix]; },
       focus() { this.focused = true; },
       select() { this.selected = true; }
     };
@@ -237,7 +254,7 @@ function browserHarness(language, clipboardMode) {
   };
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   vm.runInNewContext(script, { document, navigator });
-  return { elements, panels, listeners, copied };
+  return { elements, panels, listeners, copied, details };
 }
 
 for (const language of Object.keys(GUIDE_FILES)) {
@@ -276,23 +293,27 @@ for (const language of Object.keys(GUIDE_FILES)) {
 
 for (const mode of ["denied", "missing", "throw", "fallback-success"]) {
   test(`environment clipboard ${mode}: safe selection fallback`, async () => {
-    const { elements, listeners } = browserHarness("en", mode);
+    const { elements, listeners, details } = browserHarness("en", mode);
     elements.platform.value = "mac";
     listeners.change();
     await listeners["environment-click"]();
     assert.equal(elements["environment-mac"].focused, true);
     assert.equal(elements["environment-mac"].selected, true);
+    assert.equal(details.environment.open, true);
+    assert.equal(details.prompt.open, false);
     assert.equal(elements["environment-status"].textContent, mode === "fallback-success" ? "copied" : "select manually");
     assert.equal(elements["copy-environment"].disabled, false);
     assert.equal(elements.platform.disabled, false);
   });
   test(`clipboard ${mode}: safe local-file fallback`, async () => {
-    const { elements, listeners } = browserHarness("en", mode);
+    const { elements, listeners, details } = browserHarness("en", mode);
     elements.platform.value = "mac";
     listeners.change();
     await listeners.click();
     assert.equal(elements["prompt-mac"].focused, true);
     assert.equal(elements["prompt-mac"].selected, true);
+    assert.equal(details.prompt.open, true);
+    assert.equal(details.environment.open, false);
     assert.equal(elements["copy-status"].textContent, mode === "fallback-success" ? "copied" : "select manually");
     assert.equal(elements.copy.disabled, false);
     assert.equal(elements.platform.disabled, false);
