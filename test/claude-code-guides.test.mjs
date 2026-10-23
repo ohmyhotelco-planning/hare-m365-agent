@@ -52,6 +52,23 @@ for (const [language, filename] of Object.entries(GUIDE_FILES)) {
   });
 
   for (const [platform, shell] of Object.entries(SHELLS)) {
+    test(`${language}/${platform}: update completion does not reconnect existing users`, () => {
+      const prompt = buildEnvironmentPrompt(language, platform);
+      const required = {
+        ko: ["사용자 메시지와 현재 대화 맥락", "업데이트 확인이 완료됐어요. 기존 Hare 폴더에서 그대로 사용하시면 돼요.", "기존 사용자에게 다음 Hare 연결 단계, 재설치, 폴더 재생성, 재로그인을 안내하지 마", "처음 연결하는 사용자에게만", "사용 이력이 불명확하면", "조건부로 안내", "변경 없이", "재시작 없이 완료", "Microsoft 로그인 상태를 확인하지 않았으며", "기존 인증 확인 규칙은 그대로 유지"],
+        en: ["user's messages and current conversation", "The update check is complete. Keep using Hare in your existing folder.", "Do not direct existing users to Hare connection, reinstallation, folder recreation, or sign-in again", "only first-time users", "If usage history is unknown", "conditional guidance", "no changes were needed", "without a restart", "Microsoft sign-in status was not checked", "Preserve the existing authentication checks"],
+        ja: ["ユーザーのメッセージと現在の会話", "更新確認が完了しました。今までの Hare フォルダーでそのままお使いください。", "既存利用者には Hare 接続、再インストール、フォルダーの作り直し、再ログインを案内しません", "初めて接続する利用者だけ", "利用履歴が不明なら", "条件付きで案内", "変更せずに", "再起動せず完了", "Microsoft ログイン状態を確認していない", "既存の認証確認ルールは維持"]
+      };
+      for (const phrase of required[language]) assert.ok(prompt.includes(phrase), phrase);
+      const nextAction = renderGuide(language).match(/<p class="next-action">([\s\S]*?)<\/p>/)[1];
+      const pageGuidance = {
+        ko: ["이미 Hare를 사용 중이라면", "처음 연결하는 분만 3번"],
+        en: ["Already using Hare?", "step 3 only if you are connecting for the first time"],
+        ja: ["既に Hare を使っている方", "初めて接続する方だけステップ3"]
+      };
+      for (const phrase of pageGuidance[language]) assert.ok(nextAction.includes(phrase), phrase);
+      assert.doesNotMatch(prompt, /환경 준비 완료, 다음 Hare 연결 단계로 진행|say environment ready, proceed to Hare connection|環境準備完了と伝えて Hare 接続へ案内/);
+    });
     test(`${language}/${platform}: plain replies keep consent and avoid diagnostic overload`, () => {
       const phrases = {
         ko: ["비개발자가 바로 따라", "3~6줄", "다음 행동 하나만", "요청한 경우에만", "이름·목적", "명확히 미설치를 확인", "완료 전 완료됐다고 말하지", "줄 수 때문에 빼지 마"],
