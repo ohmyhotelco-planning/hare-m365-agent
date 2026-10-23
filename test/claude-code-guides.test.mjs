@@ -110,16 +110,17 @@ for (const [language, filename] of Object.entries(GUIDE_FILES)) {
       const prompt = buildEnvironmentPrompt(language, platform);
       assert.doesNotMatch(prompt, /DRAFT|NOT RELEASED|FOLDER_REQUIRED/);
       const runnable = {
-        ko: ["실제 환경 준비 요청", "Hare 작업 폴더 선택 없이", "Local인지 한 번", "Node 20.x는 지원 종료", "실행 자체를 차단하지 마"],
-        en: ["actual environment preparation request", "do not require a selected Hare folder", "ask the user once", "Node 20.x is end-of-life", "without blocking execution"],
-        ja: ["実際の環境準備の依頼", "Hare フォルダー未選択でも", "Local か一度", "Node 20.x はサポート終了", "実行は止めません"]
+        ko: ["실제 환경 준비 요청", "Hare 작업 폴더 선택 없이", "Local인지 한 번", "Node 20.x는 지원 종료", "거절되거나 실패하면 ENVIRONMENT_INCOMPLETE", "기존 Hare 데이터는 유지"],
+        en: ["actual environment preparation request", "do not require a selected Hare folder", "ask the user once", "Node 20.x is end-of-life", "declined or fails, stop with ENVIRONMENT_INCOMPLETE", "preserve existing Hare data"],
+        ja: ["実際の環境準備の依頼", "Hare フォルダー未選択でも", "Local か一度", "Node 20.x はサポート終了", "拒否または失敗した場合は ENVIRONMENT_INCOMPLETE", "既存の Hare データを保持"]
       };
       for (const phrase of runnable[language]) assert.ok(prompt.includes(phrase), phrase);
       for (const phrase of ["git branch -h", "--show-current"]) assert.ok(prompt.includes(phrase));
       if (platform === "windows") {
         for (const phrase of ["OpenJS.NodeJS.LTS", "Git.Git", "--exact --source winget", "--interactive", "MSI"]) assert.ok(prompt.includes(phrase));
       }
-      for (const invariant of ["Code > Local", "Cloud/SSH/WSL", "node --version", "npm --version", "git --version", "Node.js >=20.18.1", "LTS", "PATH", "https://nodejs.org/en/download", `https://git-scm.com/install/${platform}`]) assert.ok(prompt.includes(invariant), invariant);
+      for (const invariant of ["Code > Local", "Cloud/SSH/WSL", "node --version", "npm --version", "git --version", "Node.js 24.x LTS", "24.22.1", "22.23.4", "26.12.1", "PATH", "https://nodejs.org/en/download", `https://git-scm.com/install/${platform}`]) assert.ok(prompt.includes(invariant), invariant);
+      assert.doesNotMatch(prompt, /20\.18\.1|실행 자체를 차단하지 마|without blocking execution|実行は止めません/);
       const approvals = {
         ko: ["명시적 승인을 기다려", "승인 후에만", "캐시를 읽거나 변경하지 마", "보안 설정·실행 정책·PATH를 임의로 바꾸거나", "관리자 승인이 필요", "암호를 요청하거나 읽지 마", "다시 설치·업데이트하지 마", "재설치 반복 없이", "사내 IT 담당자", "npm은 Node.js와 함께 설치", "Hare 로그인 성공으로 표현하지 마"],
         en: ["wait for explicit approval", "Only after approval", "Do not read or change existing Hare data files or authentication caches", "Do not independently change security settings, execution policy, or PATH", "administrator approval", "Never request or read passwords", "Do not reinstall or update working tools", "without repeated reinstalls", "internal IT", "npm comes with Node.js", "Do not present environment readiness as successful Hare sign-in"],
@@ -154,7 +155,7 @@ for (const [language, filename] of Object.entries(GUIDE_FILES)) {
       assert.ok(prompt.includes("master"), "Installer uses the production release branch");
       assert.equal(prompt.split("```" + shell + "\n").length, 2);
       assert.ok(prompt.includes("```" + shell + "\n" + command + "\n```"));
-      for (const invariant of [SELECTED_FOLDER, "--host claude-code", `--command-shell ${shell}`, "--data-dir", "node --version", "npm --version", "git --version", "Node.js >=20.18.1", "PATH", "setup.state", "setup.nextCommand", "LOGIN_START_REQUIRED", "LOGIN_COMPLETE_REQUIRED", "READY", "FOLDER_REQUIRED", "SETUP_REQUIRED", "AUTH_CHECK_BLOCKED", "loggedIn=true", "tokenUsable=true", "loggedIn=null", "tokenUsable=null", "network check --environment claude-code", "AWAITING_USER_APPROVAL", "CLAUDE.md", "claude/hare-m365-agent-rules.md", "Computer Use", ...localizedInvariants[language]]) {
+      for (const invariant of [SELECTED_FOLDER, "--host claude-code", `--command-shell ${shell}`, "--data-dir", "node --version", "npm --version", "git --version", "Node.js 24.x LTS", "24.22.1", "22.23.4", "26.12.1", "PATH", "setup.state", "setup.nextCommand", "LOGIN_START_REQUIRED", "LOGIN_COMPLETE_REQUIRED", "READY", "FOLDER_REQUIRED", "SETUP_REQUIRED", "AUTH_CHECK_BLOCKED", "loggedIn=true", "tokenUsable=true", "loggedIn=null", "tokenUsable=null", "network check --environment claude-code", "AWAITING_USER_APPROVAL", "CLAUDE.md", "claude/hare-m365-agent-rules.md", "Computer Use", ...localizedInvariants[language]]) {
         assert.ok(prompt.includes(invariant), `Missing ${language}/${platform} invariant: ${invariant}`);
       }
       const closingFence = prompt.indexOf("\n```", prompt.indexOf("```" + shell));
