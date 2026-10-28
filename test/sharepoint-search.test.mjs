@@ -82,6 +82,51 @@ test("file search returns a resumable partial result on timeout", async () => {
   assert.equal(result.search.continuationAvailable, true);
 });
 
+test("file search retains downloadable NDJSON outside the document classification", async () => {
+  const query = 'path:"https://contoso.sharepoint.com/sites/usage" AND filename:"events.ndjson"';
+  const client = {
+    async post(url, body) {
+      assert.equal(url, "/search/query");
+      assert.equal(body.requests[0].query.queryString, query);
+      const documentOnly = /IsDocument\s*[:=]\s*(?:True|1)/i.test(body.requests[0].query.queryTemplate ?? "");
+      const hits = documentOnly ? [] : [
+        { resource: { id: "ndjson", name: "events.ndjson", size: 1712,
+          file: { mimeType: "application/octet-stream" } } },
+        { resource: { id: "pdf", name: "report.pdf", file: { mimeType: "application/pdf" } } },
+        { resource: { id: "folder", name: "events", folder: {} } }
+      ];
+      return { value: [{ hitsContainers: [{ total: hits.length, moreResultsAvailable: false, hits }] }] };
+    }
+  };
+  const result = await searchFiles(config(), query, 25, {}, client);
+  assert.deepEqual(result.files.map(file => file.id), ["ndjson", "pdf"]);
+  assert.equal(result.files[0].size, 1712);
+  assert.equal(result.search.returnedCount, 2);
+  assert.equal(result.search.partialResult, false);
+});
+
+test("file search excludes folders mislabeled with a file facet without excluding empty files", async () => {
+  const client = {
+    async post(url, body) {
+      assert.equal(url, "/search/query");
+      const excludesFolders = body.requests[0].query.queryTemplate === "({searchTerms}) AND NOT ContentTypeId:0x0120*";
+      // Search can attach a file facet to a real folder and omit its folder facet.
+      const folder = { resource: { id: "folder", name: "folder", size: 0,
+        file: { mimeType: "application/octet-stream" } } };
+      const hits = [
+        { resource: { id: "ndjson", name: "events.ndjson", size: 1712,
+          file: { mimeType: "application/octet-stream" } } },
+        { resource: { id: "empty", name: "empty.txt", size: 0, file: { mimeType: "text/plain" } } },
+        ...(excludesFolders ? [] : [folder])
+      ];
+      return { value: [{ hitsContainers: [{ total: hits.length, moreResultsAvailable: false, hits }] }] };
+    }
+  };
+  const result = await searchFiles(config(), "fixture", 25, {}, client);
+  assert.deepEqual(result.files.map(file => file.id), ["ndjson", "empty"]);
+  assert.equal(result.files[1].size, 0);
+});
+
 function config() {
   return {
     policy: { maxFileSearchLimit: 25 }

@@ -163,7 +163,7 @@ Teams 본문에 붙여넣은 이미지는 일반 첨부파일과 달리 `hostedC
 
 정확한 메일 건수 집계는 검색 인덱스를 사용하는 `outlook search` 대신 `outlook count`를 사용합니다. `outlook count`는 지정 기간의 모든 메일 페이지를 순회하고 `--subject-contains`와 `--from` 조건을 직접 대조합니다. 35초 안에 끝나지 않으면 누적 상태가 포함된 `nextCursor`를 반환합니다. 다음 실행에서 `--cursor`로 이어가며, `complete:true`인 마지막 `matchedCount`가 정확한 전체 건수입니다. `--folder all`은 삭제된 메일을 제외하며, 보낸편지함은 `sentDateTime`, 나머지는 `receivedDateTime`을 기준으로 집계합니다.
 
-`files search`는 Microsoft Search API를 통해 사용자가 접근할 수 있는 SharePoint, Teams, OneDrive 파일 전체를 검색합니다. 결과의 `nextOffset`을 `--offset`으로 전달해 다음 페이지를 조회할 수 있습니다. SharePoint 사이트 자체의 존재 여부는 `sharepoint sites`로 확인합니다.
+`files search`는 Microsoft Search API를 통해 사용자가 접근할 수 있는 SharePoint, Teams, OneDrive 파일 전체를 검색합니다. 결과의 `nextOffset`을 `--offset`으로 전달해 다음 페이지를 조회할 수 있습니다. SharePoint 사이트 자체의 존재 여부는 `sharepoint sites`로 확인합니다. `IsDocument` 분류값으로 검색을 제한하지 않습니다. 검색 응답에서는 폴더에도 `file` 속성이 붙을 수 있어, 검색 조건의 `AND NOT ContentTypeId:0x0120*`로 폴더 및 그 하위 콘텐츠 유형을 제외하고 기존 `file` 속성 필터를 유지합니다.
 
 Teams `chat-messages`는 `body`에 전체 일반 텍스트, `bodyHtml`에 Graph 원본 HTML을 반환합니다. `search-messages`도 검색 결과마다 채팅 또는 채널 메시지 상세를 추가 조회해 같은 전체 본문 필드를 반환합니다. 일부 상세 조회가 불가능하면 `fullBodyUnavailableCount`와 항목별 `bodyUnavailableReason`으로 명시하며 검색 스니펫을 전체 본문으로 취급하지 않습니다.
 

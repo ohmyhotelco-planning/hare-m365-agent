@@ -185,7 +185,8 @@ export async function searchFiles(
             entityTypes: ["driveItem"],
             query: {
               queryString: trimmedQuery,
-              queryTemplate: "({searchTerms}) IsDocument:True"
+              // IsDocument can exclude files; Search can also label folders with a file facet.
+              queryTemplate: "({searchTerms}) AND NOT ContentTypeId:0x0120*"
             },
             fields: [
               "id",
